@@ -15,6 +15,13 @@
       "when": 1793921801972,
       "tag": "0001_seed_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793922466133,
+      "tag": "0002_files",
+      "breakpoints": true
     }
   ]
 }

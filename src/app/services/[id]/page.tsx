@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
+import { expertReviewSummary } from "@/server/orderRoom";
 import { getService } from "@/server/services";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function ServicePage({ params, searchParams }: { params: Pr
   const isOwner = session?.user?.id === svc?.expert.userId;
   if (!svc || (svc.service.status !== "ACTIVE" && !isOwner)) notFound();
   const { service, expert, tiers } = svc;
+  const reviews = await expertReviewSummary(getDb(), expert.userId);
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
@@ -44,7 +46,11 @@ export default async function ServicePage({ params, searchParams }: { params: Pr
           </span>
           <div>
             <div className="font-bold">{expert.name}</div>
-            <div className="text-sm text-ink-muted">{expert.headline}{expert.verifiedAt ? " · Verified expert" : ""}</div>
+            <div className="text-sm text-ink-muted">
+              {expert.headline}
+              {expert.verifiedAt ? " · Verified expert" : ""}
+              {reviews.total > 0 ? ` · ★ ${reviews.average?.toFixed(1)} (${reviews.total} review${reviews.total === 1 ? "" : "s"})` : " · No reviews yet"}
+            </div>
           </div>
         </div>
       </div>
@@ -80,6 +86,21 @@ export default async function ServicePage({ params, searchParams }: { params: Pr
           </div>
         ))}
       </div>
+
+      {reviews.recent.length > 0 && (
+        <div className="card flex flex-col gap-4">
+          <h2 className="text-xl font-bold">What clients say about {expert.name?.split(" ")[0]}</h2>
+          <ul className="flex flex-col divide-y divide-line">
+            {reviews.recent.map((r, i) => (
+              <li key={i} className="flex flex-col gap-1 py-3">
+                <span className="text-amber-deep" aria-label={`${r.rating} out of 5 stars`}>{"★".repeat(r.rating)}<span className="text-line">{"★".repeat(5 - r.rating)}</span></span>
+                <p>{r.body}</p>
+                <span className="text-xs text-ink-muted">{r.author?.split(" ")[0]} · {r.createdAt.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="card flex flex-col gap-3">

@@ -89,11 +89,27 @@ export async function fundMilestone(
   });
 }
 
-/** Client approves a delivered milestone: escrow goes to the expert, minus the platform fee. */
-export async function releaseMilestone(db: DB, p: { milestoneId: string; approvedBy: string }) {
+/** Marks the order COMPLETED once every milestone is settled (approved or refunded). */
+async function completeOrderIfSettled(tx: Tx, orderId: string) {
+  const ms = await tx.select({ status: milestones.status }).from(milestones).where(eq(milestones.orderId, orderId));
+  const settled = ms.length > 0 && ms.every((m) => m.status === "APPROVED" || m.status === "REFUNDED");
+  const anyApproved = ms.some((m) => m.status === "APPROVED");
+  if (settled) await tx.update(orders).set({ status: anyApproved ? "COMPLETED" : "CANCELLED" }).where(eq(orders.id, orderId));
+  else await tx.update(orders).set({ status: "ACTIVE" }).where(and(eq(orders.id, orderId), eq(orders.status, "DELIVERED")));
+}
+
+/**
+ * Client approves a delivered milestone (or the system does, after the auto-approve window):
+ * escrow goes to the expert, minus the platform fee.
+ */
+export async function releaseMilestone(db: DB, p: { milestoneId: string; approvedBy: string } | { milestoneId: string; auto: true }) {
   return db.transaction(async (tx) => {
     const { milestone, order } = await lockMilestone(tx, p.milestoneId);
-    if (p.approvedBy !== order.clientId) throw new EscrowError("Only the client can approve this milestone");
+    if ("auto" in p) {
+      if (!milestone.autoApproveAt || milestone.autoApproveAt > new Date()) throw new EscrowError("Auto-approval is not due yet");
+    } else if (p.approvedBy !== order.clientId) {
+      throw new EscrowError("Only the client can approve this milestone");
+    }
     if (milestone.status !== "DELIVERED") throw new EscrowError(`Milestone is ${milestone.status}; it must be delivered first`);
 
     const held = await escrowBalance(tx, milestone.id);
@@ -109,7 +125,8 @@ export async function releaseMilestone(db: DB, p: { milestoneId: string; approve
         reference: `release:${milestone.id}`,
       }),
     );
-    await tx.update(milestones).set({ status: "APPROVED" }).where(eq(milestones.id, milestone.id));
+    await tx.update(milestones).set({ status: "APPROVED", autoApproveAt: null }).where(eq(milestones.id, milestone.id));
+    await completeOrderIfSettled(tx, order.id);
     return { releasedMinor: held };
   });
 }
@@ -125,7 +142,8 @@ export async function refundMilestone(db: DB, p: { milestoneId: string }) {
     if (held <= 0) throw new EscrowError("Nothing is held in escrow for this milestone");
 
     await writeEntries(tx, planRefund({ milestoneId: milestone.id, amountMinor: held, reference: `refund:${milestone.id}` }));
-    await tx.update(milestones).set({ status: "REFUNDED" }).where(eq(milestones.id, milestone.id));
+    await tx.update(milestones).set({ status: "REFUNDED", autoApproveAt: null }).where(eq(milestones.id, milestone.id));
+    await completeOrderIfSettled(tx, milestone.orderId);
     return { refundedMinor: held };
   });
 }
@@ -150,7 +168,8 @@ export async function settleMilestone(db: DB, p: { milestoneId: string; releaseM
       }),
     );
     const status = p.releaseMinor > 0 ? "APPROVED" : "REFUNDED";
-    await tx.update(milestones).set({ status }).where(eq(milestones.id, milestone.id));
+    await tx.update(milestones).set({ status, autoApproveAt: null }).where(eq(milestones.id, milestone.id));
+    await completeOrderIfSettled(tx, order.id);
     return { releasedMinor: p.releaseMinor, refundedMinor: held - p.releaseMinor };
   });
 }

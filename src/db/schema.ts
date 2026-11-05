@@ -5,6 +5,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -365,6 +366,32 @@ export const paymentEvents = pgTable("payment_events", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+// ───────────────────────── Files ─────────────────────────
+
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => "bytea",
+  fromDriver: (v) => (Buffer.isBuffer(v) ? v : Buffer.from(v)),
+});
+
+// Uploaded files (deliveries, message attachments). Stored in Postgres for now (max 10 MB each);
+// can move to object storage later without changing callers.
+export const files = pgTable(
+  "files",
+  {
+    id: id(),
+    orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    data: bytea("data").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("files_order").on(t.orderId)],
+);
 
 // ───────────────────────── Messaging, reviews, disputes ─────────────────────────
 
