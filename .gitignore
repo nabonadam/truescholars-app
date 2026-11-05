@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# environment — never commit real keys
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+npm-debug.log*

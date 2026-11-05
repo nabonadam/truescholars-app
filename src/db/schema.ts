@@ -1,0 +1,449 @@
+// The True Scholars — marketplace data model (Drizzle + PostgreSQL).
+// Money is always stored as integer minor units (pesewas for GHS).
+// Wallet balances are never stored: they are summed from ledger_entries.
+
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+const id = () =>
+  text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID());
+const createdAt = () => timestamp("created_at", { mode: "date" }).notNull().defaultNow();
+const updatedAt = () =>
+  timestamp("updated_at", { mode: "date" })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date());
+const textArray = (name: string) => text(name).array().notNull().default(sql`'{}'::text[]`);
+
+// ───────────────────────── Enums ─────────────────────────
+
+export const roleEnum = pgEnum("role", ["CLIENT", "EXPERT", "ADMIN"]);
+export const applicationStatusEnum = pgEnum("application_status", [
+  "SUBMITTED",
+  "IN_REVIEW",
+  "APPROVED",
+  "REJECTED",
+]);
+export const sellerLevelEnum = pgEnum("seller_level", ["NEW", "LEVEL_1", "LEVEL_2", "TOP_RATED"]);
+export const listingStatusEnum = pgEnum("listing_status", [
+  "DRAFT",
+  "PENDING_REVIEW",
+  "ACTIVE",
+  "PAUSED",
+  "REJECTED",
+]);
+export const tierNameEnum = pgEnum("tier_name", ["BASIC", "STANDARD", "PRO"]);
+export const jobStatusEnum = pgEnum("job_status", ["OPEN", "HIRED", "CLOSED", "CANCELLED"]);
+export const proposalStatusEnum = pgEnum("proposal_status", [
+  "SUBMITTED",
+  "SHORTLISTED",
+  "ACCEPTED",
+  "DECLINED",
+  "WITHDRAWN",
+]);
+export const orderStatusEnum = pgEnum("order_status", [
+  "AWAITING_PAYMENT",
+  "ACTIVE",
+  "DELIVERED",
+  "COMPLETED",
+  "CANCELLED",
+  "DISPUTED",
+]);
+export const milestoneStatusEnum = pgEnum("milestone_status", [
+  "PENDING_FUNDING",
+  "FUNDED",
+  "DELIVERED",
+  "REVISION_REQUESTED",
+  "APPROVED",
+  "REFUNDED",
+]);
+export const ledgerAccountEnum = pgEnum("ledger_account", [
+  "EXTERNAL", // money outside the platform (Paystack in / payouts out)
+  "ESCROW", // held for a specific milestone
+  "EXPERT_AVAILABLE", // an expert's withdrawable earnings
+  "PLATFORM_FEES", // platform revenue
+]);
+export const ledgerEntryTypeEnum = pgEnum("ledger_entry_type", [
+  "FUND",
+  "RELEASE",
+  "FEE",
+  "REFUND",
+  "WITHDRAWAL",
+]);
+export const disputeStatusEnum = pgEnum("dispute_status", [
+  "OPEN",
+  "RESOLVED_RELEASE",
+  "RESOLVED_PARTIAL",
+  "RESOLVED_REFUND",
+]);
+
+// ───────────────────────── Accounts (Auth.js tables + ours) ─────────────────────────
+
+export const users = pgTable("users", {
+  id: id(),
+  name: text("name"),
+  email: text("email").notNull().unique(),
+  emailVerified: timestamp("email_verified", { mode: "date" }),
+  image: text("image"),
+  passwordHash: text("password_hash"),
+  roles: roleEnum("roles").array().notNull().default(sql`'{CLIENT}'::role[]`),
+  country: text("country"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.providerAccountId] })],
+);
+
+export const sessions = pgTable("sessions", {
+  sessionToken: text("session_token").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verification_tokens",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+);
+
+// ───────────────────────── Experts & vetting ─────────────────────────
+
+export const expertApplications = pgTable("expert_applications", {
+  id: id(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  qualification: text("qualification").notNull(),
+  fields: textArray("fields"),
+  experienceYears: integer("experience_years").notNull(),
+  pitch: text("pitch").notNull(),
+  cvUrl: text("cv_url"),
+  sampleUrl: text("sample_url"),
+  idDocumentUrl: text("id_document_url"),
+  status: applicationStatusEnum("status").notNull().default("SUBMITTED"),
+  reviewerNote: text("reviewer_note"),
+  reviewedAt: timestamp("reviewed_at", { mode: "date" }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const expertProfiles = pgTable("expert_profiles", {
+  id: id(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  headline: text("headline").notNull(),
+  bio: text("bio"),
+  skills: textArray("skills"),
+  credentials: textArray("credentials"),
+  level: sellerLevelEnum("level").notNull().default("NEW"),
+  bidCredits: integer("bid_credits").notNull().default(20),
+  verifiedAt: timestamp("verified_at", { mode: "date" }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+// ───────────────────────── Catalogue ─────────────────────────
+
+export const categories = pgTable("categories", {
+  id: id(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+});
+
+// Fiverr-style packaged service
+export const services = pgTable("services", {
+  id: id(),
+  expertId: text("expert_id")
+    .notNull()
+    .references(() => expertProfiles.id, { onDelete: "cascade" }),
+  categoryId: text("category_id")
+    .notNull()
+    .references(() => categories.id),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  requirements: textArray("requirements"), // questions the client answers at checkout
+  status: listingStatusEnum("status").notNull().default("DRAFT"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const serviceTiers = pgTable(
+  "service_tiers",
+  {
+    id: id(),
+    serviceId: text("service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    name: tierNameEnum("name").notNull(),
+    priceMinor: integer("price_minor").notNull(),
+    currency: text("currency").notNull().default("GHS"),
+    deliveryDays: integer("delivery_days").notNull(),
+    revisions: integer("revisions").notNull(),
+    includes: textArray("includes"),
+  },
+  (t) => [uniqueIndex("service_tier_unique").on(t.serviceId, t.name)],
+);
+
+// Upwork-style job with bidding
+export const jobs = pgTable("jobs", {
+  id: id(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  categoryId: text("category_id")
+    .notNull()
+    .references(() => categories.id),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  attachments: textArray("attachments"),
+  budgetMinMinor: integer("budget_min_minor").notNull(),
+  budgetMaxMinor: integer("budget_max_minor").notNull(),
+  currency: text("currency").notNull().default("GHS"),
+  deadline: timestamp("deadline", { mode: "date" }),
+  status: jobStatusEnum("status").notNull().default("OPEN"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export type MilestonePlanItem = { title: string; amountMinor: number; dueInDays: number };
+
+export const proposals = pgTable(
+  "proposals",
+  {
+    id: id(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    expertId: text("expert_id")
+      .notNull()
+      .references(() => expertProfiles.id, { onDelete: "cascade" }),
+    priceMinor: integer("price_minor").notNull(),
+    currency: text("currency").notNull().default("GHS"),
+    timelineDays: integer("timeline_days").notNull(),
+    pitch: text("pitch").notNull(),
+    milestonePlan: jsonb("milestone_plan").$type<MilestonePlanItem[]>().notNull(),
+    status: proposalStatusEnum("status").notNull().default("SUBMITTED"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("one_proposal_per_expert_per_job").on(t.jobId, t.expertId)],
+);
+
+// ───────────────────────── Orders & escrow ─────────────────────────
+
+export const orders = pgTable("orders", {
+  id: id(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => users.id),
+  expertId: text("expert_id")
+    .notNull()
+    .references(() => users.id),
+  serviceId: text("service_id").references(() => services.id),
+  tier: tierNameEnum("tier"),
+  proposalId: text("proposal_id")
+    .unique()
+    .references(() => proposals.id),
+  title: text("title").notNull(),
+  totalMinor: integer("total_minor").notNull(),
+  currency: text("currency").notNull().default("GHS"),
+  feeBps: integer("fee_bps").notNull(), // platform fee locked at order creation
+  requirements: jsonb("requirements"),
+  status: orderStatusEnum("status").notNull().default("AWAITING_PAYMENT"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const milestones = pgTable(
+  "milestones",
+  {
+    id: id(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    title: text("title").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    dueAt: timestamp("due_at", { mode: "date" }),
+    revisionsAllowed: integer("revisions_allowed").notNull().default(2),
+    revisionsUsed: integer("revisions_used").notNull().default(0),
+    status: milestoneStatusEnum("status").notNull().default("PENDING_FUNDING"),
+    autoApproveAt: timestamp("auto_approve_at", { mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("milestone_position").on(t.orderId, t.position)],
+);
+
+export const deliveries = pgTable("deliveries", {
+  id: id(),
+  milestoneId: text("milestone_id")
+    .notNull()
+    .references(() => milestones.id, { onDelete: "cascade" }),
+  note: text("note").notNull(),
+  files: textArray("files"),
+  createdAt: createdAt(),
+});
+
+// Double-entry ledger: every money movement is a group of entries that sums to zero.
+export const ledgerEntries = pgTable(
+  "ledger_entries",
+  {
+    id: id(),
+    transactionId: text("transaction_id").notNull(), // groups the entries of one movement
+    account: ledgerAccountEnum("account").notNull(),
+    userId: text("user_id").references(() => users.id), // owner for EXPERT_AVAILABLE
+    milestoneId: text("milestone_id").references(() => milestones.id), // owner for ESCROW
+    type: ledgerEntryTypeEnum("type").notNull(),
+    amountMinor: integer("amount_minor").notNull(), // signed: + credit, - debit
+    currency: text("currency").notNull().default("GHS"),
+    reference: text("reference"), // Paystack reference or internal id
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("ledger_account_user").on(t.account, t.userId),
+    index("ledger_milestone").on(t.milestoneId),
+    index("ledger_tx").on(t.transactionId),
+    // A given external reference can only be booked once per movement type (idempotency).
+    uniqueIndex("ledger_reference_once")
+      .on(t.reference, t.type, t.account)
+      .where(sql`${t.reference} is not null`),
+  ],
+);
+
+// Raw payment events from Paystack (webhook + verify), stored once per reference
+export const paymentEvents = pgTable("payment_events", {
+  id: id(),
+  reference: text("reference").notNull().unique(),
+  userId: text("user_id").references(() => users.id),
+  purpose: text("purpose").notNull(), // "milestone" | "test"
+  milestoneId: text("milestone_id").references(() => milestones.id),
+  amountMinor: integer("amount_minor").notNull(),
+  currency: text("currency").notNull(),
+  status: text("status").notNull(), // "initialized" | "success" | "failed"
+  raw: jsonb("raw"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+// ───────────────────────── Messaging, reviews, disputes ─────────────────────────
+
+export const threads = pgTable("threads", {
+  id: id(),
+  orderId: text("order_id")
+    .unique()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  jobId: text("job_id")
+    .unique()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  createdAt: createdAt(),
+});
+
+export const threadMembers = pgTable(
+  "thread_members",
+  {
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    lastReadAt: timestamp("last_read_at", { mode: "date" }),
+  },
+  (t) => [primaryKey({ columns: [t.threadId, t.userId] })],
+);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: id(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    senderId: text("sender_id")
+      .notNull()
+      .references(() => users.id),
+    body: text("body").notNull(),
+    files: textArray("files"),
+    flagged: boolean("flagged").notNull().default(false), // e.g. contact details before hiring
+    createdAt: createdAt(),
+  },
+  (t) => [index("messages_thread_time").on(t.threadId, t.createdAt)],
+);
+
+export const reviews = pgTable(
+  "reviews",
+  {
+    id: id(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    subjectId: text("subject_id")
+      .notNull()
+      .references(() => users.id),
+    rating: integer("rating").notNull(), // 1–5
+    body: text("body"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("one_review_per_author_per_order").on(t.orderId, t.authorId)],
+);
+
+export const disputes = pgTable("disputes", {
+  id: id(),
+  orderId: text("order_id")
+    .notNull()
+    .unique()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  openedById: text("opened_by_id")
+    .notNull()
+    .references(() => users.id),
+  reason: text("reason").notNull(),
+  evidence: textArray("evidence"),
+  status: disputeStatusEnum("status").notNull().default("OPEN"),
+  decision: text("decision"),
+  resolvedAt: timestamp("resolved_at", { mode: "date" }),
+  createdAt: createdAt(),
+});

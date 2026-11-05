@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* The True Scholars brand tokens (see the brand guide). 60% parchment/white · 30% green · 10% amber. */
+@theme {
+  --color-green: #0f3d2a;
+  --color-green-deep: #0b2418;
+  --color-green-tint: #e6f0e9;
+  --color-amber: #f4a261;
+  --color-amber-tint: #fce3cc;
+  --color-amber-deep: #8a4b16;
+  --color-parchment: #fbf4e8;
+  --color-line: #ece3d3;
+  --color-ink: #13261c;
+  --color-ink-muted: #4b5c51;
+  --color-on-green-muted: #d4e4d9;
+
+  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+}
+
+html {
+  background: var(--color-parchment);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Shared form + button styles */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-bold no-underline transition-opacity hover:opacity-90 disabled:opacity-50;
+  }
+  .btn-primary,
+  .btn-amber,
+  .btn-outline {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-bold no-underline transition-opacity hover:opacity-90 disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-green text-white;
+  }
+  .btn-amber {
+    @apply bg-amber text-ink;
+  }
+  .btn-outline {
+    @apply border-2 border-ink bg-transparent text-ink;
+  }
+  .field {
+    @apply block w-full rounded-sm border border-line bg-white px-4 py-3 text-base text-ink outline-none focus:border-green focus:ring-2 focus:ring-green/20;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-bold text-ink;
+  }
+  .card {
+    @apply rounded-md border border-line bg-white p-6;
+  }
+  .eyebrow {
+    @apply text-[13px] font-bold tracking-[0.08em] text-green uppercase;
+  }
+}
