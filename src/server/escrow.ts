@@ -79,7 +79,9 @@ export async function fundMilestone(
     }
 
     await writeEntries(tx, planFund({ milestoneId: milestone.id, amountMinor: p.amountMinor, reference: p.reference }));
-    await tx.update(milestones).set({ status: "FUNDED" }).where(eq(milestones.id, milestone.id));
+    // The delivery clock starts when the money is in escrow, not when the order was opened.
+    const dueAt = milestone.dueAt ? new Date(Date.now() + (milestone.dueAt.getTime() - milestone.createdAt.getTime())) : null;
+    await tx.update(milestones).set({ status: "FUNDED", dueAt }).where(eq(milestones.id, milestone.id));
     if (order.status === "AWAITING_PAYMENT") {
       await tx.update(orders).set({ status: "ACTIVE" }).where(eq(orders.id, order.id));
     }

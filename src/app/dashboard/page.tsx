@@ -34,6 +34,10 @@ export default async function Dashboard() {
       <div className="flex flex-col gap-2">
         <span className="eyebrow">Dashboard</span>
         <h1 className="text-3xl font-bold sm:text-4xl">Welcome, {firstName}</h1>
+        <div className="flex flex-wrap gap-3 text-sm font-bold">
+          <Link href="/orders" className="text-green">Your orders →</Link>
+          <Link href="/services" className="text-green">Find an expert →</Link>
+        </div>
         <div className="flex flex-wrap gap-2">
           {user.roles.map((r) => (
             <span key={r} className="rounded-full bg-green-tint px-3 py-1 text-xs font-bold text-green">
@@ -64,7 +68,8 @@ export default async function Dashboard() {
         {isExpert ? (
           <div className="card flex flex-col gap-3">
             <span className="text-sm font-bold text-ink-muted">Expert</span>
-            <p className="text-ink">You&apos;re a vetted expert. Creating services and bidding on jobs arrive in the next update.</p>
+            <p className="text-ink">You&apos;re a vetted expert. Package your expertise so clients can buy straight away.</p>
+            <Link href="/expert/services" className="btn-primary mt-auto">My services</Link>
           </div>
         ) : (
           <div className="card flex flex-col gap-3">
