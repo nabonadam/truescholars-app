@@ -1,21 +1,32 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import Link from "next/link";
 import { startTestPayment } from "@/app/actions/payments";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { isTestMode, paystackConfigured } from "@/lib/paystack";
 import { expertAvailable } from "@/server/escrow";
+import { requireUser } from "@/server/guards";
+import { getApplicationForUser, listApplications } from "@/server/vetting";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
+const APP_STATUS: Record<string, string> = {
+  SUBMITTED: "Application received: awaiting review",
+  IN_REVIEW: "Application under review",
+  REJECTED: "Not approved yet: you can update and reapply",
+};
+
 export default async function Dashboard() {
-  const session = await auth();
-  if (!session?.user) redirect("/sign-in");
-  const { user } = session;
+  const user = await requireUser();
+  const db = getDb();
   const isExpert = user.roles.includes("EXPERT");
-  const available = isExpert ? await expertAvailable(getDb(), user.id) : 0;
+  const isAdmin = user.roles.includes("ADMIN");
+  const [available, application, openApps] = await Promise.all([
+    isExpert ? expertAvailable(db, user.id) : Promise.resolve(0),
+    isExpert ? Promise.resolve(null) : getApplicationForUser(db, user.id),
+    isAdmin ? listApplications(db).then((r) => r.filter((a) => a.status === "SUBMITTED" || a.status === "IN_REVIEW").length) : Promise.resolve(0),
+  ]);
   const firstName = user.name?.split(" ")[0] ?? "there";
 
   return (
@@ -41,11 +52,25 @@ export default async function Dashboard() {
           </span>
         </div>
 
-        {!isExpert && (
+        {isAdmin && (
+          <div className="card flex flex-col gap-3 border-green">
+            <span className="text-sm font-bold text-ink-muted">Admin · Expert applications</span>
+            <span className="font-display text-3xl font-bold">{openApps}</span>
+            <span className="text-sm text-ink-muted">waiting for review</span>
+            <Link href="/admin/applications" className="btn-primary mt-auto">Review applications</Link>
+          </div>
+        )}
+
+        {isExpert ? (
+          <div className="card flex flex-col gap-3">
+            <span className="text-sm font-bold text-ink-muted">Expert</span>
+            <p className="text-ink">You&apos;re a vetted expert. Creating services and bidding on jobs arrive in the next update.</p>
+          </div>
+        ) : (
           <div className="card flex flex-col gap-3">
             <span className="text-sm font-bold text-ink-muted">Become an expert</span>
-            <p className="text-ink">Apply to join our vetted network and offer your services.</p>
-            <span className="mt-auto text-sm font-bold text-amber-deep">Applications open in the next update</span>
+            <p className="text-ink">{application ? APP_STATUS[application.status] : "Apply to join our vetted network and offer your services."}</p>
+            <Link href="/apply" className="btn-outline mt-auto">{application ? "View application" : "Apply now"}</Link>
           </div>
         )}
 

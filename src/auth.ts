@@ -7,6 +7,7 @@ import Google from "next-auth/providers/google";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
+import { grantRole, isAdminEmail } from "@/server/vetting";
 
 type AppRole = "CLIENT" | "EXPERT" | "ADMIN";
 
@@ -52,8 +53,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       async jwt({ token, user }) {
         const userId = user?.id ?? token.sub;
         if (userId) {
-          const [row] = await db.select({ roles: users.roles }).from(users).where(eq(users.id, userId));
-          token.roles = row?.roles ?? ["CLIENT"];
+          const [row] = await db.select({ roles: users.roles, email: users.email }).from(users).where(eq(users.id, userId));
+          let roles = row?.roles ?? ["CLIENT"];
+          // Emails listed in ADMIN_EMAILS are promoted to ADMIN the next time their session refreshes.
+          if (row && isAdminEmail(row.email) && !roles.includes("ADMIN")) {
+            await grantRole(db, userId, "ADMIN");
+            roles = [...roles, "ADMIN"];
+          }
+          token.roles = roles;
         }
         return token;
       },
