@@ -153,9 +153,12 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
 
         <div ref={feed} className="lab-paper flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[920px] px-3 py-6 sm:px-6">
-            {!runs.length && !pending && access.canRun && <Welcome sugg={sugg} aiEnabled={aiEnabled} onAsk={(t) => { setMode("ask"); setInput(t); box.current?.focus(); }} onCmd={putCommand} />}
+            {runs.filter((r) => r.status === "IMPORT").map((r) => (
+              <div key={r.id} className="mb-7"><RunBlock run={r} sessionId={session.id} firstTable={0} aiEnabled={aiEnabled} onEdit={putCommand} /></div>
+            ))}
+            {!runs.some((r) => r.status !== "IMPORT") && !pending && access.canRun && <Welcome sugg={sugg} aiEnabled={aiEnabled} onAsk={(t) => { setMode("ask"); setInput(t); box.current?.focus(); }} onCmd={putCommand} />}
             <div className="space-y-7">
-              {runs.map((r, i) => (
+              {runs.map((r, i) => r.status === "IMPORT" ? null : (
                 <RunBlock key={r.id} run={r} sessionId={session.id} firstTable={numbered[i]} aiEnabled={aiEnabled} onEdit={putCommand} />
               ))}
               {pending && <Pending text={pending} ask={mode === "ask"} />}
@@ -403,6 +406,21 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   const english = run.mode === "ENGLISH";
   const act = (fn: () => Promise<{ error?: string } | undefined>) => start(async () => { const r = await fn(); setErr(r?.error ?? null); });
 
+  if (run.status === "IMPORT") {
+    const [head, ...rest] = (run.explanation ?? "").split("\n");
+    return (
+      <div className="ts-rise flex gap-3.5 rounded-sm border border-green/20 bg-white p-4 sm:p-5">
+        <span className="grid h-10 w-10 flex-none place-items-center rounded-[12px] bg-green text-amber"><Icon name="check" size={20} /></span>
+        <div className="min-w-0">
+          <p className="font-bold text-ink">{head}</p>
+          <ul className="mt-1.5 space-y-1 text-[13.5px] text-ink-muted">
+            {rest.map((line, i) => <li key={i}>{line}</li>)}
+          </ul>
+          <p className="mt-2 text-[12.5px] text-ink-muted">Download it as a Stata file any time from Export → Original data (.dta).</p>
+        </div>
+      </div>
+    );
+  }
   if (run.status === "RESET") {
     return (
       <div className="flex items-center gap-3 text-[12.5px] font-bold text-amber-deep">

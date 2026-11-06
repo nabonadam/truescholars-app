@@ -20,9 +20,10 @@ class Dataset:
     var_labels: dict[str, str] = field(default_factory=dict)
     value_labels: dict[str, dict] = field(default_factory=dict)  # var -> {code: label}
     label_sets: dict[str, dict] = field(default_factory=dict)  # label define name -> {code: label}
+    import_notes: list[str] = field(default_factory=list)  # what converting a CSV/Excel file changed
 
     def copy(self) -> "Dataset":
-        return Dataset(self.df.copy(), dict(self.var_labels), {k: dict(v) for k, v in self.value_labels.items()}, {k: dict(v) for k, v in self.label_sets.items()})
+        return Dataset(self.df.copy(), dict(self.var_labels), {k: dict(v) for k, v in self.value_labels.items()}, {k: dict(v) for k, v in self.label_sets.items()}, list(self.import_notes))
 
     def label(self, var: str) -> str:
         return self.var_labels.get(var, "")
@@ -95,8 +96,12 @@ def load_path(path: str, filename: str) -> Dataset:
         if ext in ("csv", "txt", "tsv"):
             with open(path, "rb") as fh:
                 head = fh.read(65536).decode("utf-8-sig", errors="replace")
-            sep = "\t" if ext == "tsv" or (head.count("\t") > head.count(",")) else ","
-            df = pd.read_csv(path, sep=sep, encoding="utf-8-sig", encoding_errors="replace", low_memory=False)
+            first = head.splitlines()[0] if head else ""
+            counts = {"\t": first.count("\t"), ";": first.count(";"), ",": first.count(",")}
+            sep = "\t" if ext == "tsv" else max(counts, key=lambda k: counts[k]) if any(counts.values()) else ","
+            # European Excel writes "1,5" for 1.5 when the separator is ";"
+            decimal = "," if sep == ";" else "."
+            df = pd.read_csv(path, sep=sep, decimal=decimal, encoding="utf-8-sig", encoding_errors="replace", low_memory=False)
         elif ext in ("xlsx", "xls"):
             df = pd.read_excel(path)
         else:
@@ -105,14 +110,50 @@ def load_path(path: str, filename: str) -> Dataset:
         raise
     except Exception as e:  # noqa: BLE001 - surfaced to the user in plain words
         raise StataError(f"We couldn't read that file ({type(e).__name__}). Check that it opens in Excel or Stata.") from e
+    return to_stata(df, ext)
+
+
+def to_stata(df: pd.DataFrame, ext: str) -> Dataset:
+    """Turns a spreadsheet into a proper Stata dataset, and says what changed:
+    Stata-safe names (original headings kept as variable labels), numbers stored as text made
+    numeric, and text categories encoded as labelled numbers, the way Stata's `encode` does
+    (codes 1, 2, ... in alphabetical order). Free text, IDs and dates stay as text."""
+    original = [str(c).strip() for c in df.columns]
     df = _clean_names(df)
-    # Numbers stored as text ("12", "3.5") become numeric, like Stata's destring for clean columns.
+    var_labels = {n: o[:80] for n, o in zip(df.columns, original) if o and o != n}
+    value_labels: dict[str, dict] = {}
+    numeric, encoded = [], []
     for c in df.columns:
-        if df[c].dtype == object:
-            conv = pd.to_numeric(df[c], errors="coerce")
-            if conv.notna().sum() == df[c].notna().sum() and df[c].notna().any():
-                df[c] = conv
-    return Dataset(df)
+        if not (pd.api.types.is_object_dtype(df[c]) or pd.api.types.is_string_dtype(df[c])):
+            continue
+        df[c] = df[c].astype(object).map(lambda v: (v.strip() or np.nan) if isinstance(v, str) else v)
+        conv = pd.to_numeric(df[c], errors="coerce")
+        if df[c].notna().any() and conv.notna().sum() == df[c].notna().sum():
+            df[c] = conv
+            numeric.append(c)
+            continue
+        vals = df[c].dropna().astype(str)
+        uniq = vals.nunique()
+        looks_like_dates = vals.head(50).str.match(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}").mean() > 0.8 if len(vals) else False
+        if 1 <= uniq <= 50 and (uniq <= 2 or uniq <= 0.5 * len(vals)) and not looks_like_dates:
+            levels = sorted(vals.unique())
+            codes = {v: i + 1 for i, v in enumerate(levels)}
+            df[c] = df[c].map(lambda v: codes.get(str(v)) if isinstance(v, str) else np.nan).astype(float)
+            value_labels[c] = {i + 1: v for i, v in enumerate(levels)}
+            encoded.append(f"{c} ({', '.join(f'{i + 1} = {v}' for i, v in enumerate(levels[:4]))}{', …' if len(levels) > 4 else ''})")
+    kind = {"csv": "CSV", "txt": "text", "tsv": "text", "xlsx": "Excel", "xls": "Excel"}.get(ext, ext.upper())
+    notes = [f"Converted your {kind} file to Stata format: {df.shape[1]} variables, {len(df):,} observations."]
+    renamed = [f"“{o}” → {n}" for n, o in zip(df.columns, original) if o != n]
+    if renamed:
+        notes.append(f"Renamed {len(renamed)} column{'s' if len(renamed) != 1 else ''} to valid Stata names (the original headings are kept as variable labels): {'; '.join(renamed[:6])}{'; …' if len(renamed) > 6 else ''}.")
+    if encoded:
+        notes.append(f"Turned {len(encoded)} text column{'s' if len(encoded) != 1 else ''} into labelled categories, as Stata's encode does: {'; '.join(encoded[:5])}{'; …' if len(encoded) > 5 else ''}.")
+    if numeric:
+        notes.append(f"Read {len(numeric)} column{'s' if len(numeric) != 1 else ''} of numbers stored as text as numeric: {', '.join(numeric[:8])}{', …' if len(numeric) > 8 else ''}.")
+    left = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
+    if left:
+        notes.append(f"Kept as text (too many different values to be categories): {', '.join(left[:8])}{', …' if len(left) > 8 else ''}.")
+    return Dataset(df, var_labels, value_labels, {k: dict(v) for k, v in value_labels.items()}, notes)
 
 
 def is_numeric(s: pd.Series) -> bool:

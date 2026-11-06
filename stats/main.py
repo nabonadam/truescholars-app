@@ -118,7 +118,7 @@ def _changes_data(commands: list[str]) -> bool:
 
 
 def overview(ds: Dataset) -> dict:
-    return {"nObs": int(len(ds.df)), "nVars": int(ds.df.shape[1]), "variables": variables_meta(ds)}
+    return {"nObs": int(len(ds.df)), "nVars": int(ds.df.shape[1]), "variables": variables_meta(ds), "importNotes": ds.import_notes}
 
 
 class LoadBody(BaseModel):

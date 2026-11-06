@@ -171,14 +171,24 @@ def test_load_csv_and_clean_names():
     assert d.df["Monthly_Income"].isna().sum() == 1
 
 
+def test_csv_becomes_a_stata_dataset():
+    rows = "\n".join(f"{i};{'Male' if i % 2 else 'Female'};{['Public', 'Private', 'Mission'][i % 3]};{50 + i % 9},5;note {i};2024-03-{1 + i % 28:02d}" for i in range(1, 41))
+    d = load_bytes(("ID;Gender;School type;Score;Comment;Survey date\n" + rows).encode(), "x.csv")  # semicolons, decimal commas
+    assert d.value_labels["Gender"] == {1: "Female", 2: "Male"} and d.value_label("School_type", 3) == "Public"
+    assert d.label("School_type") == "School type" and d.df["Score"].iloc[0] == 51.5
+    assert not pd.api.types.is_numeric_dtype(d.df["Comment"]) and not pd.api.types.is_numeric_dtype(d.df["Survey_date"])
+    assert any("labelled categories" in n for n in d.import_notes)
+    assert one(d, "regress Score i.Gender i.School_type")["summary"]["n"] == 40  # no encode step needed
+
+
 def test_encode_and_destring_for_text_data():
-    d = load_bytes(b"sex,school,amt\nMale,Public,\"1,200\"\nFemale,Private,300\nFemale,Public,450\nMale,Mission,500\n", "x.csv")
-    one(d, "encode sex, gen(sex_n)")
-    assert d.value_label("sex_n", 1) == "Female" and d.df["sex_n"].tolist() == [2, 1, 1, 2]  # alphabetical, like Stata
-    one(d, "encode school, gen(sch)")
-    assert one(d, "tab sch")["summary"]
-    assert "replaced" in one(d, "destring amt, replace")["log"] and d.df["amt"].tolist() == [1200, 300, 450, 500]
-    r = run_commands(d, ["encode sex_n, gen(z)"])[0]
+    names = "\n".join(f"Person {i},\"{i},200\"" for i in range(8))
+    d = load_bytes(("name,amt\n" + names).encode(), "x.csv")
+    assert not pd.api.types.is_numeric_dtype(d.df["name"])  # free text stays text
+    one(d, "encode name, gen(name_n)")
+    assert d.value_label("name_n", 1) == "Person 0"
+    assert "replaced" in one(d, "destring amt, replace")["log"] and d.df["amt"].tolist()[:2] == [200, 1200]
+    r = run_commands(d, ["encode name_n, gen(z)"])[0]
     assert not r["ok"] and "not a string" in r["error"]
     r = run_commands(d, ["summarize amt if"])[0]
     assert not r["ok"] and "invalid syntax" in r["error"]

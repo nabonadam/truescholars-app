@@ -28,7 +28,7 @@ export type CommandResult = {
   summary?: Record<string, unknown>;
   changesData?: boolean;
 };
-type Overview = { nObs: number; nVars: number; variables: VarMeta[] };
+type Overview = { nObs: number; nVars: number; variables: VarMeta[]; importNotes?: string[] };
 
 // ───────── engine ─────────
 
@@ -111,6 +111,10 @@ export async function createSession(db: DB, ownerId: string, file: { name: strin
     .insert(statSessions)
     .values({ ownerId, datasetId: ds.id, title: name, nObs: o.nObs, nVars: o.nVars, variables: o.variables })
     .returning({ id: statSessions.id });
+  if (o.importNotes?.length) {
+    // What converting a CSV/Excel file to Stata format changed, shown at the top of the session.
+    await db.insert(statRuns).values({ sessionId: s.id, input: "Converted to Stata format", mode: "NOTE", status: "IMPORT", explanation: o.importNotes.join("\n") });
+  }
   return s.id;
 }
 
