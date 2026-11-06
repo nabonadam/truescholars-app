@@ -15,7 +15,14 @@ const CTA: Record<NotificationKind, string> = {
   PAYMENT_RELEASED: "View your earnings",
   REVIEW_RECEIVED: "See the review",
   APPLICATION_DECIDED: "View your application",
+  NEW_PROPOSAL: "Review proposals",
+  HIRED: "Open the order",
+  PROPOSAL_DECLINED: "Find more work",
+  JOB_MATCH: "See the job",
 };
+
+/** Kinds that can arrive in bursts: only the first unread one per link is emailed. */
+const THROTTLED = new Set<NotificationKind>(["MESSAGE", "NEW_PROPOSAL"]);
 
 /**
  * Creates a notification and emails the user. For messages, only the first unread one per order
@@ -27,11 +34,11 @@ export async function notify(
 ) {
   try {
     let shouldEmail = true;
-    if (p.kind === "MESSAGE" && p.orderId) {
+    if (THROTTLED.has(p.kind)) {
       const [{ n }] = await db
         .select({ n: count() })
         .from(notifications)
-        .where(and(eq(notifications.userId, p.userId), eq(notifications.kind, "MESSAGE"), eq(notifications.orderId, p.orderId), isNull(notifications.readAt)));
+        .where(and(eq(notifications.userId, p.userId), eq(notifications.kind, p.kind), eq(notifications.link, p.link), isNull(notifications.readAt)));
       shouldEmail = Number(n) === 0;
     }
     await db.insert(notifications).values({
@@ -80,4 +87,12 @@ export async function markOrderNotificationsRead(db: DB, userId: string, orderId
     .update(notifications)
     .set({ readAt: new Date() })
     .where(and(eq(notifications.userId, userId), eq(notifications.orderId, orderId), isNull(notifications.readAt)));
+}
+
+/** Marks notifications pointing at a page (e.g. a job) as read when the user opens it. */
+export async function markLinkNotificationsRead(db: DB, userId: string, link: string) {
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.userId, userId), eq(notifications.link, link), isNull(notifications.readAt)));
 }

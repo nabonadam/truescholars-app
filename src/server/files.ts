@@ -2,7 +2,7 @@
 
 import { eq, inArray } from "drizzle-orm";
 import type { DB } from "@/db";
-import { files, orders } from "@/db/schema";
+import { files, jobs, orders } from "@/db/schema";
 
 export class FileError extends Error {}
 
@@ -27,14 +27,15 @@ export function checkUpload(name: string, size: number) {
 }
 
 /** Saves uploaded browser File objects for an order; returns their ids. */
-export async function saveUploads(db: DB, p: { orderId: string; ownerId: string; uploads: File[] }): Promise<string[]> {
+export async function saveUploads(db: DB, p: { orderId?: string; jobId?: string; ownerId: string; uploads: File[] }): Promise<string[]> {
   const real = p.uploads.filter((f) => f && f.size > 0);
   if (real.length > MAX_FILES_PER_UPLOAD) throw new FileError(`Attach up to ${MAX_FILES_PER_UPLOAD} files at a time.`);
   real.forEach((f) => checkUpload(f.name, f.size));
   if (real.length === 0) return [];
   const rows = await Promise.all(
     real.map(async (f) => ({
-      orderId: p.orderId,
+      orderId: p.orderId ?? null,
+      jobId: p.jobId ?? null,
       ownerId: p.ownerId,
       name: f.name.slice(0, 200),
       mimeType: f.type || "application/octet-stream",
@@ -59,6 +60,11 @@ export async function getFileForUser(db: DB, fileId: string, user: { id: string;
   const [f] = await db.select().from(files).where(eq(files.id, fileId));
   if (!f) return null;
   if (user.roles.includes("ADMIN") || f.ownerId === user.id) return f;
+  if (f.jobId) {
+    // Job attachments: visible to the job's owner and to experts who can bid on it
+    const [j] = await db.select({ clientId: jobs.clientId, status: jobs.status }).from(jobs).where(eq(jobs.id, f.jobId));
+    return j && (j.clientId === user.id || (user.roles.includes("EXPERT") && j.status !== "CANCELLED")) ? f : null;
+  }
   if (!f.orderId) return null;
   const [o] = await db.select({ clientId: orders.clientId, expertId: orders.expertId }).from(orders).where(eq(orders.id, f.orderId));
   return o && (o.clientId === user.id || o.expertId === user.id) ? f : null;

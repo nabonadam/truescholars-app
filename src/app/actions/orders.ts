@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { milestones, orders, paymentEvents } from "@/db/schema";
 import { initializeTransaction, newReference, paystackConfigured } from "@/lib/paystack";
 import { requireUser } from "@/server/guards";
+import { nextFundable } from "@/server/jobs";
 import { createOrderFromService, OrderError } from "@/server/orders";
 import { getService, type TierName } from "@/server/services";
 
@@ -72,9 +73,7 @@ export async function payOrderAction(form: FormData) {
   const db = getDb();
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order || order.clientId !== user.id || !user.email) redirect("/orders");
-  const [next] = (await db.select().from(milestones).where(eq(milestones.orderId, orderId)).orderBy(milestones.position)).filter(
-    (m) => m.status === "PENDING_FUNDING",
-  );
+  const next = nextFundable(await db.select().from(milestones).where(eq(milestones.orderId, orderId)));
   if (!next) redirect(`/orders/${orderId}`);
   await payMilestone({ milestoneId: next.id, amountMinor: next.amountMinor, email: user.email, userId: user.id, orderId });
 }

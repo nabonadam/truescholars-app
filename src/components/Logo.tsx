@@ -17,9 +17,9 @@ export function CiteMark({ size = 32, onDark = false }: { size?: number; onDark?
 
 export function Logo({ onDark = false }: { onDark?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <CiteMark size={30} onDark={onDark} />
-      <span className={`font-display text-xl tracking-tight whitespace-nowrap ${onDark ? "text-white" : "text-ink"}`}>
+    <span className="inline-flex items-center gap-2">
+      <CiteMark size={28} onDark={onDark} />
+      <span className={`font-display text-lg tracking-tight sm:text-xl whitespace-nowrap ${onDark ? "text-white" : "text-ink"}`}>
         <span className="font-medium opacity-80">The</span> <span className="font-extrabold">True Scholars</span>
       </span>
     </span>

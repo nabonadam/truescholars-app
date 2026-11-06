@@ -3,11 +3,12 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { DB } from "@/db";
 import { milestones, orders, reviews, users } from "@/db/schema";
+import { listJobsForClient, nextFundable } from "./jobs";
 import { unreadByOrder } from "./orderRoom";
 
 export type AttentionItem = {
   key: string;
-  icon: "package" | "card" | "star" | "message" | "clock" | "refresh";
+  icon: "package" | "card" | "star" | "message" | "clock" | "refresh" | "spark" | "briefcase";
   tone: "amber" | "green" | "solid";
   title: string;
   detail: string;
@@ -21,11 +22,22 @@ const inDays = (d: Date, now: Date) => Math.max(0, Math.round((d.getTime() - now
 const short = (s: string, n = 48) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export async function attentionItems(db: DB, userId: string, now = new Date()): Promise<AttentionItem[]> {
+  const items: AttentionItem[] = [];
+  for (const j of await listJobsForClient(db, userId)) {
+    if (j.status === "OPEN" && j.unseen > 0) {
+      items.push({
+        key: `props-${j.id}`, icon: "spark", tone: "amber", urgent: true, href: `/jobs/${j.id}`, cta: "Review",
+        title: `${j.unseen} new proposal${j.unseen === 1 ? "" : "s"} for “${short(j.title)}”`,
+        detail: "Compare experts, shortlist the best and hire when you're ready.",
+      });
+    }
+  }
+
   const myOrders = await db
     .select()
     .from(orders)
     .where(or(eq(orders.clientId, userId), eq(orders.expertId, userId)));
-  if (myOrders.length === 0) return [];
+  if (myOrders.length === 0) return items;
 
   const ids = myOrders.map((o) => o.id);
   const [ms, revs, people, unread] = await Promise.all([
@@ -39,7 +51,6 @@ export async function attentionItems(db: DB, userId: string, now = new Date()): 
   ]);
   const first = (id: string) => people.find((p) => p.id === id)?.name?.split(" ")[0] ?? "Someone";
   const reviewed = new Set(revs.map((r) => r.orderId));
-  const items: AttentionItem[] = [];
 
   for (const o of myOrders) {
     const isClient = o.clientId === userId;
@@ -69,6 +80,15 @@ export async function attentionItems(db: DB, userId: string, now = new Date()): 
 
     if (isClient && o.status === "AWAITING_PAYMENT") {
       items.push({ key: `pay-${o.id}`, icon: "card", tone: "amber", href, cta: "Pay", title: `Finish paying for “${title}”`, detail: `${other} starts once your payment is in escrow.` });
+    }
+    const mine = ms.filter((x) => x.orderId === o.id);
+    const next = o.status === "ACTIVE" && nextFundable(mine);
+    if (isClient && next && mine.length > 1) {
+      items.push({
+        key: `next-${next.id}`, icon: "card", tone: "amber", href, cta: "Fund",
+        title: `Ready for milestone ${next.position} of “${title}”`,
+        detail: `Fund “${short(next.title, 40)}” so ${other} can carry on.`,
+      });
     }
     if (o.status === "COMPLETED" && !reviewed.has(o.id)) {
       items.push({ key: `rev-${o.id}`, icon: "star", tone: "green", href, cta: "Rate", title: `Rate ${other} for “${title}”`, detail: "Your review helps others choose with confidence." });

@@ -14,6 +14,7 @@ const PATHS = {
   clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
   receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
   card: "M3 6h18v12H3zM3 10h18",
+  briefcase: "M3 8h18v12H3zM8 8V5h8v3M3 13h18",
   spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6",
 } as const;
 
@@ -50,6 +51,10 @@ const KIND: Record<string, { icon: IconName; tone: keyof typeof TONES }> = {
   PAYMENT_RELEASED: { icon: "wallet", tone: "solid" },
   REVIEW_RECEIVED: { icon: "star", tone: "amber" },
   APPLICATION_DECIDED: { icon: "shield", tone: "green" },
+  NEW_PROPOSAL: { icon: "spark", tone: "amber" },
+  HIRED: { icon: "check", tone: "solid" },
+  PROPOSAL_DECLINED: { icon: "receipt", tone: "ink" },
+  JOB_MATCH: { icon: "briefcase", tone: "green" },
 };
 
 export function KindIcon({ kind }: { kind: string }) {

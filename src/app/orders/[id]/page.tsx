@@ -14,12 +14,13 @@ import { requireUser } from "@/server/guards";
 import { markOrderNotificationsRead } from "@/server/notifications";
 import { autoApproveDue, listDeliveries, listMessages, markThreadRead, orderPulse, reviewsForOrder } from "@/server/orderRoom";
 import { getOrderForUser } from "@/server/orders";
+import { nextFundable } from "@/server/jobs";
 
 export const metadata: Metadata = { title: "Order" };
 export const dynamic = "force-dynamic";
 
 const MILESTONE: Record<string, string> = {
-  PENDING_FUNDING: "Awaiting payment",
+  PENDING_FUNDING: "Not funded yet",
   FUNDED: "Paid into escrow · in progress",
   DELIVERED: "Delivered · awaiting the client's approval",
   REVISION_REQUESTED: "Revision requested",
@@ -30,9 +31,10 @@ const MILESTONE: Record<string, string> = {
 const fmtDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const fmtTime = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ hired?: string }> }) {
   const user = await requireUser();
   const { id } = await params;
+  const { hired } = await searchParams;
   const db = getDb();
   await autoApproveDue(db); // so an overdue approval never waits on a scheduler
   const data = await getOrderForUser(db, id, user.id, { admin: user.roles.includes("ADMIN") });
@@ -54,6 +56,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const myReview = revs.find((r) => r.authorId === user.id);
   const theirReview = revs.find((r) => r.authorId !== user.id);
   const expertFirst = expert.name?.split(" ")[0] ?? "the expert";
+  const next = nextFundable(milestones);
+  const multi = milestones.length > 1;
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6">
@@ -84,14 +88,36 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {order.status === "AWAITING_PAYMENT" && role === "client" && (
+      {hired && role === "client" && order.status === "AWAITING_PAYMENT" && (
+        <div className="flex items-center gap-4 rounded-md bg-green p-5 text-white">
+          <span className="grid size-12 flex-none place-items-center rounded-full bg-amber font-display text-xl font-bold text-ink" aria-hidden="true">✓</span>
+          <div>
+            <div className="font-display text-xl font-bold">You hired {expertFirst}!</div>
+            <p className="text-on-green-muted">We&apos;ve let {expertFirst} know. Fund the first milestone below and the work begins. Say hello in the messages while you&apos;re here.</p>
+          </div>
+        </div>
+      )}
+
+      {role === "client" && next && (order.status === "AWAITING_PAYMENT" || order.status === "ACTIVE") && (
         <div className="card flex flex-wrap items-center gap-4 border-amber bg-amber-tint">
-          <p className="flex-1 text-amber-deep">Your order starts once payment is in escrow.</p>
+          <div className="flex-1">
+            <p className="font-bold text-ink">
+              {multi ? `${order.status === "AWAITING_PAYMENT" ? "Start with" : "Ready for"} milestone ${next.position} of ${milestones.length}: ${next.title}` : "Your order starts once payment is in escrow."}
+            </p>
+            <p className="text-sm text-amber-deep">
+              {formatMoney(next.amountMinor, order.currency)} is held safely in escrow and released to {expertFirst} only when you approve the work.
+            </p>
+          </div>
           <form action={payOrderAction}>
             <input type="hidden" name="orderId" value={order.id} />
-            <button className="btn-primary">Pay now</button>
+            <button className="btn-primary">{multi ? `Fund ${formatMoney(next.amountMinor, order.currency).replace(/\.00$/, "")}` : "Pay now"}</button>
           </form>
         </div>
+      )}
+      {role === "expert" && next && order.status === "ACTIVE" && (
+        <p className="rounded-sm bg-parchment px-4 py-3 text-sm">
+          Milestone {next.position} (“{next.title}”) starts once {client.name?.split(" ")[0] ?? "the client"} funds it. We&apos;ll notify you.
+        </p>
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
@@ -172,7 +198,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
           {answers.length > 0 && (
             <details className="card">
-              <summary className="cursor-pointer text-lg font-bold">Project details from the client</summary>
+              <summary className="cursor-pointer text-lg font-bold">{order.proposalId ? "The job and the proposal" : "Project details from the client"}</summary>
               <div className="mt-4 flex flex-col gap-4">
                 {answers.map((a) => (
                   <div key={a.question}>

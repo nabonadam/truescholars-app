@@ -178,6 +178,7 @@ export const expertProfiles = pgTable("expert_profiles", {
   credentials: textArray("credentials"),
   level: sellerLevelEnum("level").notNull().default("NEW"),
   bidCredits: integer("bid_credits").notNull().default(20),
+  creditsMonth: text("credits_month"), // "2026-11": month the free allowance was last topped up
   verifiedAt: timestamp("verified_at", { mode: "date" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -241,6 +242,10 @@ export const jobs = pgTable("jobs", {
   budgetMaxMinor: integer("budget_max_minor").notNull(),
   currency: text("currency").notNull().default("GHS"),
   deadline: timestamp("deadline", { mode: "date" }),
+  timelineDays: integer("timeline_days"), // how soon the client needs it; null = flexible
+  skills: textArray("skills"),
+  level: text("level").notNull().default("any"), // any | masters | phd
+
   status: jobStatusEnum("status").notNull().default("OPEN"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -264,6 +269,8 @@ export const proposals = pgTable(
     pitch: text("pitch").notNull(),
     milestonePlan: jsonb("milestone_plan").$type<MilestonePlanItem[]>().notNull(),
     status: proposalStatusEnum("status").notNull().default("SUBMITTED"),
+    creditsSpent: integer("credits_spent").notNull().default(0),
+    viewedAt: timestamp("viewed_at", { mode: "date" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -377,6 +384,10 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "PAYMENT_RELEASED",
   "REVIEW_RECEIVED",
   "APPLICATION_DECIDED",
+  "NEW_PROPOSAL",
+  "HIRED",
+  "PROPOSAL_DECLINED",
+  "JOB_MATCH",
 ]);
 
 export const notifications = pgTable(
@@ -411,6 +422,7 @@ export const files = pgTable(
   {
     id: id(),
     orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
+    jobId: text("job_id").references(() => jobs.id, { onDelete: "cascade" }),
     ownerId: text("owner_id")
       .notNull()
       .references(() => users.id),

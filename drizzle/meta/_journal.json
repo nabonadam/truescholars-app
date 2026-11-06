@@ -36,6 +36,13 @@
       "when": 1793932439562,
       "tag": "0004_conversation_stars",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793933749476,
+      "tag": "0005_jobs_bidding",
+      "breakpoints": true
     }
   ]
 }

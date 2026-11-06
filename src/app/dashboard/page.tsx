@@ -16,6 +16,7 @@ import { unreadNotificationCount } from "@/server/notifications";
 import { listFlaggedMessages, unreadByOrder } from "@/server/orderRoom";
 import { clientEscrowTotal, listOrdersForUser } from "@/server/orders";
 import { listServicesForExpert } from "@/server/services";
+import { budgetLabel, creditBalance, expertProfileOf, recommendedJobs } from "@/server/jobs";
 import { getApplicationForUser, listApplications } from "@/server/vetting";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -78,6 +79,8 @@ export default async function Dashboard() {
     unreadByOrder(db, user.id),
   ]);
   const unreadMsgs = [...unreadMap.values()].reduce((a, b) => a + b, 0);
+  const profile = isExpert ? await expertProfileOf(db, user.id) : null;
+  const [jobsForYou, credits] = profile ? await Promise.all([recommendedJobs(db, user.id, 3), creditBalance(db, profile.id)]) : [[], 0];
 
   const buying = orders.filter((o) => o.clientId === user.id);
   const selling = orders.filter((o) => o.expertId === user.id);
@@ -112,7 +115,13 @@ export default async function Dashboard() {
               : `You have ${attention.length} thing${attention.length === 1 ? "" : "s"} to look at${urgent ? `, ${urgent} of them time-sensitive` : ""}.`}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href="/services" className="btn-amber"><Icon name="search" size={18} /> Find an expert</Link>
+            <Link href="/jobs/new" className="btn-amber"><Icon name="briefcase" size={18} /> Post a job</Link>
+            <Link href="/services" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-[15px] font-bold text-green no-underline"><Icon name="search" size={18} /> Find an expert</Link>
+            {isExpert && (
+              <Link href="/jobs" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/40 px-5 text-[15px] font-bold text-white no-underline">
+                <Icon name="spark" size={18} /> Find work
+              </Link>
+            )}
             <Link href="/orders" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/40 px-5 text-[15px] font-bold text-white no-underline">
               My orders
             </Link>
@@ -137,7 +146,7 @@ export default async function Dashboard() {
           <div className="flex flex-col gap-4 rounded-lg bg-amber-tint p-6">
             <h2 className="text-2xl font-bold">Get research help in three steps</h2>
             <ol className="grid gap-4 md:grid-cols-3">
-              <Step n={1} icon="search" title="Find an expert" body="Browse vetted statisticians, editors and methodologists, and pick a package." />
+              <Step n={1} icon="search" title="Find an expert or post a job" body="Pick a ready-made package, or describe your project and let vetted experts send you proposals." />
               <Step n={2} icon="lock" title="Pay into escrow" body="Mobile Money or card. The expert isn't paid until you approve the work." />
               <Step n={3} icon="star" title="Approve and review" body="Get your delivery, ask for revisions if needed, then approve and rate." />
             </ol>
@@ -243,6 +252,30 @@ export default async function Dashboard() {
               <h2 className="text-lg font-bold text-white">How you&apos;re protected</h2>
               <p className="text-sm text-on-green-muted">Your payment sits in escrow until you approve the delivery. Revisions are included, and our team steps in if you can&apos;t agree.</p>
             </div>
+
+            {isExpert && (
+              <div className="card flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold">Jobs for you</h2>
+                  <span className="rounded-full bg-amber-tint px-3 py-1 text-xs font-bold text-amber-deep">{credits} credits</span>
+                </div>
+                {jobsForYou.length === 0 ? (
+                  <p className="text-sm text-ink-muted">No matching jobs right now. We&apos;ll notify you when one is posted in your categories.</p>
+                ) : (
+                  <ul className="flex flex-col divide-y divide-line">
+                    {jobsForYou.map((j) => (
+                      <li key={j.id}>
+                        <Link href={`/jobs/${j.id}`} className="flex flex-col gap-0.5 py-3 text-ink no-underline hover:text-green">
+                          <span className="line-clamp-2 font-bold">{j.title}</span>
+                          <span className="text-xs text-ink-muted">{budgetLabel(j)} · {j.proposalCount === 0 ? "no proposals yet" : `${j.proposalCount} proposal${j.proposalCount === 1 ? "" : "s"}`}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Link href="/jobs" className="btn-primary">Browse all jobs</Link>
+              </div>
+            )}
 
             {isExpert ? (
               <div className="card flex flex-col gap-3">
