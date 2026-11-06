@@ -132,9 +132,23 @@ export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: num
   };
 }
 
+/** Numbers rounded the APA way before the model sees them, so it copies instead of rounding. */
+export function apaRound(value: unknown, key = ""): unknown {
+  if (Array.isArray(value)) return value.map((v) => apaRound(v, key));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, apaRound(v, k)]));
+  if (typeof value !== "number" || !Number.isFinite(value)) return value;
+  if (/^(p|pv|pvalue|p_?value|prob)(_|$)|_p$/i.test(key)) return value < 0.001 ? "< .001" : value.toFixed(3).replace(/^0/, "");
+  if (Number.isInteger(value)) return value;
+  if (/^(r|rho|r2|r2_a|adj_r2|pseudo_r2|eta2|v|cramers_v|cohens_d|d)$/i.test(key)) return Number(value.toFixed(2));
+  const a = Math.abs(value);
+  if (a >= 0.1) return Number(value.toFixed(2));
+  if (a >= 0.001) return Number(value.toFixed(3));
+  return Number(value.toPrecision(2));
+}
+
 export async function interpret(input: string, results: { command: string; summary?: unknown; notes?: string[] }[]): Promise<string> {
-  const system = `You write the results paragraph a careful supervisor would accept: plain English, APA 7 style statistics (italic symbols are not needed), exact numbers from the summaries only, two decimals (p to three, "p < .001" when smaller). Say what the result means for the research question in one sentence. Mention a key assumption warning if the notes contain one. No headings, no bullet points, at most two short paragraphs. Never invent numbers.`;
-  const body = results.map((r) => `. ${r.command}\nsummary: ${JSON.stringify(r.summary ?? {}, (_k, v) => (typeof v === "number" ? Number(v.toPrecision(6)) : v))}${r.notes?.length ? `\nnotes: ${r.notes.join(" ")}` : ""}`).join("\n\n");
-  const out = await claude({ max_tokens: 700, system, messages: [{ role: "user", content: `Request: ${input}\n\n${body}` }] });
+  const system = `You write the results paragraph a careful supervisor would accept: plain English, APA 7 style statistics (italic symbols are not needed). The numbers in the summaries are already rounded for reporting: copy them exactly as given, never re-round, recompute or invent numbers. Say what the result means for the research question in one sentence. Mention a key assumption warning if the notes contain one. No headings, no bullet points, at most two short paragraphs, and finish every sentence.`;
+  const body = results.map((r) => `. ${r.command}\nsummary: ${JSON.stringify(apaRound(r.summary ?? {}))}${r.notes?.length ? `\nnotes: ${r.notes.join(" ")}` : ""}`).join("\n\n");
+  const out = await claude({ max_tokens: 1600, system, messages: [{ role: "user", content: `Request: ${input}\n\n${body}` }] });
   return out.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
 }
