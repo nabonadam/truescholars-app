@@ -87,7 +87,7 @@ async function claude(body: Record<string, unknown>) {
 }
 
 export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: number; history: string[]; recent: string[] }): Promise<Plan> {
-  const system = `You are the analysis planner inside a Stata-style statistics workspace used by students and researchers in Ghana. You turn a request into Stata commands that our engine runs.\n\n${SYNTAX}\n\n${RULES}`;
+  const system = `You are the analysis planner inside a Stata-style statistics workspace used by students and researchers in Ghana. You turn a request into Stata commands that our engine runs.\n\n${SYNTAX}\n\n${RULES}\n- Always answer by calling the plan tool, never with plain text.`;
   const user = `Dataset: ${ctx.nObs} observations.\nCodebook:\n${codebook(ctx.vars)}\n\nData changes already applied (in order):\n${ctx.history.join("\n") || "(none)"}\n\nRecent analyses:\n${ctx.recent.join("\n") || "(none)"}\n\nRequest: ${input}`;
   const out = await claude({
     max_tokens: 1200,
@@ -108,10 +108,20 @@ export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: num
         },
       },
     ],
-    tool_choice: { type: "tool", name: "plan" },
   });
+  // Some models do not allow forcing a tool, so the instruction asks for it and we accept JSON text as a fallback.
   const call = out.content.find((c) => c.type === "tool_use");
-  const plan = (call?.input ?? {}) as Partial<Plan>;
+  let plan = (call?.input ?? null) as Partial<Plan> | null;
+  if (!plan) {
+    const text = out.content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
+    const json = text.match(/\{[\s\S]*\}/);
+    try {
+      plan = json ? (JSON.parse(json[0]) as Partial<Plan>) : null;
+    } catch {
+      plan = null;
+    }
+    plan ??= { commands: [], explanation: "", clarification: text.trim() || "Could you say a little more about what you want to find out?" };
+  }
   return {
     commands: (plan.commands ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 12),
     explanation: plan.explanation?.trim() ?? "",
