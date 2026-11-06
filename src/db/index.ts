@@ -13,7 +13,9 @@ export function getDb() {
   if (!cached) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
-    const pool = new Pool({ connectionString: url, max: 10 });
+    // Timestamps are stored without a time zone, so every connection works in UTC: times written by the
+    // app (new Date()) and by the database (now()) then always agree, whatever the server's own zone.
+    const pool = new Pool({ connectionString: url, max: 10, options: "-c timezone=UTC" });
     cached = drizzle(pool, { schema });
   }
   return cached;

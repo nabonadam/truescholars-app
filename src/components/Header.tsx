@@ -6,6 +6,7 @@ import { unreadByOrder } from "@/server/orderRoom";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderBadges } from "./HeaderBadges";
 import { Logo } from "./Logo";
+import { site } from "@/lib/site";
 
 export async function Header() {
   const session = await auth().catch(() => null); // no database yet → treat as signed out
@@ -20,9 +21,15 @@ export async function Header() {
   return (
     <header className="site-header bg-green text-white">
       <nav className="mx-auto flex max-w-7xl items-center gap-x-1 px-3 py-2.5 sm:gap-x-4 sm:px-6" aria-label="Main">
-        <Link href={user ? "/dashboard" : "/"} className="mr-auto min-w-0 no-underline">
-          <Logo onDark />
-        </Link>
+        {user ? (
+          <Link href="/dashboard" className="mr-auto min-w-0 no-underline" aria-label="The True Scholars: your dashboard">
+            <Logo onDark />
+          </Link>
+        ) : (
+          <a href={site("/")} className="mr-auto min-w-0 no-underline" aria-label="The True Scholars home">
+            <Logo onDark />
+          </a>
+        )}
         {user ? (
           <>
             <Link href="/services" className={`${link} hidden lg:inline`}>Find experts</Link>
@@ -34,8 +41,10 @@ export async function Header() {
           </>
         ) : (
           <>
-            <Link href="/services" className={`${link} hidden sm:inline`}>Find experts</Link>
-            <Link href="/jobs" className={`${link} hidden md:inline`}>Find work</Link>
+            <Link href="/services" className={`${link} hidden md:inline`}>Find experts</Link>
+            <a href={site("/#tools")} className={`${link} hidden lg:inline`}>AI tools</a>
+            <a href={site("/#how")} className={`${link} hidden lg:inline`}>How it works</a>
+            <Link href="/jobs" className={`${link} hidden lg:inline`}>For experts</Link>
             <Link href="/sign-in" className="px-2 text-sm font-medium text-white no-underline">Log in</Link>
             <Link href="/sign-up" className="btn-amber">Join free</Link>
           </>

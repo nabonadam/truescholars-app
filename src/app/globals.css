@@ -37,7 +37,8 @@ h3 {
 }
 
 @media print {
-  .site-header {
+  .site-header,
+  .site-footer {
     display: none;
   }
   html,
@@ -89,4 +90,23 @@ body:has(.chat-shell) {
 body:has(.chat-shell) > main {
   flex: 1;
   min-height: 0;
+}
+body:has(.chat-shell) > .site-footer {
+  display: none;
+}
+
+/* Little motions for live alerts */
+@keyframes ts-wiggle {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-14deg); }
+  40% { transform: rotate(12deg); }
+  60% { transform: rotate(-8deg); }
+  80% { transform: rotate(5deg); }
+}
+@keyframes ts-toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; }
 }

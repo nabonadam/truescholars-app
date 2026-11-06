@@ -106,8 +106,10 @@ export async function searchServices(db: DB, opts: { q?: string; category?: stri
       categoryName: categories.name,
       categorySlug: categories.slug,
       expertName: users.name,
+      expertUserId: users.id,
       expertHeadline: expertProfiles.headline,
       level: expertProfiles.level,
+      createdAt: services.createdAt,
       fromMinor: sql<number>`min(${serviceTiers.priceMinor})`.mapWith(Number),
       fastestDays: sql<number>`min(${serviceTiers.deliveryDays})`.mapWith(Number),
     })

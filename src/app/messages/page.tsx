@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { toggleStarAction } from "@/app/actions/orderRoom";
+import { SoundButton } from "@/components/AlertSettings";
 import { ChatThread } from "@/components/ChatThread";
 import { Icon } from "@/components/Icons";
 import { LivePulse, MessageComposer } from "@/components/OrderRoomForms";
@@ -93,7 +94,10 @@ export default async function Messages({ searchParams }: { searchParams: Promise
       {/* ── Conversation list ── */}
       <aside className={`${selected ? "hidden md:flex" : "flex"} w-full flex-none flex-col border-line md:w-80 md:border-r lg:w-96`} aria-label="Conversations">
         <div className="flex flex-col gap-3 border-b border-line p-4">
-          <h1 className="text-2xl font-bold">Conversations</h1>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-2xl font-bold">Conversations</h1>
+            <SoundButton />
+          </div>
           <form action="/messages" className="relative">
             {selected && <input type="hidden" name="c" value={selected.order.id} />}
             {filter !== "all" && <input type="hidden" name="f" value={filter} />}

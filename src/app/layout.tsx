@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: { default: "The True Scholars", template: "%s · The True Scholars" },
@@ -22,9 +23,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <link rel="icon" href="https://thetruescholars.com/wp-content/uploads/2026/11/true-scholars-icon-150x150.png" />
       </head>
-      <body className="min-h-dvh bg-parchment">
+      <body className="flex min-h-dvh flex-col bg-parchment [&>main]:flex-1">
         <Header />
         <main>{children}</main>
+        <SiteFooter />
       </body>
     </html>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOutAction } from "@/app/actions/auth";
+import { AlertSettings } from "./AlertSettings";
 
 type Item = { href: string; label: string };
 
@@ -43,7 +44,7 @@ export function AccountMenu({ name, email, roles }: { name: string; email: strin
         }
       : { title: "Working", items: [{ href: "/apply", label: "Become an expert" }] },
   ];
-  if (roles.includes("ADMIN")) groups.push({ title: "Admin", items: [{ href: "/admin/applications", label: "Applications" }, { href: "/admin/disputes", label: "Disputes" }, { href: "/admin/payouts", label: "Payouts" }, { href: "/admin/messages", label: "Flagged messages" }] });
+  if (roles.includes("ADMIN")) groups.push({ title: "Admin", items: [{ href: "/admin", label: "Overview" }, { href: "/admin/applications", label: "Applications" }, { href: "/admin/disputes", label: "Disputes" }, { href: "/admin/payouts", label: "Payouts" }, { href: "/admin/messages", label: "Flagged messages" }] });
 
   return (
     <div ref={ref} className="relative">
@@ -74,6 +75,10 @@ export function AccountMenu({ name, email, roles }: { name: string; email: strin
                 ))}
               </div>
             ))}
+          </div>
+          <div className="border-t border-line py-1">
+            <div className="px-4 pt-2 pb-1 text-[11px] font-bold tracking-wider text-ink-muted uppercase">Alerts</div>
+            <AlertSettings compact />
           </div>
           <form action={signOutAction} className="border-t border-line">
             <button role="menuitem" className="w-full px-4 py-3 text-left text-[15px] font-bold text-ink hover:bg-parchment">Sign out</button>

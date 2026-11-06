@@ -334,3 +334,20 @@ export async function expertReviewSummary(db: DB, expertUserId: string, limit = 
     .limit(limit);
   return { average: agg?.average ? Number(agg.average) : null, total: Number(agg?.total ?? 0), recent };
 }
+
+/** The newest message someone else sent this user (drives the chime and the "new message" pop-up). */
+export async function latestIncoming(db: DB, userId: string) {
+  const [m] = await db
+    .select({ id: messages.id, body: messages.body, files: messages.files, at: messages.createdAt, sender: users.name, orderId: threads.orderId, title: orders.title })
+    .from(threadMembers)
+    .innerJoin(messages, eq(messages.threadId, threadMembers.threadId))
+    .innerJoin(users, eq(users.id, messages.senderId))
+    .innerJoin(threads, eq(threads.id, threadMembers.threadId))
+    .leftJoin(orders, eq(orders.id, threads.orderId))
+    .where(and(eq(threadMembers.userId, userId), ne(messages.senderId, userId)))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  if (!m) return null;
+  const preview = m.body ? (m.body.length > 90 ? `${m.body.slice(0, 89)}…` : m.body) : m.files.length ? "Sent a file" : "";
+  return { id: m.id, at: m.at.toISOString(), sender: m.sender ?? "Someone", preview, orderId: m.orderId, title: m.title };
+}

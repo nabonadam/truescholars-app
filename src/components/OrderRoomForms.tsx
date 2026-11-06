@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
+import { playSent } from "@/lib/sounds";
 import {
   approveAction,
   deliverAction,
@@ -83,6 +84,9 @@ export function AutoRefresh({ seconds = 15 }: { seconds?: number }) {
 export function MessageComposer({ orderId, rows = 3 }: { orderId: string; rows?: number }) {
   const [state, action, pending] = useActionState<FormState, FormData>(sendMessageAction, undefined);
   const ref = useResetOnOk(state);
+  useEffect(() => {
+    if (state?.ok) playSent();
+  }, [state]);
   return (
     <form ref={ref} action={action} className="flex flex-col gap-2">
       <input type="hidden" name="orderId" value={orderId} />

@@ -43,7 +43,7 @@ function Stat({ icon, tone, label, value, note }: { icon: IconName; tone: "green
       <IconTile name={icon} tone={tone} size={48} />
       <div className="flex min-w-0 flex-col">
         <span className="text-sm font-bold text-ink-muted">{label}</span>
-        <span className="font-display text-2xl font-bold sm:text-3xl">{value}</span>
+        <span className="font-display text-2xl font-bold break-words tabular-nums lg:text-[1.65rem]">{value}</span>
         <span className="text-xs text-ink-muted">{note}</span>
       </div>
     </div>
@@ -313,7 +313,10 @@ export default async function Dashboard() {
 
             {isAdmin && (
               <div className="card flex flex-col gap-3 border-green">
-                <h2 className="text-lg font-bold">Admin</h2>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold">Admin</h2>
+                  <Link href="/admin" className="text-sm font-bold text-green">Overview →</Link>
+                </div>
                 <Link href="/admin/applications" className="flex items-center justify-between font-bold text-green no-underline">
                   Expert applications <span className="rounded-full bg-amber-tint px-3 py-1 text-xs text-amber-deep">{openApps} to review</span>
                 </Link>
