@@ -97,7 +97,8 @@ export function VariablesPanel({ vars, nObs, onInsert, onCommand }: { vars: VarM
                   )}
                   <div className="flex flex-wrap gap-1.5">
                     {v.kind === "continuous" && <Chip onClick={() => onCommand(`summarize ${v.name}, detail`)}>summarize</Chip>}
-                    {v.kind === "categorical" && <Chip onClick={() => onCommand(`tabulate ${v.name}`)}>tabulate</Chip>}
+                    {v.kind !== "continuous" && <Chip onClick={() => onCommand(`tabulate ${v.name}`)}>tabulate</Chip>}
+                    {v.kind === "text" && <Chip onClick={() => onCommand(`encode ${v.name}, gen(${v.name.slice(0, 28)}_n)`)}>encode</Chip>}
                     <Chip onClick={() => onCommand(`codebook ${v.name}`)}>codebook</Chip>
                   </div>
                 </div>

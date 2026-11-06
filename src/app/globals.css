@@ -141,3 +141,10 @@ body:has(.chat-shell) > .site-footer {
 .ts-rise {
   animation: ts-rise 0.35s ease-out both;
 }
+@keyframes ts-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.ts-indeterminate {
+  animation: ts-indeterminate 1.2s ease-in-out infinite;
+}

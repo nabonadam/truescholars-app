@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -71,28 +70,35 @@ def _clean_names(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_bytes(data: bytes, filename: str) -> Dataset:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+        tmp.write(data)
+        path = tmp.name
+    try:
+        return load_path(path, filename)
+    finally:
+        os.unlink(path)
+
+
+def load_path(path: str, filename: str) -> Dataset:
+    """Reads a file from disk (the engine never needs the raw bytes and the table in memory at once)."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     try:
         if ext in ("dta", "sav", "zsav"):
             import pyreadstat
 
-            with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
-                tmp.write(data)
-                path = tmp.name
-            try:
-                reader = pyreadstat.read_dta if ext == "dta" else pyreadstat.read_sav
-                df, meta = reader(path, apply_value_formats=False)
-            finally:
-                os.unlink(path)
+            reader = pyreadstat.read_dta if ext == "dta" else pyreadstat.read_sav
+            df, meta = reader(path, apply_value_formats=False)
             var_labels = {k: v for k, v in zip(meta.column_names, meta.column_labels or []) if v}
             value_labels = {k: {(int(c) if isinstance(c, float) and c.is_integer() else c): lab for c, lab in v.items()} for k, v in (meta.variable_value_labels or {}).items()}
             return Dataset(df, var_labels, value_labels)
         if ext in ("csv", "txt", "tsv"):
-            text = data.decode("utf-8-sig", errors="replace")
-            sep = "\t" if ext == "tsv" or (text.count("\t") > text.count(",")) else ","
-            df = pd.read_csv(io.StringIO(text), sep=sep)
+            with open(path, "rb") as fh:
+                head = fh.read(65536).decode("utf-8-sig", errors="replace")
+            sep = "\t" if ext == "tsv" or (head.count("\t") > head.count(",")) else ","
+            df = pd.read_csv(path, sep=sep, encoding="utf-8-sig", encoding_errors="replace", low_memory=False)
         elif ext in ("xlsx", "xls"):
-            df = pd.read_excel(io.BytesIO(data))
+            df = pd.read_excel(path)
         else:
             raise StataError("Use a Stata (.dta), SPSS (.sav), Excel (.xlsx) or CSV file.")
     except StataError:

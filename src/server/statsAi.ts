@@ -43,6 +43,8 @@ recode var (rule = value "label") ... , gen(newvar)     e.g. recode age (18/34 =
 drop varlist | drop if exp | keep varlist | keep if exp | rename old new
 label variable var "text" | label define name 1 "a" 2 "b" | label values var name
 mvdecode varlist, mv(99999)        turns codes such as 99, 999, 99999 into missing
+encode textvar, gen(newvar)        text categories -> numeric codes with value labels (needed before i.newvar)
+destring var, replace [force]      numbers stored as text -> numeric
 Prefix: by var: <command>   (not with data-changing commands)
 Factor variables: i.x (first level is base), ib2.x, ib(last).x, c.x, a#b, a##b
 Expressions: + - * / ^, == != > < >= <=, & | !, missing(), inrange(x,a,b), inlist(x,a,b), ln(), log10(), exp(), sqrt(), abs(), round(), cond()
@@ -51,6 +53,7 @@ Missing values are larger than any number: "if income > 1000" includes missing i
 const RULES = `Rules:
 - Use only variable names that exist in the codebook, spelled exactly.
 - Treat categorical variables (kind "categorical", or with value labels) with i. in regressions.
+- Text variables (kind "text") cannot go into regressions, oneway, anova or correlations directly: encode them first (encode sex, gen(sex_n)) and use the new variable. tabulate, ttest by() and ranksum by() accept text directly.
 - If a variable has obvious missing-value codes (for example 99999 or 999 well outside the rest), add an mvdecode line first, unless an earlier command already did.
 - Pick the test that fits the data: a binary 0/1 outcome means logit/logistic, a count means poisson, two groups means ttest (ranksum if clearly skewed or ordinal), three or more groups means oneway (kwallis for ordinal), two categorical variables means tabulate with chi2.
 - For a cross-tab, add row percentages when the first variable is the explanatory one.

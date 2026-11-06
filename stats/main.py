@@ -7,8 +7,12 @@ cached copy, so results are always reproducible from the do-file alone.
 
 from __future__ import annotations
 
+import gzip
 import hmac
+import io
 import os
+import shutil
+import tempfile
 import threading
 from collections import OrderedDict
 
@@ -16,9 +20,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from engine.data import Dataset, StataError, load_bytes, variables_meta
+from engine.data import Dataset, StataError, load_path, variables_meta
 from engine.export import dataset_bytes, docx_bytes, xlsx_bytes
 from engine.run import apply_history, run_commands
+from engine.syntax import DATA_COMMANDS, parse
 
 app = FastAPI(title="True Scholars statistics engine", docs_url=None, redoc_url=None)
 KEY = os.environ.get("STATS_KEY", "")
@@ -30,29 +35,35 @@ def auth(x_stats_key: str = Header(default="")):
         raise HTTPException(401, "unauthorized")
 
 
-class LRU:
-    """Small in-memory cache: raw datasets by id, and replayed states by (id, history)."""
+def _mb(ds: Dataset) -> float:
+    return float(ds.df.memory_usage(deep=False).sum()) / 1e6
 
-    def __init__(self, size: int):
-        self.size, self.items, self.lock = size, OrderedDict(), threading.Lock()
+
+class LRU:
+    """In-memory cache with a memory budget (MB): datasets by id, replayed states by (id, history).
+    The newest entry is always kept, so one large dataset still works."""
+
+    def __init__(self, budget_mb: float):
+        self.budget, self.items, self.lock = budget_mb, OrderedDict(), threading.Lock()
 
     def get(self, key):
         with self.lock:
             if key in self.items:
                 self.items.move_to_end(key)
-                return self.items[key]
+                return self.items[key][0]
         return None
 
-    def put(self, key, value):
+    def put(self, key, value: Dataset):
         with self.lock:
-            self.items[key] = value
+            self.items[key] = (value, _mb(value))
             self.items.move_to_end(key)
-            while len(self.items) > self.size:
+            while len(self.items) > 1 and sum(m for _, m in self.items.values()) > self.budget:
                 self.items.popitem(last=False)
 
 
-BASE = LRU(8)
-STATES = LRU(16)
+CACHE_MB = float(os.environ.get("STATS_CACHE_MB", "120"))
+BASE = LRU(CACHE_MB / 2)
+STATES = LRU(CACHE_MB / 2)
 
 
 def fetch(dataset_id: str) -> Dataset:
@@ -65,19 +76,45 @@ def fetch(dataset_id: str) -> Dataset:
         row = conn.execute("select data, file_name from stat_datasets where id = %s", (dataset_id,)).fetchone()
     if not row:
         raise HTTPException(404, "dataset not found")
-    ds = load_bytes(bytes(row[0]), row[1])
+    blob, name = row
+    row = None
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else "bin"
+    # The app stores uploads gzip-compressed; unpack straight to a temporary file.
+    with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+        if bytes(blob[:2]) == b"\x1f\x8b":
+            with gzip.GzipFile(fileobj=io.BytesIO(blob)) as gz:
+                shutil.copyfileobj(gz, tmp, 1 << 20)
+        else:
+            tmp.write(blob)
+        path = tmp.name
+    del blob
+    try:
+        ds = load_path(path, name)
+    finally:
+        os.unlink(path)
     BASE.put(dataset_id, ds)
     return ds
 
 
-def state(dataset_id: str, history: list[str]) -> Dataset:
+def state(dataset_id: str, history: list[str], writable: bool = True) -> Dataset:
+    """The working data after `history`. Read-only callers share the cached copy (no extra memory)."""
     key = (dataset_id, tuple(history))
-    hit = STATES.get(key)
-    if hit:
-        return hit.copy()
-    ds = apply_history(fetch(dataset_id), history)
-    STATES.put(key, ds)
-    return ds.copy()
+    hit = STATES.get(key) if history else None
+    if hit is None:
+        hit = apply_history(fetch(dataset_id), history) if history else fetch(dataset_id)
+        if history:
+            STATES.put(key, hit)
+    return hit.copy() if writable else hit
+
+
+def _changes_data(commands: list[str]) -> bool:
+    for line in commands:
+        try:
+            if parse(line).name in DATA_COMMANDS:
+                return True
+        except StataError:
+            return True  # let run_commands report it; be safe
+    return False
 
 
 def overview(ds: Dataset) -> dict:
@@ -107,7 +144,7 @@ def health():
 @app.post("/load", dependencies=[Depends(auth)])
 def load(body: LoadBody):
     try:
-        return overview(state(body.datasetId, body.history))
+        return overview(state(body.datasetId, body.history, writable=False))
     except StataError as e:
         raise HTTPException(422, f"Replaying your earlier commands failed: {e}") from e
 
@@ -115,7 +152,7 @@ def load(body: LoadBody):
 @app.post("/run", dependencies=[Depends(auth)])
 def run(body: RunBody):
     try:
-        ds = state(body.datasetId, body.history)
+        ds = state(body.datasetId, body.history, writable=_changes_data(body.commands))
     except StataError as e:
         raise HTTPException(422, f"Replaying your earlier commands failed: {e}") from e
     results = run_commands(ds, body.commands)
@@ -123,7 +160,7 @@ def run(body: RunBody):
     out = {"results": results, "changed": changed}
     if changed:
         kept = [r["command"] for r in results if r.get("ok") and r.get("changesData")]
-        STATES.put((body.datasetId, tuple(body.history + kept)), ds.copy())
+        STATES.put((body.datasetId, tuple(body.history + kept)), ds)
         out["dataset"] = overview(ds)
     return out
 
@@ -141,5 +178,5 @@ def export(fmt: str, body: ExportBody):
 def data(fmt: str, body: LoadBody):
     if fmt not in ("dta", "csv"):
         raise HTTPException(404, "unknown format")
-    ds = state(body.datasetId, body.history)
+    ds = state(body.datasetId, body.history, writable=False)
     return Response(dataset_bytes(ds, fmt), media_type="text/csv" if fmt == "csv" else "application/x-stata-dta")

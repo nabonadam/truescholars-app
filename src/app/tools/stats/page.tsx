@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
-import { listSessions } from "@/server/stats";
+import { listSessions, maxDatasetMb } from "@/server/stats";
 import { ago } from "@/lib/time";
 import { Icon } from "@/components/Icons";
 import { SampleButton, UploadForm } from "@/components/stats/UploadForm";
@@ -55,7 +55,7 @@ export default async function StatsHome() {
             <div className="mt-1 mb-4 text-ink-muted">
               Your file stays private to you and is never changed. No data yet? <SampleButton />
             </div>
-            <UploadForm />
+            <UploadForm maxMb={maxDatasetMb()} />
             <p className="mt-3 flex items-start gap-2 text-[13px] text-ink-muted">
               <Icon name="lock" size={15} className="mt-0.5 flex-none" /> The assistant reads variable names, labels and summary numbers to plan your analysis. Individual rows never leave our engine.
             </p>

@@ -2,6 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { DB } from "@/db";
 import { statDatasets, statRuns, statSessions } from "@/db/schema";
@@ -10,7 +11,9 @@ import { AiUnavailable, interpret, translate, type VarMeta } from "./statsAi";
 
 export class StatsError extends Error {}
 
-export const MAX_DATASET_BYTES = 50 * 1024 * 1024;
+/** Largest upload, in MB. The engine needs roughly the file's size in memory, so raise this
+ * together with the engine's plan (about 100 MB fits the free 512 MB instance). */
+export const maxDatasetMb = () => Math.max(1, Number(process.env.STATS_MAX_MB) || 100);
 const EXTENSIONS = ["dta", "sav", "xlsx", "xls", "csv", "tsv", "txt"];
 
 export type TableOut = { title: string; columns: string[]; rows: string[][]; note: string; groups: number[] };
@@ -58,13 +61,18 @@ export async function ping() {
 
 // ───────── sessions ─────────
 
-export async function createSession(db: DB, ownerId: string, file: { name: string; bytes: Buffer }) {
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+export function checkUpload(name: string, size: number) {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (!EXTENSIONS.includes(ext)) throw new StatsError("Upload a Stata (.dta), SPSS (.sav), Excel (.xlsx) or CSV file.");
-  if (file.bytes.length === 0) throw new StatsError("That file is empty.");
-  if (file.bytes.length > MAX_DATASET_BYTES) throw new StatsError("Datasets can be up to 50 MB.");
+  if (size === 0) throw new StatsError("That file is empty.");
+  if (size > maxDatasetMb() * 1024 * 1024) throw new StatsError(`Datasets can be up to ${maxDatasetMb()} MB.`);
+}
+
+/** `gz` is the file gzip-compressed (smaller to store and to move; the engine unpacks it). */
+export async function createSession(db: DB, ownerId: string, file: { name: string; size: number; gz: Buffer }) {
+  checkUpload(file.name, file.size);
   const name = file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Dataset";
-  const [ds] = await db.insert(statDatasets).values({ ownerId, name, fileName: file.name, size: file.bytes.length, data: file.bytes }).returning({ id: statDatasets.id });
+  const [ds] = await db.insert(statDatasets).values({ ownerId, name, fileName: file.name, size: file.size, data: file.gz }).returning({ id: statDatasets.id });
   let o: Overview;
   try {
     o = await engine<Overview>("/load", { datasetId: ds.id, history: [] });
@@ -83,7 +91,7 @@ export const SAMPLE_FILE = "ghana_households_simulated.dta";
 
 export async function createSampleSession(db: DB, ownerId: string) {
   const bytes = await readFile(path.join(process.cwd(), "stats", "sample", SAMPLE_FILE));
-  return createSession(db, ownerId, { name: SAMPLE_FILE, bytes });
+  return createSession(db, ownerId, { name: SAMPLE_FILE, size: bytes.length, gz: gzipSync(bytes) });
 }
 
 export async function listSessions(db: DB, ownerId: string) {
@@ -217,6 +225,7 @@ export async function resetData(db: DB, ownerId: string, sessionId: string) {
   const s = await mustSession(db, ownerId, sessionId);
   const o = await engine<Overview>("/load", { datasetId: s.datasetId, history: [] });
   await db.update(statSessions).set({ history: [], nObs: o.nObs, nVars: o.nVars, variables: o.variables }).where(eq(statSessions.id, sessionId));
+  await db.insert(statRuns).values({ sessionId, input: "Restored the original data", mode: "STATA", status: "RESET" });
 }
 
 export async function renameSession(db: DB, ownerId: string, sessionId: string, title: string) {
@@ -250,18 +259,21 @@ export function doFile(session: Session, runs: Run[]) {
     "",
   ];
   const ext = session.fileName.split(".").pop()?.toLowerCase();
-  const file = session.fileName.replace(/"/g, "");
-  lines.push(
-    ext === "dta"
-      ? `use "${file}", clear`
-      : ext === "sav"
-        ? `import spss using "${file}", clear`
-        : ext === "xlsx" || ext === "xls"
-          ? `import excel using "${file}", firstrow clear`
-          : `import delimited using "${file}", clear varnames(1)`,
-    "",
-  );
+  let useLine = "";
+  const stem = session.fileName.replace(/\.[^.]+$/, "").replace(/"/g, "");
+  if (ext === "dta") {
+    useLine = `use "${session.fileName.replace(/"/g, "")}", clear`;
+  } else {
+    // Stata's own importers name variables differently from ours, so start from the exact original as .dta.
+    lines.splice(2, 1, `* Runs in Stata 14 or later. First download "Original data (.dta)" from the Export menu`, `* and save it as ${stem}_original.dta in your working directory.`);
+    useLine = `use "${stem}_original.dta", clear`;
+  }
+  lines.push(useLine, "");
   for (const r of runs) {
+    if (r.status === "RESET") {
+      lines.push("* Restored the original data", useLine, "");
+      continue;
+    }
     if (r.status !== "DONE" && r.status !== "ERROR") continue;
     const okCommands = r.results.filter((x) => x.ok).map((x) => x.command);
     if (!okCommands.length) continue;

@@ -169,3 +169,16 @@ def test_load_csv_and_clean_names():
     d = load_bytes(b"Age (years),Monthly Income,group\n30,1000,a\n41,,b\n", "x.csv")
     assert list(d.df.columns) == ["Age__years_", "Monthly_Income", "group"]
     assert d.df["Monthly_Income"].isna().sum() == 1
+
+
+def test_encode_and_destring_for_text_data():
+    d = load_bytes(b"sex,school,amt\nMale,Public,\"1,200\"\nFemale,Private,300\nFemale,Public,450\nMale,Mission,500\n", "x.csv")
+    one(d, "encode sex, gen(sex_n)")
+    assert d.value_label("sex_n", 1) == "Female" and d.df["sex_n"].tolist() == [2, 1, 1, 2]  # alphabetical, like Stata
+    one(d, "encode school, gen(sch)")
+    assert one(d, "tab sch")["summary"]
+    assert "replaced" in one(d, "destring amt, replace")["log"] and d.df["amt"].tolist() == [1200, 300, 450, 500]
+    r = run_commands(d, ["encode sex_n, gen(z)"])[0]
+    assert not r["ok"] and "not a string" in r["error"]
+    r = run_commands(d, ["summarize amt if"])[0]
+    assert not r["ok"] and "invalid syntax" in r["error"]

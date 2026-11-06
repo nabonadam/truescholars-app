@@ -26,6 +26,8 @@ HANDLERS = {
     "rename": dc.rename,
     "label": dc.label,
     "mvdecode": dc.mvdecode,
+    "encode": dc.encode,
+    "destring": dc.destring,
     "summarize": sc.summarize,
     "tabulate": sc.tabulate,
     "tab1": sc.tabulate,

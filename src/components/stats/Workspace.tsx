@@ -57,7 +57,7 @@ export function Workspace({ session, runs, aiEnabled }: { session: SessionView; 
   const feed = useRef<HTMLDivElement>(null);
   const histIdx = useRef(-1);
 
-  const typed = useMemo(() => runs.flatMap((r) => (r.mode === "STATA" ? [r.input] : r.status === "DONE" ? [r.commands.join("\n")] : [])).reverse(), [runs]);
+  const typed = useMemo(() => runs.flatMap((r) => (r.mode === "STATA" && r.status !== "RESET" ? [r.input] : r.status === "DONE" ? [r.commands.join("\n")] : [])).reverse(), [runs]);
   const sugg = useMemo(() => suggestions(session.variables), [session.variables]);
 
   useEffect(() => {
@@ -199,7 +199,7 @@ export function Workspace({ session, runs, aiEnabled }: { session: SessionView; 
                   onKeyDown={onKey}
                   rows={1}
                   spellCheck={mode === "ask"}
-                  placeholder={mode === "ask" ? (aiEnabled ? "Ask about your data, e.g. Does income differ between urban and rural households?" : "Plain-English requests are not switched on yet. Switch to Stata.") : "regress wellbeing age i.educ"}
+                  placeholder={mode === "ask" ? (aiEnabled ? "Ask about your data, e.g. Does income differ between urban and rural households?" : "Plain-English requests are not switched on yet. Switch to Stata.") : sugg.find((x) => x.cmd.startsWith("regress"))?.cmd ?? sugg[1]?.cmd ?? "summarize"}
                   className={`max-h-[220px] min-h-[26px] flex-1 resize-none bg-transparent leading-[1.55] text-white outline-none placeholder:text-white/35 ${mode === "stata" ? "font-mono text-[14px]" : "text-[15px]"}`}
                   aria-label={mode === "ask" ? "Ask a question" : "Stata command"}
                 />
@@ -272,6 +272,7 @@ function TopBar({ session, hasTables, onVars, onDoFile }: { session: SessionView
           <div className="my-1 border-t border-line" />
           <MenuLink href={`${base}/data?fmt=dta`} title="Working data (.dta)" sub="With your changes and labels" />
           <MenuLink href={`${base}/data?fmt=csv`} title="Working data (.csv)" />
+          {!session.fileName.toLowerCase().endsWith(".dta") && <MenuLink href={`${base}/data?fmt=dta&original=1`} title="Original data (.dta)" sub="Your upload as a Stata file, for the do-file" />}
           <div className="my-1 border-t border-line" />
           <form action={() => deleteAction(session.id)} onSubmit={(e) => { if (!confirm("Delete this session and its data? This cannot be undone.")) e.preventDefault(); }}>
             <button className="w-full px-4 py-2 text-left text-red-700 hover:bg-red-50">Delete session</button>
@@ -381,6 +382,15 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   const english = run.mode === "ENGLISH";
   const act = (fn: () => Promise<{ error?: string } | undefined>) => start(async () => { const r = await fn(); setErr(r?.error ?? null); });
 
+  if (run.status === "RESET") {
+    return (
+      <div className="flex items-center gap-3 text-[12.5px] font-bold text-amber-deep">
+        <span className="h-px flex-1 bg-amber/40" />
+        <span className="flex items-center gap-1.5"><Icon name="undo" size={14} /> Original data restored</span>
+        <span className="h-px flex-1 bg-amber/40" />
+      </div>
+    );
+  }
   if (run.status === "CANCELLED") {
     return (
       <div className="opacity-60">

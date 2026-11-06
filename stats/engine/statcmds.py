@@ -166,8 +166,8 @@ def _tab1(ds: Dataset, cmd: Command, v: str) -> Result:
     if not include_missing:
         s = s[_nonmissing(s.to_frame(), [v])]
     levels = _levels(ds, s, include_missing)
-    if len(levels) > 500:
-        raise StataError("too many values")
+    if len(levels) > 3000:
+        raise StataError(f"too many values ({len(levels):,}); tabulate is for categories, try summarize")
     total = len(s)
     if total == 0:
         return Result(log="no observations")
@@ -601,7 +601,7 @@ def ranksum(ds: Dataset, cmd: Command) -> Result:
     sub = sample(ds, cmd, [y, g])
     levels = _levels(ds, sub[g], False)
     if len(levels) != 2:
-        raise StataError(f"{g} must have exactly 2 groups")
+        raise StataError(f"{g} must have exactly 2 groups (it has {len(levels)})")
     x = sub[y].astype(float).to_numpy()
     ranks = st.rankdata(x)
     grp = (sub[g] == levels[0]).to_numpy()

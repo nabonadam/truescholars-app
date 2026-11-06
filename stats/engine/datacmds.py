@@ -245,6 +245,60 @@ def mvdecode(ds: Dataset, cmd: Command) -> Result:
     return Result(log="\n".join(lines), changes_data=True)
 
 
+def encode(ds: Dataset, cmd: Command) -> Result:
+    """String to numeric codes 1, 2, ... in alphabetical order, with the text kept as value labels."""
+    var = resolve_var(cmd.args.strip(), ds.df)
+    target = cmd.opt("generate")
+    if not isinstance(target, str):
+        raise StataError("must specify gen(): e.g. encode sex, gen(sex_n)")
+    target = _new_name(target.strip(), ds)
+    s = ds.df[var]
+    if is_numeric(s):
+        raise StataError(f"{var} is not a string variable; it is already numeric")
+    text = s.where(s.notna(), "").astype(str)
+    levels = sorted(v for v in text.unique() if v != "")
+    codes = {v: i + 1 for i, v in enumerate(levels)}
+    keep = selected(ds, cmd)
+    ds.df[target] = text.map(codes).where(keep).astype(float)
+    labels = {i + 1: v for i, v in enumerate(levels)}
+    ds.label_sets[target] = labels
+    ds.value_labels[target] = dict(labels)
+    if ds.label(var):
+        ds.var_labels[target] = ds.label(var)
+    return Result(log="", changes_data=True, summary={"encoded": var, "into": target, "levels": len(levels)})
+
+
+def destring(ds: Dataset, cmd: Command) -> Result:
+    """Text that holds numbers becomes numeric; `force` turns anything else into missing."""
+    vars_ = expand_varlist(cmd.args, ds.df, allow_empty_all=False)
+    gen, rep, force = cmd.opt("generate"), cmd.opt("replace"), cmd.opt("force")
+    if not gen and not rep:
+        raise StataError("must specify either generate() or replace")
+    targets = [t for t in str(gen).split()] if isinstance(gen, str) else vars_
+    if len(targets) != len(vars_):
+        raise StataError("generate() needs one new name per variable")
+    lines = []
+    for v, t in zip(vars_, targets):
+        s = ds.df[v]
+        if is_numeric(s):
+            lines.append(f"{v}: already numeric; no {'replace' if rep else 'generate'}")
+            continue
+        clean = s.astype("string").str.strip().str.replace(",", "", regex=False)
+        num = pd.to_numeric(clean, errors="coerce")
+        bad = int((num.isna() & clean.fillna("").ne("")).sum())
+        if bad and not force:
+            lines.append(f"{v}: contains nonnumeric characters; no {'replace' if rep else 'generate'}")
+            continue
+        if not rep:
+            _new_name(t, ds)
+        ds.df[t] = num.astype(float)
+        if rep:
+            lines.append(f"{v}: all characters numeric; replaced as {storage_type(ds.df[t])}" + (f" ({bad} missing values generated)" if bad else ""))
+        else:
+            lines.append(f"{v}: all characters numeric; {t} generated as {storage_type(ds.df[t])}" + (f" ({bad} missing values generated)" if bad else ""))
+    return Result(log="\n".join(lines), changes_data=True)
+
+
 # ───────────── views ─────────────
 
 

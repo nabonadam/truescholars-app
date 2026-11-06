@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
-import { StatsError, cancel, confirm, createSampleSession, createSession, deleteSession, interpretRun, renameSession, resetData, submit } from "@/server/stats";
+import { StatsError, cancel, confirm, createSampleSession, deleteSession, interpretRun, renameSession, resetData, submit } from "@/server/stats";
 
 export type StatsState = { error?: string; ok?: number; runId?: string } | undefined;
 
@@ -12,19 +12,6 @@ const known = (err: unknown): StatsState => {
   if (err instanceof StatsError) return { error: err.message };
   throw err;
 };
-
-export async function uploadAction(_p: StatsState, form: FormData): Promise<StatsState> {
-  const user = await requireUser();
-  const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a data file first." };
-  let id: string;
-  try {
-    id = await createSession(getDb(), user.id, { name: file.name, bytes: Buffer.from(await file.arrayBuffer()) });
-  } catch (err) {
-    return known(err);
-  }
-  redirect(`/tools/stats/${id}`);
-}
 
 export async function sampleAction(): Promise<StatsState> {
   const user = await requireUser();

@@ -38,3 +38,42 @@ def test_run_with_history_and_exports(client):
     dta = client.post("/data/dta", headers=H, json={"datasetId": "d", "history": hist})
     back = load_bytes(dta.content, "x.dta")
     assert "lninc" in back.df and back.value_label("region", 1) == load_bytes(SAMPLE.read_bytes(), "s.dta").value_label("region", 1)
+
+
+def test_gzip_storage_and_shared_cache(monkeypatch):
+    """Stored uploads are gzip-compressed; analyses reuse the cached data without changing it."""
+    import gzip
+
+    import main
+
+    raw = SAMPLE.read_bytes()
+
+    class Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, *_a):
+            class R:
+                def fetchone(self_inner):
+                    return (gzip.compress(raw), "s.dta")
+
+            return R()
+
+    import psycopg
+
+    monkeypatch.setattr(psycopg, "connect", lambda *a, **k: Conn())
+    monkeypatch.setattr(main, "KEY", "k")
+    main.BASE.items.clear()
+    main.STATES.items.clear()
+    c = TestClient(main.app)
+    r = c.post("/run", headers=H, json={"datasetId": "z", "history": [], "commands": ["summarize age"]}).json()
+    assert r["results"][0]["ok"] and not r["changed"]
+    r = c.post("/run", headers=H, json={"datasetId": "z", "history": [], "commands": ["gen a2 = age*2"]}).json()
+    assert r["changed"]
+    base = main.BASE.get("z")
+    assert "a2" not in base.df  # the shared original was not modified
+    r = c.post("/run", headers=H, json={"datasetId": "z", "history": ["gen a2 = age*2"], "commands": ["summarize a2"]}).json()
+    assert r["results"][0]["ok"]

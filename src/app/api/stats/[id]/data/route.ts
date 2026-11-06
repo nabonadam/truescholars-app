@@ -8,10 +8,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const o = await owned(id);
   if (!o) return new Response("Not found", { status: 404 });
-  const fmt = new URL(req.url).searchParams.get("fmt") === "csv" ? "csv" : "dta";
+  const url = new URL(req.url);
+  const fmt = url.searchParams.get("fmt") === "csv" ? "csv" : "dta";
+  const original = url.searchParams.get("original") === "1";
   try {
-    const bytes = await engine<ArrayBuffer>(`/data/${fmt}`, { datasetId: o.session.datasetId, history: o.session.history }, true);
-    return download(bytes, fmt === "csv" ? "text/csv" : "application/x-stata-dta", `${slug(o.session.title)}.${fmt}`);
+    const bytes = await engine<ArrayBuffer>(`/data/${fmt}`, { datasetId: o.session.datasetId, history: original ? [] : o.session.history }, true);
+    const name = original ? `${o.session.fileName.replace(/\.[^.]+$/, "")}_original.${fmt}` : `${slug(o.session.title)}.${fmt}`;
+    return download(bytes, fmt === "csv" ? "text/csv" : "application/x-stata-dta", name);
   } catch (err) {
     return new Response(err instanceof StatsError ? err.message : "Download failed", { status: 503 });
   }

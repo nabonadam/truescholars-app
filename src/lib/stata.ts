@@ -4,7 +4,7 @@ export const STATA_COMMANDS = [
   "describe", "codebook", "summarize", "tabulate", "tab1", "tab2", "ttest", "oneway", "anova",
   "correlate", "pwcorr", "spearman", "ranksum", "kwallis", "signrank", "regress", "logit",
   "logistic", "probit", "poisson", "generate", "replace", "recode", "drop", "keep", "rename",
-  "label", "mvdecode", "list", "count",
+  "label", "mvdecode", "encode", "destring", "list", "count",
 ] as const;
 
 const ABBREV = new Set([

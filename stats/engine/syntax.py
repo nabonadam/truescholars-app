@@ -41,11 +41,13 @@ COMMANDS = {
     "rename": "ren",
     "label": "la",
     "mvdecode": "mvdecode",
+    "encode": "encode",
+    "destring": "destring",
     "list": "l",
     "count": "count",
 }
 
-DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode"}
+DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring"}
 
 
 def canonical(word: str) -> str | None:
@@ -159,6 +161,8 @@ def parse(line: str) -> Command:
         cmd.in_ = (a, b)
         main = main[: m.start()]
     # if expression
+    if re.search(r"(^|\s)if\s*$", main):
+        raise StataError("invalid syntax: nothing after if")
     m = re.search(r"(^|\s)if\s+", main)
     if m:
         cmd.if_ = main[m.end():].strip()
