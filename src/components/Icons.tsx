@@ -33,6 +33,15 @@ const PATHS = {
   trophy: "M8 4h8v5a4 4 0 01-8 0zM8 6H4v1a4 4 0 004 4M16 6h4v1a4 4 0 01-4 4M12 13v4M8 20h8",
   briefcase: "M3 8h18v12H3zM8 8V5h8v3M3 13h18",
   spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6",
+  download: "M12 4v11M7 10l5 5 5-5M4 20h16",
+  upload: "M12 20V9M7 14l5-5 5 5M4 4h16",
+  play: "M7 4l13 8-13 8z",
+  terminal: "M3 4h18v16H3zM7 9l3 3-3 3M13 15h4",
+  table: "M3 5h18v14H3zM3 10h18M3 15h18M9 5v14",
+  undo: "M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3",
+  x: "M6 6l12 12M18 6L6 18",
+  copy: "M8 8h12v12H8zM4 16V4h12",
+  wand: "M4 20L16 8M14 4v3M18 8h3M17.5 4.5l-1.5 1.5M19 11l-1-1",
 } as const;
 
 export type IconName = keyof typeof PATHS;

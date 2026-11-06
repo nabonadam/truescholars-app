@@ -64,6 +64,13 @@
       "when": 1793939738286,
       "tag": "0008_account_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793987512127,
+      "tag": "0009_stats_assistant",
+      "breakpoints": true
     }
   ]
 }

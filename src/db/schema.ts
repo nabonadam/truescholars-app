@@ -588,3 +588,65 @@ export const withdrawals = pgTable(
   },
   (t) => [index("withdrawals_user").on(t.userId), index("withdrawals_status").on(t.status)],
 );
+
+// ───────────────────────── Statistics Assistant ─────────────────────────
+// Uploaded datasets live here; the Python engine (stats/) reads them by id.
+// A session is one workspace on one dataset. `history` holds the data-changing
+// commands applied so far, so the engine can rebuild the working data exactly,
+// and so the do-file reproduces everything.
+
+export const statDatasets = pgTable(
+  "stat_datasets",
+  {
+    id: id(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    fileName: text("file_name").notNull(),
+    size: integer("size").notNull(),
+    data: bytea("data").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("stat_datasets_owner_idx").on(t.ownerId)],
+);
+
+export const statSessions = pgTable(
+  "stat_sessions",
+  {
+    id: id(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    datasetId: text("dataset_id")
+      .notNull()
+      .references(() => statDatasets.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    history: textArray("history"),
+    nObs: integer("n_obs").notNull(),
+    nVars: integer("n_vars").notNull(),
+    variables: jsonb("variables").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("stat_sessions_owner_idx").on(t.ownerId, t.updatedAt)],
+);
+
+export const statRuns = pgTable(
+  "stat_runs",
+  {
+    id: id(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => statSessions.id, { onDelete: "cascade" }),
+    input: text("input").notNull(),
+    mode: text("mode").notNull(), // STATA | ENGLISH
+    commands: textArray("commands"),
+    status: text("status").notNull(), // PLAN | DONE | ERROR | CANCELLED | CLARIFY
+    explanation: text("explanation"),
+    results: jsonb("results"),
+    interpretation: text("interpretation"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("stat_runs_session_idx").on(t.sessionId, t.createdAt)],
+);

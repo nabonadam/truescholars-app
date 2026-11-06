@@ -16,6 +16,7 @@
 
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   --radius-sm: 12px;
   --radius-md: 20px;
@@ -109,4 +110,34 @@ body:has(.chat-shell) > .site-footer {
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; }
+}
+
+/* Statistics Assistant */
+.apa {
+  font-family: "Times New Roman", Times, "Liberation Serif", serif;
+}
+.lab-paper {
+  background-color: #f7f1e6;
+  background-image: linear-gradient(rgba(15, 61, 42, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 61, 42, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.stata-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.stata-scroll::-webkit-scrollbar-thumb {
+  background: #2b4a3c;
+  border-radius: 8px;
+}
+@keyframes ts-caret {
+  50% { opacity: 0; }
+}
+.ts-caret {
+  animation: ts-caret 1s steps(1) infinite;
+}
+@keyframes ts-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.ts-rise {
+  animation: ts-rise 0.35s ease-out both;
 }

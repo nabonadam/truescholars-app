@@ -35,6 +35,7 @@ export async function Header() {
             <Link href="/services" className={`${link} hidden lg:inline`}>Find experts</Link>
             {user.roles.includes("EXPERT") && <Link href="/jobs" className={`${link} hidden lg:inline`}>Find work</Link>}
             <Link href="/orders" className={`${link} hidden md:inline`}>Orders</Link>
+            <Link href="/tools/stats" className={`${link} hidden xl:inline`}>Statistics</Link>
             <Link href="/jobs/new" className="mr-1 hidden min-h-10 items-center rounded-full bg-amber px-4 text-sm font-bold text-ink no-underline md:inline-flex">Post a job</Link>
             <HeaderBadges messages={unreadMsgs} notifications={unread} />
             <AccountMenu name={user.name ?? ""} email={user.email ?? ""} roles={user.roles} image={user.image} />
