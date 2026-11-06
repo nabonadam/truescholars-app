@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { AuthShell } from "@/components/AuthShell";
 import { SignUpForm } from "@/components/AuthForms";
 
@@ -6,6 +8,8 @@ export const metadata: Metadata = { title: "Create your account" };
 
 export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ as?: string; next?: string }> }) {
   const { as, next } = await searchParams;
+  // Already signed in: never show the login form again; go where they were heading.
+  if ((await auth())?.user) redirect(next?.startsWith("/") && !next.startsWith("//") ? next : "/dashboard");
   const stats = next?.startsWith("/tools/stats");
   return (
     <AuthShell

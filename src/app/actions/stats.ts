@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
 import { ENDED } from "@/lib/statsCopy";
-import { accessFor, canRun } from "@/server/statsAccess";
+import { accessFor, canRun, requestUpgrade } from "@/server/statsAccess";
 import { StatsError, cancel, confirm, createSampleSession, deleteSession, interpretRun, renameSession, resetData, submit } from "@/server/stats";
 
 /** Running analyses needs an active trial or access; viewing and downloading never does. */
@@ -130,4 +130,12 @@ export async function deleteAction(sessionId: string) {
   await deleteSession(getDb(), user.id, sessionId);
   revalidatePath("/tools/stats");
   redirect("/tools/stats");
+}
+
+export async function upgradeRequestAction(): Promise<StatsState> {
+  const user = await requireUser();
+  await requestUpgrade(getDb(), user);
+  revalidatePath("/tools/stats/upgrade");
+  revalidatePath("/dashboard");
+  return { ok: Date.now() };
 }

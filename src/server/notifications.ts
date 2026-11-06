@@ -22,6 +22,7 @@ const CTA: Record<NotificationKind, string> = {
   DISPUTE: "Open the resolution centre",
   PAYOUT: "View your earnings",
   LEVEL_UP: "See your level",
+  TOOL_ACCESS: "Open",
 };
 
 /** Kinds that can arrive in bursts: only the first unread one per link is emailed. */

@@ -125,6 +125,7 @@ export const statAccess = pgTable("stat_access", {
     .references(() => users.id, { onDelete: "cascade" }),
   trialStartedAt: timestamp("trial_started_at", { mode: "date" }).notNull().defaultNow(),
   accessUntil: timestamp("access_until", { mode: "date" }),
+  upgradeRequestedAt: timestamp("upgrade_requested_at", { mode: "date" }),
   note: text("note"),
   updatedAt: updatedAt(),
 });
@@ -423,6 +424,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "DISPUTE",
   "PAYOUT",
   "LEVEL_UP",
+  "TOOL_ACCESS",
 ]);
 
 export const notifications = pgTable(

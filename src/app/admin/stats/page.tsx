@@ -22,6 +22,7 @@ export default async function AdminStats({ searchParams }: { searchParams: Promi
     return { text: "Ended", tone: "bg-line text-ink-muted", active: false };
   };
   const active = rows.filter((r) => status(r).active).length;
+  const wanting = rows.filter((r) => r.upgradeRequestedAt).length;
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6">
       <div className="flex flex-col gap-2">
@@ -34,7 +35,7 @@ export default async function AdminStats({ searchParams }: { searchParams: Promi
       <AdminTabs active="/admin/stats" />
       <GrantForm />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-ink-muted">{rows.length} {rows.length === 1 ? "person has" : "people have"} tried it · {active} active now</p>
+        <p className="text-sm text-ink-muted">{rows.length} {rows.length === 1 ? "person has" : "people have"} tried it · {active} active now{wanting ? ` · ${wanting} waiting for an upgrade` : ""}</p>
         <form className="flex gap-2">
           <input name="q" defaultValue={q} placeholder="Search name or email" className="field py-2" />
           <button className="btn-outline min-h-10 px-4 text-sm">Search</button>
@@ -62,7 +63,10 @@ export default async function AdminStats({ searchParams }: { searchParams: Promi
                     <div className="text-xs text-ink-muted">{r.email}</div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">{day(r.trialStartedAt)}</td>
-                  <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${s.tone}`}>{s.text}</span></td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${s.tone}`}>{s.text}</span>
+                    {r.upgradeRequestedAt && <span className="ml-1.5 rounded-full bg-amber px-2.5 py-0.5 text-xs font-bold whitespace-nowrap text-ink">Wants to upgrade</span>}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{r.runs}</td>
                   <td className="max-w-[220px] truncate px-4 py-3 text-ink-muted">{r.note}</td>
                   <td className="px-4 py-3 text-right">{s.active && <EndAccessButton userId={r.userId} />}</td>

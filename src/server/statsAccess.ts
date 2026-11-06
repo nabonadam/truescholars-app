@@ -7,6 +7,7 @@
 import { desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
 import { statAccess, statRuns, statSessions, users } from "@/db/schema";
+import { notify } from "./notifications";
 
 export const trialDays = () => Math.max(1, Number(process.env.STATS_TRIAL_DAYS) || 2);
 const DAY = 24 * 60 * 60 * 1000;
@@ -18,6 +19,32 @@ export type Access =
   | { kind: "ended"; endedAt: Date };
 
 export const canRun = (a: Access) => a.kind !== "ended";
+
+/** For the dashboard: reads access without starting the trial ("new" = not tried yet). */
+export async function peekAccess(db: DB, user: { id: string; roles: string[] }, now = new Date()): Promise<{ access: Access | { kind: "new" }; upgradeRequestedAt: Date | null }> {
+  if (user.roles.includes("ADMIN")) return { access: { kind: "admin" }, upgradeRequestedAt: null };
+  const [row] = await db.select({ id: statAccess.userId, req: statAccess.upgradeRequestedAt }).from(statAccess).where(eq(statAccess.userId, user.id));
+  if (!row) return { access: { kind: "new" }, upgradeRequestedAt: null };
+  return { access: await accessFor(db, user, now), upgradeRequestedAt: row.req };
+}
+
+/** Someone asks to keep using the tool after the trial: recorded, and every admin is told. */
+export async function requestUpgrade(db: DB, user: { id: string; name?: string | null; email?: string | null }, now = new Date()) {
+  await db.insert(statAccess).values({ userId: user.id, trialStartedAt: now }).onConflictDoNothing();
+  const [row] = await db.select({ req: statAccess.upgradeRequestedAt }).from(statAccess).where(eq(statAccess.userId, user.id));
+  if (row?.req && now.getTime() - row.req.getTime() < DAY) return; // one request a day is enough
+  await db.update(statAccess).set({ upgradeRequestedAt: now }).where(eq(statAccess.userId, user.id));
+  const admins = await db.select({ id: users.id }).from(users).where(sql`'ADMIN' = any(${users.roles})`);
+  for (const a of admins) {
+    await notify(db, {
+      userId: a.id,
+      kind: "TOOL_ACCESS",
+      title: `${user.name ?? "Someone"} wants to upgrade the Statistics Assistant`,
+      body: `${user.email ?? ""} asked for continued access. Give them days in Statistics access.`,
+      link: `/admin/stats?q=${encodeURIComponent(user.email ?? "")}`,
+    });
+  }
+}
 
 /** Reads access, starting the trial clock on the first visit. */
 export async function accessFor(db: DB, user: { id: string; roles: string[] }, now = new Date()): Promise<Access> {
@@ -56,7 +83,8 @@ export async function grantAccess(db: DB, email: string, days: number, note?: st
   const trialEnd = new Date(row.trialStartedAt.getTime() + trialDays() * DAY);
   const from = [now, row.accessUntil ?? now, trialEnd].reduce((a, b) => (b > a ? b : a));
   const until = new Date(from.getTime() + days * DAY);
-  await db.update(statAccess).set({ accessUntil: until, note: note?.trim() || row.note }).where(eq(statAccess.userId, u.id));
+  await db.update(statAccess).set({ accessUntil: until, upgradeRequestedAt: null, note: note?.trim() || row.note }).where(eq(statAccess.userId, u.id));
+  await notify(db, { userId: u.id, kind: "TOOL_ACCESS", title: "Your Statistics Assistant access is on", body: `You can run analyses until ${until.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}.`, link: "/tools/stats" });
   return { name: u.name, until };
 }
 
@@ -70,7 +98,7 @@ export async function endAccess(db: DB, userId: string, now = new Date()) {
 export async function listStatsUsers(db: DB, q?: string) {
   const runs = sql<number>`(select count(*)::int from ${statRuns} r join ${statSessions} s on s.id = r.session_id where s.owner_id = ${statAccess.userId} and r.status = 'DONE')`;
   const base = db
-    .select({ userId: statAccess.userId, name: users.name, email: users.email, trialStartedAt: statAccess.trialStartedAt, accessUntil: statAccess.accessUntil, note: statAccess.note, runs })
+    .select({ userId: statAccess.userId, name: users.name, email: users.email, trialStartedAt: statAccess.trialStartedAt, accessUntil: statAccess.accessUntil, upgradeRequestedAt: statAccess.upgradeRequestedAt, note: statAccess.note, runs })
     .from(statAccess)
     .innerJoin(users, eq(users.id, statAccess.userId));
   const term = q?.trim();

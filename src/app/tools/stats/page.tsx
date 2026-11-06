@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getDb } from "@/db";
 import { auth } from "@/auth";
-import { CONTACT } from "@/lib/statsCopy";
+import { UPGRADE_PATH } from "@/lib/statsCopy";
 import { listSessions, maxDatasetMb } from "@/server/stats";
 import { type Access, accessFor, timeLeft, trialDays } from "@/server/statsAccess";
 import { ago } from "@/lib/time";
@@ -185,11 +185,9 @@ function TrialEnded() {
       <span className="grid h-12 w-12 place-items-center rounded-[14px] bg-amber-tint text-amber-deep"><Icon name="clock" size={22} /></span>
       <h2 className="mt-4 text-2xl font-extrabold">Your free trial has ended</h2>
       <p className="mt-2 text-ink-muted">
-        Thanks for trying the Statistics Assistant. Your sessions, tables and do-files are still here and you can download them any time. Paid plans are on the way; to keep running analyses now, write to us and we&apos;ll switch your access back on.
+        Thanks for trying the Statistics Assistant. Your sessions, tables and do-files are still here and you can download them any time. Upgrade to keep running analyses.
       </p>
-      <a href={`mailto:${CONTACT}?subject=${encodeURIComponent("Statistics Assistant access")}`} className="btn-primary mt-5">
-        Email {CONTACT}
-      </a>
+      <Link href={UPGRADE_PATH} className="btn-amber mt-5">Upgrade</Link>
     </div>
   );
 }

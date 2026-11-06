@@ -34,7 +34,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
   // Everyone starts as a client; experts become EXPERT only after vetting approval.
   await db.insert(users).values({ name, email, passwordHash: await hashPassword(password), roles: ["CLIENT"] });
 
-  await signIn("credentials", { email, password, redirectTo: intent === "expert" ? "/apply" : nextPath(form, "/dashboard") });
+  await signIn("credentials", { email, password, redirectTo: nextPath(form, intent === "expert" ? "/apply" : "/dashboard") });
   return undefined;
 }
 

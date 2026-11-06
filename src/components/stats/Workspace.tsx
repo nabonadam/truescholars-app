@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { cancelAction, confirmAction, deleteAction, interpretAction, renameAction, resetAction, submitAction } from "@/app/actions/stats";
 import { looksLikeStata } from "@/lib/stata";
-import { CONTACT } from "@/lib/statsCopy";
+import { UPGRADE_PATH } from "@/lib/statsCopy";
 import type { CommandResult } from "@/server/stats";
 import type { VarMeta } from "@/server/statsAi";
 import { Icon } from "../Icons";
@@ -168,8 +168,9 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
             <div className="mx-auto flex max-w-[920px] flex-col items-start gap-3 rounded-[18px] bg-green px-5 py-4 text-white sm:flex-row sm:items-center">
               <Icon name="clock" size={22} className="flex-none text-amber" />
               <p className="flex-1 text-[14.5px]">
-                <b>Your free trial has ended.</b> Your results and downloads are still here. To keep running analyses, write to <a href={`mailto:${CONTACT}`} className="font-bold text-amber">{CONTACT}</a>.
+                <b>Your free trial has ended.</b> Your results and downloads are still here. Upgrade to keep running analyses.
               </p>
+              <Link href={UPGRADE_PATH} className="btn-amber min-h-10 flex-none px-5 text-sm">Upgrade</Link>
             </div>
           </div>
         ) : (
