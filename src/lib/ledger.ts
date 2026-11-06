@@ -5,12 +5,14 @@
  *   release   ESCROW(milestone) −a   → EXPERT_AVAILABLE(expert) +(a−fee), PLATFORM_FEES +fee
  *   refund    ESCROW(milestone) −a   → EXTERNAL +a
  *   withdraw  EXPERT_AVAILABLE −a    → EXTERNAL +a
+ *   payout    EXPERT_AVAILABLE −a    → PAYOUT_PENDING +a   (requested; money set aside)
+ *             PAYOUT_PENDING −a      → EXTERNAL +a         (paid out) or → EXPERT_AVAILABLE +a (rejected)
  */
 
 import { assertMinor, feeFor } from "./money";
 
-export type LedgerAccount = "EXTERNAL" | "ESCROW" | "EXPERT_AVAILABLE" | "PLATFORM_FEES";
-export type LedgerEntryType = "FUND" | "RELEASE" | "FEE" | "REFUND" | "WITHDRAWAL";
+export type LedgerAccount = "EXTERNAL" | "ESCROW" | "EXPERT_AVAILABLE" | "PLATFORM_FEES" | "PAYOUT_PENDING";
+export type LedgerEntryType = "FUND" | "RELEASE" | "FEE" | "REFUND" | "WITHDRAWAL" | "REVERSAL";
 
 export interface PlannedEntry {
   account: LedgerAccount;
@@ -96,6 +98,40 @@ export function planWithdrawal(p: {
   const entries: PlannedEntry[] = [
     { account: "EXPERT_AVAILABLE", type: "WITHDRAWAL", amountMinor: -p.amountMinor, userId: p.expertId, reference: p.reference },
     { account: "EXTERNAL", type: "WITHDRAWAL", amountMinor: p.amountMinor, reference: p.reference },
+  ];
+  assertBalanced(entries);
+  return entries;
+}
+
+/** An expert asks to be paid: the money leaves their available balance and waits for payout. */
+export function planPayoutHold(p: { expertId: string; amountMinor: number; availableMinor: number; reference: string }): PlannedEntry[] {
+  assertMinor(p.amountMinor);
+  if (p.amountMinor > p.availableMinor) throw new Error("Withdrawal exceeds available balance");
+  const entries: PlannedEntry[] = [
+    { account: "EXPERT_AVAILABLE", type: "WITHDRAWAL", amountMinor: -p.amountMinor, userId: p.expertId, reference: p.reference },
+    { account: "PAYOUT_PENDING", type: "WITHDRAWAL", amountMinor: p.amountMinor, userId: p.expertId, reference: p.reference },
+  ];
+  assertBalanced(entries);
+  return entries;
+}
+
+/** The payout was sent (e.g. by Mobile Money): it leaves the platform. */
+export function planPayoutPaid(p: { expertId: string; amountMinor: number; reference: string }): PlannedEntry[] {
+  assertMinor(p.amountMinor);
+  const entries: PlannedEntry[] = [
+    { account: "PAYOUT_PENDING", type: "WITHDRAWAL", amountMinor: -p.amountMinor, userId: p.expertId, reference: p.reference },
+    { account: "EXTERNAL", type: "WITHDRAWAL", amountMinor: p.amountMinor, reference: p.reference },
+  ];
+  assertBalanced(entries);
+  return entries;
+}
+
+/** The payout was rejected: the money goes back to the expert's available balance. */
+export function planPayoutReturn(p: { expertId: string; amountMinor: number; reference: string }): PlannedEntry[] {
+  assertMinor(p.amountMinor);
+  const entries: PlannedEntry[] = [
+    { account: "PAYOUT_PENDING", type: "REVERSAL", amountMinor: -p.amountMinor, userId: p.expertId, reference: p.reference },
+    { account: "EXPERT_AVAILABLE", type: "REVERSAL", amountMinor: p.amountMinor, userId: p.expertId, reference: p.reference },
   ];
   assertBalanced(entries);
   return entries;

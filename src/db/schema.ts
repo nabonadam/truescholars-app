@@ -76,6 +76,7 @@ export const ledgerAccountEnum = pgEnum("ledger_account", [
   "ESCROW", // held for a specific milestone
   "EXPERT_AVAILABLE", // an expert's withdrawable earnings
   "PLATFORM_FEES", // platform revenue
+  "PAYOUT_PENDING", // withdrawals requested by experts, waiting to be paid out
 ]);
 export const ledgerEntryTypeEnum = pgEnum("ledger_entry_type", [
   "FUND",
@@ -83,13 +84,16 @@ export const ledgerEntryTypeEnum = pgEnum("ledger_entry_type", [
   "FEE",
   "REFUND",
   "WITHDRAWAL",
+  "REVERSAL",
 ]);
 export const disputeStatusEnum = pgEnum("dispute_status", [
   "OPEN",
   "RESOLVED_RELEASE",
   "RESOLVED_PARTIAL",
   "RESOLVED_REFUND",
+  "CANCELLED",
 ]);
+export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["REQUESTED", "PAID", "REJECTED"]);
 
 // ───────────────────────── Accounts (Auth.js tables + ours) ─────────────────────────
 
@@ -388,6 +392,9 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "HIRED",
   "PROPOSAL_DECLINED",
   "JOB_MATCH",
+  "DISPUTE",
+  "PAYOUT",
+  "LEVEL_UP",
 ]);
 
 export const notifications = pgTable(
@@ -501,19 +508,69 @@ export const reviews = pgTable(
   (t) => [uniqueIndex("one_review_per_author_per_order").on(t.orderId, t.authorId)],
 );
 
-export const disputes = pgTable("disputes", {
-  id: id(),
-  orderId: text("order_id")
-    .notNull()
-    .unique()
-    .references(() => orders.id, { onDelete: "cascade" }),
-  openedById: text("opened_by_id")
-    .notNull()
-    .references(() => users.id),
-  reason: text("reason").notNull(),
-  evidence: textArray("evidence"),
-  status: disputeStatusEnum("status").notNull().default("OPEN"),
-  decision: text("decision"),
-  resolvedAt: timestamp("resolved_at", { mode: "date" }),
-  createdAt: createdAt(),
+export const disputes = pgTable(
+  "disputes",
+  {
+    id: id(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    milestoneId: text("milestone_id").references(() => milestones.id, { onDelete: "cascade" }),
+    openedById: text("opened_by_id")
+      .notNull()
+      .references(() => users.id),
+    reason: text("reason").notNull(), // reason code: QUALITY | NOT_DELIVERED | LATE | SCOPE | UNRESPONSIVE | OTHER
+    details: text("details"),
+    evidence: textArray("evidence"),
+    status: disputeStatusEnum("status").notNull().default("OPEN"),
+    previousMilestoneStatus: text("previous_milestone_status"),
+    respondBy: timestamp("respond_by", { mode: "date" }), // after this, our team can decide
+    offerReleaseMinor: integer("offer_release_minor"), // latest settlement offer: amount to the expert
+    offerById: text("offer_by_id").references(() => users.id),
+    offerAt: timestamp("offer_at", { mode: "date" }),
+    releasedMinor: integer("released_minor"),
+    refundedMinor: integer("refunded_minor"),
+    decision: text("decision"),
+    resolvedById: text("resolved_by_id").references(() => users.id),
+    resolvedAt: timestamp("resolved_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("disputes_order").on(t.orderId),
+    index("disputes_milestone").on(t.milestoneId),
+    uniqueIndex("one_open_dispute_per_milestone").on(t.milestoneId).where(sql`${t.status} = 'OPEN'`),
+  ],
+);
+
+export const payoutMethods = pgTable("payout_methods", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // momo | bank
+  provider: text("provider").notNull(), // MTN, Telecel, AirtelTigo, or the bank's name
+  accountName: text("account_name").notNull(),
+  accountNumber: text("account_number").notNull(),
+  updatedAt: updatedAt(),
 });
+
+export type PayoutSnapshot = { kind: string; provider: string; accountName: string; accountNumber: string };
+
+export const withdrawals = pgTable(
+  "withdrawals",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull().default("GHS"),
+    status: withdrawalStatusEnum("status").notNull().default("REQUESTED"),
+    method: jsonb("method").$type<PayoutSnapshot>().notNull(),
+    payoutReference: text("payout_reference"), // e.g. the Mobile Money transaction ID
+    note: text("note"),
+    decidedById: text("decided_by_id").references(() => users.id),
+    decidedAt: timestamp("decided_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("withdrawals_user").on(t.userId), index("withdrawals_status").on(t.status)],
+);

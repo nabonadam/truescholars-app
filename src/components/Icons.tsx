@@ -14,6 +14,8 @@ const PATHS = {
   clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
   receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
   card: "M3 6h18v12H3zM3 10h18",
+  scale: "M12 4v16M7 20h10M5 8h14M5 8l-3 6a3 3 0 006 0zM19 8l-3 6a3 3 0 006 0z",
+  trophy: "M8 4h8v5a4 4 0 01-8 0zM8 6H4v1a4 4 0 004 4M16 6h4v1a4 4 0 01-4 4M12 13v4M8 20h8",
   briefcase: "M3 8h18v12H3zM8 8V5h8v3M3 13h18",
   spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6",
 } as const;
@@ -55,6 +57,9 @@ const KIND: Record<string, { icon: IconName; tone: keyof typeof TONES }> = {
   HIRED: { icon: "check", tone: "solid" },
   PROPOSAL_DECLINED: { icon: "receipt", tone: "ink" },
   JOB_MATCH: { icon: "briefcase", tone: "green" },
+  DISPUTE: { icon: "scale", tone: "amber" },
+  PAYOUT: { icon: "wallet", tone: "solid" },
+  LEVEL_UP: { icon: "trophy", tone: "amber" },
 };
 
 export function KindIcon({ kind }: { kind: string }) {

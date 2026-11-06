@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ago } from "@/lib/time";
-import { budgetLabel, LEVELS, TIMELINES, type JobCard as Job, type Level } from "@/server/jobs";
+import { budgetLabel, LEVELS, TIMELINES, type JobCard as Job, type JobLevel } from "@/server/jobs";
 
 export function proposalsBand(n: number) {
   if (n === 0) return "Be the first to bid";
@@ -28,7 +28,7 @@ export function JobCard({ job, highlight = false }: { job: Job; highlight?: bool
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         <span><span className="text-ink-muted">Budget</span> <b>{budgetLabel(job)}</b></span>
         <span className="text-ink-muted">{timelineLabel(job.timelineDays)}</span>
-        {job.level !== "any" && <span className="text-ink-muted">{LEVELS[job.level as Level]}</span>}
+        {job.level !== "any" && <span className="text-ink-muted">{LEVELS[job.level as JobLevel]}</span>}
       </div>
       <p className="line-clamp-2 text-[15px] text-ink-muted">{job.description}</p>
       {job.skills.length > 0 && (

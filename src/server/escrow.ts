@@ -5,16 +5,17 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import type { DB } from "@/db";
-import { ledgerEntries, milestones, orders } from "@/db/schema";
+import { ledgerEntries, milestones, orders, disputes } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
 import { planFund, planPartial, planRefund, planRelease, type PlannedEntry } from "@/lib/ledger";
+import { evaluateLevel } from "./levels";
 import { notify } from "./notifications";
 
 export class EscrowError extends Error {}
 
 type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
 
-async function writeEntries(tx: Tx, entries: PlannedEntry[]) {
+export async function writeEntries(tx: Tx, entries: PlannedEntry[]) {
   const transactionId = crypto.randomUUID();
   await tx.insert(ledgerEntries).values(
     entries.map((e) => ({
@@ -136,6 +137,8 @@ export async function releaseMilestone(db: DB, p: { milestoneId: string; approve
       throw new EscrowError("Only the client can approve this milestone");
     }
     if (milestone.status !== "DELIVERED") throw new EscrowError(`Milestone is ${milestone.status}; it must be delivered first`);
+    const [openDispute] = await tx.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.milestoneId, milestone.id), eq(disputes.status, "OPEN")));
+    if (openDispute) throw new EscrowError("This milestone is in dispute. It will be settled through the resolution centre.");
 
     const held = await escrowBalance(tx, milestone.id);
     if (held !== milestone.amountMinor) throw new EscrowError(`Escrow holds ${held}, expected ${milestone.amountMinor}`);
@@ -165,6 +168,7 @@ export async function releaseMilestone(db: DB, p: { milestoneId: string; approve
       link: `/orders/${o.id}`,
       orderId: o.id,
     });
+    await evaluateLevel(db, o.expertId);
   }
   return result;
 }

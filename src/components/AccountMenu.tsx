@@ -31,10 +31,19 @@ export function AccountMenu({ name, email, roles }: { name: string; email: strin
     { title: "", items: [{ href: "/dashboard", label: "Dashboard" }, { href: "/messages", label: "Messages" }, { href: "/orders", label: "Orders" }] },
     { title: "Hiring", items: [{ href: "/jobs/new", label: "Post a job" }, { href: "/jobs/mine", label: "My jobs" }, { href: "/services", label: "Find experts" }] },
     isExpert
-      ? { title: "Working", items: [{ href: "/jobs", label: "Find work" }, { href: "/proposals", label: "My proposals" }, { href: "/expert/services", label: "My services" }] }
+      ? {
+          title: "Working",
+          items: [
+            { href: "/jobs", label: "Find work" },
+            { href: "/proposals", label: "My proposals" },
+            { href: "/expert/services", label: "My services" },
+            { href: "/earnings", label: "Earnings" },
+            { href: "/expert/level", label: "Your level" },
+          ],
+        }
       : { title: "Working", items: [{ href: "/apply", label: "Become an expert" }] },
   ];
-  if (roles.includes("ADMIN")) groups.push({ title: "Admin", items: [{ href: "/admin/applications", label: "Applications" }, { href: "/admin/messages", label: "Flagged messages" }] });
+  if (roles.includes("ADMIN")) groups.push({ title: "Admin", items: [{ href: "/admin/applications", label: "Applications" }, { href: "/admin/disputes", label: "Disputes" }, { href: "/admin/payouts", label: "Payouts" }, { href: "/admin/messages", label: "Flagged messages" }] });
 
   return (
     <div ref={ref} className="relative">

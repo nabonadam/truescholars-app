@@ -19,6 +19,9 @@ const CTA: Record<NotificationKind, string> = {
   HIRED: "Open the order",
   PROPOSAL_DECLINED: "Find more work",
   JOB_MATCH: "See the job",
+  DISPUTE: "Open the resolution centre",
+  PAYOUT: "View your earnings",
+  LEVEL_UP: "See your level",
 };
 
 /** Kinds that can arrive in bursts: only the first unread one per link is emailed. */

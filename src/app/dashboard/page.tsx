@@ -17,6 +17,9 @@ import { listFlaggedMessages, unreadByOrder } from "@/server/orderRoom";
 import { clientEscrowTotal, listOrdersForUser } from "@/server/orders";
 import { listServicesForExpert } from "@/server/services";
 import { budgetLabel, creditBalance, expertProfileOf, recommendedJobs } from "@/server/jobs";
+import { openDisputeCount } from "@/server/disputes";
+import { LEVEL_INFO, type Level } from "@/server/levels";
+import { listWithdrawals } from "@/server/payouts";
 import { getApplicationForUser, listApplications } from "@/server/vetting";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -80,6 +83,8 @@ export default async function Dashboard() {
   ]);
   const unreadMsgs = [...unreadMap.values()].reduce((a, b) => a + b, 0);
   const profile = isExpert ? await expertProfileOf(db, user.id) : null;
+  const [adminDisputes, adminPayouts] = isAdmin ? await Promise.all([openDisputeCount(db), listWithdrawals(db).then((r) => r.length)]) : [0, 0];
+  const level = (profile?.level ?? "NEW") as Level;
   const [jobsForYou, credits] = profile ? await Promise.all([recommendedJobs(db, user.id, 3), creditBalance(db, profile.id)]) : [[], 0];
 
   const buying = orders.filter((o) => o.clientId === user.id);
@@ -168,7 +173,9 @@ export default async function Dashboard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {isExpert && (
             <>
-              <Stat icon="wallet" tone="solid" label="Earnings available" value={formatMoney(available)} note="From approved work" />
+              <Link href="/earnings" className="text-ink no-underline transition-shadow hover:shadow-md [&>div]:h-full">
+                <Stat icon="wallet" tone="solid" label="Earnings available" value={formatMoney(available)} note="Withdraw to Mobile Money →" />
+              </Link>
               <Stat icon="clock" tone="green" label="Active sales" value={String(selling.filter((o) => OPEN.includes(o.status)).length)} note={`${selling.length} in total`} />
               <Stat icon="package" tone="amber" label="Live services" value={String(liveServices)} note={`${services.length} created`} />
             </>
@@ -254,6 +261,17 @@ export default async function Dashboard() {
             </div>
 
             {isExpert && (
+              <Link href="/expert/level" className="flex items-center gap-4 rounded-lg bg-amber-tint p-5 text-ink no-underline transition-shadow hover:shadow-md">
+                <span className="grid size-12 flex-none place-items-center rounded-full bg-amber text-ink"><Icon name="trophy" size={24} /></span>
+                <span className="flex-1">
+                  <span className="block text-xs font-bold tracking-wide text-amber-deep uppercase">Your level</span>
+                  <span className="block font-display text-xl font-bold">{LEVEL_INFO[level].name}</span>
+                  <span className="text-sm text-ink-muted">{level === "TOP_RATED" ? "You're at the top." : "See what unlocks the next level →"}</span>
+                </span>
+              </Link>
+            )}
+
+            {isExpert && (
               <div className="card flex flex-col gap-4">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-lg font-bold">Jobs for you</h2>
@@ -298,6 +316,12 @@ export default async function Dashboard() {
                 <h2 className="text-lg font-bold">Admin</h2>
                 <Link href="/admin/applications" className="flex items-center justify-between font-bold text-green no-underline">
                   Expert applications <span className="rounded-full bg-amber-tint px-3 py-1 text-xs text-amber-deep">{openApps} to review</span>
+                </Link>
+                <Link href="/admin/disputes" className="flex items-center justify-between font-bold text-green no-underline">
+                  Open disputes <span className="rounded-full bg-amber-tint px-3 py-1 text-xs text-amber-deep">{adminDisputes}</span>
+                </Link>
+                <Link href="/admin/payouts" className="flex items-center justify-between font-bold text-green no-underline">
+                  Payouts to send <span className="rounded-full bg-amber-tint px-3 py-1 text-xs text-amber-deep">{adminPayouts}</span>
                 </Link>
                 <Link href="/admin/messages" className="flex items-center justify-between font-bold text-green no-underline">
                   Flagged messages <span className="rounded-full bg-amber-tint px-3 py-1 text-xs text-amber-deep">{flagged}</span>

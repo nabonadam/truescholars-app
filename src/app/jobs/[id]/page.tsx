@@ -22,7 +22,7 @@ import {
   LEVELS,
   listProposalsForJob,
   myProposal,
-  type Level,
+  type JobLevel,
   type ProposalView,
 } from "@/server/jobs";
 import { markLinkNotificationsRead } from "@/server/notifications";
@@ -60,7 +60,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
     <div className="flex flex-wrap gap-2 text-sm">
       <Chip icon="wallet">{budgetLabel(job)} · fixed price</Chip>
       <Chip icon="clock">{timelineLabel(job.timelineDays)}</Chip>
-      <Chip icon="shield">{LEVELS[job.level as Level]}</Chip>
+      <Chip icon="shield">{LEVELS[job.level as JobLevel]}</Chip>
     </div>
   );
   const details = (

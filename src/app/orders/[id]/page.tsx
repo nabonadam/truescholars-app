@@ -15,6 +15,7 @@ import { markOrderNotificationsRead } from "@/server/notifications";
 import { autoApproveDue, listDeliveries, listMessages, markThreadRead, orderPulse, reviewsForOrder } from "@/server/orderRoom";
 import { getOrderForUser } from "@/server/orders";
 import { nextFundable } from "@/server/jobs";
+import { disputesForOrder } from "@/server/disputes";
 
 export const metadata: Metadata = { title: "Order" };
 export const dynamic = "force-dynamic";
@@ -41,12 +42,14 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   if (!data) notFound();
   const { order, milestones, client, expert, role } = data;
 
-  const [msgs, dels, revs, pulse] = await Promise.all([
+  const [msgs, dels, revs, pulse, orderDisputes] = await Promise.all([
     listMessages(db, order.id),
     listDeliveries(db, milestones.map((m) => m.id)),
     reviewsForOrder(db, order.id),
     orderPulse(db, order.id),
+    disputesForOrder(db, order.id),
   ]);
+  const openDisputes = orderDisputes.filter((x) => x.status === "OPEN");
   const meta = new Map((await fileMeta(db, [...msgs.flatMap((m) => m.files), ...dels.flatMap((d) => d.files)])).map((f) => [f.id, f]));
   const answers = (order.requirements as { question: string; answer: string }[] | null) ?? [];
   const status = ORDER_STATUS[order.status];
@@ -66,6 +69,16 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
       {isAdminView && (
         <p className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">Admin view: read-only. You can see the conversation and deliveries but can&apos;t act on this order.</p>
       )}
+      {openDisputes.map((x) => (
+        <Link key={x.id} href={`/disputes/${x.id}`} className="flex flex-wrap items-center gap-3 rounded-md bg-ink px-5 py-4 text-white no-underline">
+          <span className="grid size-10 flex-none place-items-center rounded-full bg-amber font-bold text-ink" aria-hidden="true">⚖</span>
+          <span className="flex-1">
+            <b>A dispute is open on this order.</b>{" "}
+            <span className="text-on-green-muted">The payment is frozen in escrow until it&apos;s settled.</span>
+          </span>
+          <span className="font-bold text-amber">Open the resolution centre →</span>
+        </Link>
+      ))}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className="eyebrow">Order</span>
@@ -126,6 +139,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           {milestones.map((m) => {
             const mDels = dels.filter((d) => d.milestoneId === m.id);
             const revisionsLeft = m.revisionsAllowed - m.revisionsUsed;
+            const frozen = openDisputes.some((x) => x.milestoneId === m.id);
             return (
               <div key={m.id} className="card flex flex-col gap-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -150,13 +164,19 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
                   </div>
                 ))}
 
-                {role === "expert" && (m.status === "FUNDED" || m.status === "REVISION_REQUESTED") && (
+                {role === "expert" && !frozen && (m.status === "FUNDED" || m.status === "REVISION_REQUESTED") && (
                   <div className="border-t border-line pt-4">
                     <DeliveryForm orderId={order.id} milestoneId={m.id} />
                   </div>
                 )}
 
-                {m.status === "DELIVERED" && (
+                {!isAdminView && ["FUNDED", "DELIVERED", "REVISION_REQUESTED"].includes(m.status) && !frozen && (
+                  <Link href={`/orders/${order.id}/dispute?m=${m.id}`} className="order-last self-start text-xs font-bold text-ink-muted">
+                    Problem with this milestone? Open a dispute
+                  </Link>
+                )}
+                {frozen && <p className="rounded-sm bg-parchment px-4 py-3 text-sm font-bold">In dispute: actions are paused until it&apos;s settled.</p>}
+                {m.status === "DELIVERED" && !frozen && (
                   <div className="flex flex-col gap-2 border-t border-line pt-4">
                     {role === "client" ? (
                       <>

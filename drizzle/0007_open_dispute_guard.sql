@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "one_open_dispute_per_milestone" ON "disputes" USING btree ("milestone_id") WHERE "disputes"."status" = 'OPEN';

@@ -23,6 +23,7 @@ import {
 } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
 import { checkUpload, saveUploads } from "./files";
+import { LEVEL_INFO, LEVEL_ORDER, type Level } from "./levels";
 import { notify } from "./notifications";
 import { platformFeeBps } from "./orders";
 
@@ -32,13 +33,15 @@ type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
 
 const DAY = 86_400_000;
 export const MONTHLY_CREDITS = 20;
+/** Higher seller levels get a bigger free allowance. */
+export const monthlyCreditsFor = (level: string) => LEVEL_INFO[level as Level]?.credits ?? MONTHLY_CREDITS;
 export const MIN_BUDGET_MINOR = 2_000; // GH₵20
 export const MAX_BUDGET_MINOR = 10_000_000; // GH₵100,000
 export const MIN_MILESTONE_MINOR = 1_000; // GH₵10
 export const MAX_MILESTONES = 5;
 
 export const LEVELS = { any: "Any level", masters: "Master's or above", phd: "PhD holders" } as const;
-export type Level = keyof typeof LEVELS;
+export type JobLevel = keyof typeof LEVELS;
 export const TIMELINES: { days: number | null; label: string }[] = [
   { days: 3, label: "Within 3 days" },
   { days: 7, label: "Within a week" },
@@ -90,7 +93,7 @@ export function validateJob(input: JobInput) {
   if (max > MAX_BUDGET_MINOR) throw new JobError("For budgets above GH₵100,000, please contact us.");
   if (input.timelineDays !== null && !TIMELINES.some((t) => t.days === input.timelineDays)) throw new JobError("Choose a timeline.");
   if (!(input.level in LEVELS)) throw new JobError("Choose the expertise level you need.");
-  return { title, description, skills, categoryId: input.categoryId, budgetMinMinor: min, budgetMaxMinor: max, timelineDays: input.timelineDays, level: input.level as Level };
+  return { title, description, skills, categoryId: input.categoryId, budgetMinMinor: min, budgetMaxMinor: max, timelineDays: input.timelineDays, level: input.level as JobLevel };
 }
 
 export async function postJob(db: DB, clientId: string, input: JobInput, uploads: File[] = []) {
@@ -161,11 +164,11 @@ export async function priceGuides(db: DB): Promise<Record<string, { low: number;
 
 /** An expert's credit balance, topping up the free monthly allowance the first time it's read each month. */
 export async function creditBalance(db: DB | Tx, expertProfileId: string, now = new Date()) {
-  const [p] = await db.select({ bal: expertProfiles.bidCredits, month: expertProfiles.creditsMonth }).from(expertProfiles).where(eq(expertProfiles.id, expertProfileId));
+  const [p] = await db.select({ bal: expertProfiles.bidCredits, month: expertProfiles.creditsMonth, level: expertProfiles.level }).from(expertProfiles).where(eq(expertProfiles.id, expertProfileId));
   if (!p) throw new JobError("Expert profile not found");
   const key = monthKey(now);
   if (p.month === key) return p.bal;
-  const bal = Math.max(p.bal, MONTHLY_CREDITS);
+  const bal = Math.max(p.bal, monthlyCreditsFor(p.level));
   await db.update(expertProfiles).set({ bidCredits: bal, creditsMonth: key }).where(eq(expertProfiles.id, expertProfileId));
   return bal;
 }
@@ -421,7 +424,7 @@ export async function listProposalsForJob(db: DB, jobId: string, clientId: strin
     const topMatch = sellers.some((s) => s.expertId === r.profile.id);
     const sharedSkills = r.profile.skills.filter((s) => jobSkills.has(s.toLowerCase()));
     const inBudget = r.proposal.priceMinor <= job.budgetMaxMinor;
-    const score = (topMatch ? 30 : 0) + sharedSkills.length * 8 + (rating ?? 4.2) * 6 + Math.min(done, 10) * 2 + (inBudget ? 10 : 0) + (r.proposal.status === "SHORTLISTED" ? 15 : 0);
+    const score = (topMatch ? 30 : 0) + sharedSkills.length * 8 + (rating ?? 4.2) * 6 + Math.min(done, 10) * 2 + (inBudget ? 10 : 0) + (r.proposal.status === "SHORTLISTED" ? 15 : 0) + Math.max(0, LEVEL_ORDER.indexOf(r.profile.level as Level)) * 6;
     return {
       ...r.proposal,
       isNew: !r.proposal.viewedAt,

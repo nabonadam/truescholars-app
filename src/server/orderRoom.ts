@@ -2,8 +2,9 @@
 
 import { and, asc, avg, count, desc, eq, gt, inArray, isNotNull, lte, ne, or, isNull, sql } from "drizzle-orm";
 import type { DB } from "@/db";
-import { deliveries, messages, milestones, orders, reviews, threadMembers, threads, users } from "@/db/schema";
+import { deliveries, disputes, messages, milestones, orders, reviews, threadMembers, threads, users } from "@/db/schema";
 import { releaseMilestone } from "./escrow";
+import { evaluateLevel } from "./levels";
 import { notify } from "./notifications";
 
 export class OrderRoomError extends Error {}
@@ -203,6 +204,8 @@ export async function submitDelivery(db: DB, p: { milestoneId: string; expertId:
     if (!m) throw new OrderRoomError("Milestone not found");
     const [order] = await tx.select().from(orders).where(eq(orders.id, m.orderId));
     if (order.expertId !== p.expertId) throw new OrderRoomError("Only the expert can deliver this order");
+    const [inDispute] = await tx.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.milestoneId, m.id), eq(disputes.status, "OPEN")));
+    if (inDispute) throw new OrderRoomError("This milestone is in dispute. Use the resolution centre to settle it first.");
     if (m.status !== "FUNDED" && m.status !== "REVISION_REQUESTED") {
       throw new OrderRoomError(m.status === "PENDING_FUNDING" ? "Wait until the client has paid into escrow." : "This milestone can't receive a delivery now.");
     }
@@ -233,6 +236,8 @@ export async function requestRevision(db: DB, p: { milestoneId: string; clientId
     if (!m) throw new OrderRoomError("Milestone not found");
     const [order] = await tx.select().from(orders).where(eq(orders.id, m.orderId));
     if (order.clientId !== p.clientId) throw new OrderRoomError("Only the client can request a revision");
+    const [inDispute] = await tx.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.milestoneId, m.id), eq(disputes.status, "OPEN")));
+    if (inDispute) throw new OrderRoomError("This milestone is in dispute. Use the resolution centre to settle it first.");
     if (m.status !== "DELIVERED") throw new OrderRoomError("You can only request a revision after a delivery.");
     if (m.revisionsUsed >= m.revisionsAllowed) {
       throw new OrderRoomError("You've used all the revisions in this package. Approve the work, or message the expert to agree next steps.");
@@ -304,6 +309,7 @@ export async function leaveReview(db: DB, p: { orderId: string; authorId: string
     link: `/orders/${order.id}`,
     orderId: order.id,
   });
+  if (subjectId === order.expertId) await evaluateLevel(db, subjectId);
 }
 
 export async function reviewsForOrder(db: DB, orderId: string) {
