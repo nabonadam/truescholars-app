@@ -4,6 +4,7 @@ import Link from "next/link";
 import { startTestPayment } from "@/app/actions/payments";
 import { Icon, IconTile, type IconName } from "@/components/Icons";
 import { OrderProgress } from "@/components/OrderProgress";
+import { Avatar } from "@/components/UserAvatar";
 import { getDb } from "@/db";
 import { milestones } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
@@ -94,7 +95,6 @@ export default async function Dashboard() {
   const liveServices = services.filter((s) => s.status === "ACTIVE").length;
   const totalSpent = buying.filter((o) => o.status !== "AWAITING_PAYMENT" && o.status !== "CANCELLED").reduce((s, o) => s + o.totalMinor, 0);
   const firstName = user.name?.split(" ")[0] ?? "there";
-  const initials = (user.name ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const isNewClient = !isExpert && buying.length === 0;
   const urgent = attention.filter((a) => a.urgent).length;
 
@@ -106,7 +106,9 @@ export default async function Dashboard() {
         <div className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full border-2 border-dashed border-white/15" aria-hidden="true" />
         <div className="relative mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 sm:py-12">
           <div className="flex items-center gap-4">
-            <span className="grid size-14 flex-none place-items-center rounded-full bg-amber font-display text-xl font-extrabold text-ink" aria-hidden="true">{initials}</span>
+            <Link href="/settings" aria-label="Account settings" className="rounded-full ring-2 ring-white/30">
+              <Avatar name={user.name ?? "?"} size={56} tone="amber" src={user.image} />
+            </Link>
             <div className="flex flex-col gap-1">
               <span className="text-sm text-on-green-muted">{greeting()},</span>
               <h1 className="text-3xl font-extrabold text-white sm:text-4xl">{firstName}</h1>

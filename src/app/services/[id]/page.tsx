@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Avatar } from "@/components/UserAvatar";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
@@ -41,9 +42,7 @@ export default async function ServicePage({ params, searchParams }: { params: Pr
         <Link href={`/services?category=${svc.categorySlug}`} className="eyebrow no-underline">{svc.categoryName}</Link>
         <h1 className="max-w-3xl text-3xl font-bold sm:text-4xl">{service.title}</h1>
         <div className="flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-full bg-green text-sm font-bold text-amber" aria-hidden="true">
-            {(expert.name ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
-          </span>
+          <Avatar name={expert.name ?? "?"} size={44} userId={expert.userId} />
           <div>
             <div className="font-bold">{expert.name}</div>
             <div className="text-sm text-ink-muted">

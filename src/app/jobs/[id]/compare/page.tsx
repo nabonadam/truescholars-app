@@ -65,7 +65,7 @@ export default async function Compare({ params, searchParams }: { params: Promis
                 {picked.map((x) => (
                   <th key={x.id} scope="col" className="min-w-60 px-4 py-5 text-left align-top">
                     <div className="flex items-center gap-3">
-                      <Avatar name={x.expert.name} size={48} />
+                      <Avatar name={x.expert.name} size={48} userId={x.expert.userId} />
                       <div className="min-w-0">
                         <div className="font-display text-lg font-bold">{x.expert.name}</div>
                         <div className="line-clamp-2 text-xs font-normal text-ink-muted">{x.expert.headline}</div>

@@ -145,7 +145,7 @@ export default async function DisputePage({ params }: { params: Promise<{ id: st
             </div>
           )}
           <div className="flex items-center gap-3 rounded-md border border-line bg-white p-4 text-sm">
-            <Avatar name={role === "client" ? v.expertName : v.clientName} size={36} />
+            <Avatar name={role === "client" ? v.expertName : v.clientName} size={36} userId={role === "client" ? order.expertId : order.clientId} />
             <span className="text-ink-muted">Keep it respectful and factual. Our team reads the conversation when deciding.</span>
           </div>
         </aside>

@@ -5,8 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPrefs, playBell, playMessage, playPop, unlockAudioOnGesture } from "@/lib/sounds";
 import { Icon, type IconName } from "./Icons";
+import { Avatar } from "./UserAvatar";
 
-type Incoming = { id: string; at: string; sender: string; preview: string; orderId: string | null; title: string | null };
+type Incoming = { id: string; at: string; sender: string; senderImage: string | null; preview: string; orderId: string | null; title: string | null };
 type Pulse = { messages: number; notifications: number; incoming: Incoming | null };
 type Toast = Incoming & { key: number };
 
@@ -21,7 +22,6 @@ function Badge({ href, icon, label, n, bump }: { href: string; icon: IconName; l
   );
 }
 
-const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
 /**
  * Message and notification icons that stay current, plus everything that tells you a message
@@ -132,8 +132,8 @@ export function HeaderBadges({ messages, notifications }: { messages: number; no
       <div className="pointer-events-none fixed right-3 bottom-3 z-[60] flex w-[min(92vw,22rem)] flex-col gap-2 sm:right-5 sm:bottom-5" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.key} className="pointer-events-auto flex animate-[ts-toast-in_0.35s_cubic-bezier(.2,.9,.3,1.3)] items-start gap-3 rounded-md border border-line bg-white p-3.5 text-ink shadow-2xl">
-            <span className="relative grid size-11 flex-none place-items-center rounded-full bg-green font-display text-sm font-bold text-amber">
-              {initials(t.sender)}
+            <span className="relative flex-none">
+              <Avatar name={t.sender} size={44} src={t.senderImage} />
               <span className="absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full border-2 border-white bg-amber" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">

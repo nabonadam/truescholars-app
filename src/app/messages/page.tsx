@@ -4,6 +4,7 @@ import { toggleStarAction } from "@/app/actions/orderRoom";
 import { SoundButton } from "@/components/AlertSettings";
 import { ChatThread } from "@/components/ChatThread";
 import { Icon } from "@/components/Icons";
+import { Avatar } from "@/components/UserAvatar";
 import { LivePulse, MessageComposer } from "@/components/OrderRoomForms";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
@@ -25,16 +26,6 @@ function when(d: Date) {
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-const initials = (name: string) => name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
-
-function Avatar({ name, size = 48 }: { name: string; size?: number }) {
-  return (
-    <span className="grid flex-none place-items-center rounded-full bg-green font-display font-bold text-amber" style={{ width: size, height: size, fontSize: size * 0.36 }} aria-hidden="true">
-      {initials(name)}
-    </span>
-  );
 }
 
 function href(p: { c?: string; f?: Filter; q?: string }) {
@@ -133,7 +124,7 @@ export default async function Messages({ searchParams }: { searchParams: Promise
                   aria-current={active ? "true" : undefined}
                   className={`flex items-center gap-3 border-l-4 px-4 py-3.5 text-ink no-underline ${active ? "border-amber bg-green-tint" : "border-transparent hover:bg-parchment"}`}
                 >
-                  <Avatar name={c.otherName} />
+                  <Avatar name={c.otherName} userId={c.otherId} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className={`truncate ${c.unread ? "font-bold" : "font-medium"}`}>{c.otherName}</span>
@@ -166,7 +157,7 @@ export default async function Messages({ searchParams }: { searchParams: Promise
             <Link href={href({ f: filter, q })} className="grid size-10 flex-none place-items-center rounded-full text-ink hover:bg-parchment md:hidden" aria-label="Back to conversations">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
             </Link>
-            <Avatar name={otherName} size={42} />
+            <Avatar name={otherName} size={42} userId={other.id} />
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold">{otherName}</div>
               <div className="truncate text-xs text-ink-muted">{selected.role === "client" ? "Expert" : "Client"} · {selected.order.title}</div>
@@ -221,7 +212,7 @@ export default async function Messages({ searchParams }: { searchParams: Promise
       {selected && status && (
         <aside className="hidden w-72 flex-none flex-col gap-5 overflow-y-auto border-l border-line bg-parchment/40 p-5 xl:flex" aria-label="Order details">
           <div className="flex flex-col items-center gap-2 text-center">
-            <Avatar name={otherName} size={64} />
+            <Avatar name={otherName} size={64} userId={other?.id} />
             <div className="font-bold">{otherName}</div>
             <div className="text-xs text-ink-muted">{selected.role === "client" ? "Your expert" : "Your client"}</div>
           </div>

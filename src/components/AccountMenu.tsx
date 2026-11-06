@@ -5,11 +5,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOutAction } from "@/app/actions/auth";
 import { AlertSettings } from "./AlertSettings";
+import { Avatar } from "./UserAvatar";
 
 type Item = { href: string; label: string };
 
 /** Avatar button with everything account-related, so the header stays on one line on phones. */
-export function AccountMenu({ name, email, roles }: { name: string; email: string; roles: string[] }) {
+export function AccountMenu({ name, email, roles, image }: { name: string; email: string; roles: string[]; image?: string | null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const path = usePathname();
@@ -27,9 +28,8 @@ export function AccountMenu({ name, email, roles }: { name: string; email: strin
   }, [open]);
 
   const isExpert = roles.includes("EXPERT");
-  const initials = (name || email).split(/[\s@]/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const groups: { title: string; items: Item[] }[] = [
-    { title: "", items: [{ href: "/dashboard", label: "Dashboard" }, { href: "/messages", label: "Messages" }, { href: "/orders", label: "Orders" }] },
+    { title: "", items: [{ href: "/dashboard", label: "Dashboard" }, { href: "/messages", label: "Messages" }, { href: "/orders", label: "Orders" }, { href: "/settings", label: "Account settings" }] },
     { title: "Hiring", items: [{ href: "/jobs/new", label: "Post a job" }, { href: "/jobs/mine", label: "My jobs" }, { href: "/services", label: "Find experts" }] },
     isExpert
       ? {
@@ -56,14 +56,20 @@ export function AccountMenu({ name, email, roles }: { name: string; email: strin
         aria-label="Account menu"
         className="grid size-11 place-items-center rounded-full"
       >
-        <span className="grid size-9 place-items-center rounded-full bg-amber font-display text-sm font-bold text-ink ring-2 ring-white/30">{initials}</span>
+        <span className="rounded-full ring-2 ring-white/30">
+          <Avatar name={name || email} size={36} tone="amber" src={image} />
+        </span>
       </button>
       {open && (
         <div role="menu" className="absolute top-full right-0 z-50 mt-2 w-72 overflow-hidden rounded-md border border-line bg-white text-ink shadow-xl">
-          <div className="border-b border-line bg-parchment px-4 py-3">
-            <div className="truncate font-bold">{name || "Your account"}</div>
-            <div className="truncate text-xs text-ink-muted">{email}</div>
-          </div>
+          <Link href="/settings" className="flex items-center gap-3 border-b border-line bg-parchment px-4 py-3 text-ink no-underline hover:bg-amber-tint">
+            <Avatar name={name || email} size={44} tone="amber" src={image} />
+            <span className="min-w-0">
+              <span className="block truncate font-bold">{name || "Your account"}</span>
+              <span className="block truncate text-xs text-ink-muted">{email}</span>
+              <span className="text-xs font-bold text-green">Account settings →</span>
+            </span>
+          </Link>
           <div className="max-h-[70dvh] overflow-y-auto py-1">
             {groups.map((g) => (
               <div key={g.title || "main"} className="border-b border-line py-1 last:border-0">

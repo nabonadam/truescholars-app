@@ -53,9 +53,9 @@ export async function notify(
       orderId: p.orderId ?? null,
     });
     if (shouldEmail) {
-      const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, p.userId));
+      const [u] = await db.select({ email: users.email, wantsEmail: users.emailNotifications }).from(users).where(eq(users.id, p.userId));
       const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-      if (u?.email) {
+      if (u?.email && u.wantsEmail) {
         await sendEmail({
           to: u.email,
           subject: p.title,

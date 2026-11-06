@@ -29,6 +29,11 @@ const updatedAt = () =>
     .$onUpdate(() => new Date());
 const textArray = (name: string) => text(name).array().notNull().default(sql`'{}'::text[]`);
 
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => "bytea",
+  fromDriver: (v) => (Buffer.isBuffer(v) ? v : Buffer.from(v)),
+});
+
 // ───────────────────────── Enums ─────────────────────────
 
 export const roleEnum = pgEnum("role", ["CLIENT", "EXPERT", "ADMIN"]);
@@ -106,7 +111,19 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   roles: roleEnum("roles").array().notNull().default(sql`'{CLIENT}'::role[]`),
   country: text("country"),
+  emailNotifications: boolean("email_notifications").notNull().default(true),
+  sessionVersion: integer("session_version").notNull().default(0), // bumped on password change: signs out other devices
   createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** Profile photos, stored small (the browser resizes them to 320 px before upload). */
+export const avatars = pgTable("avatars", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  mimeType: text("mime_type").notNull(),
+  data: bytea("data").notNull(),
   updatedAt: updatedAt(),
 });
 
@@ -417,10 +434,7 @@ export const notifications = pgTable(
 
 // ───────────────────────── Files ─────────────────────────
 
-const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
-  dataType: () => "bytea",
-  fromDriver: (v) => (Buffer.isBuffer(v) ? v : Buffer.from(v)),
-});
+
 
 // Uploaded files (deliveries, message attachments). Stored in Postgres for now (max 10 MB each);
 // can move to object storage later without changing callers.

@@ -170,7 +170,7 @@ function OrderCard({ o }: { o: BoardOrder }) {
       <span className={`w-1.5 flex-none ${rail}`} aria-hidden="true" />
       <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
         <Link href={`/orders/${o.id}`} className="flex min-w-0 flex-1 items-center gap-4 text-ink no-underline">
-          <Avatar name={o.other} size={52} tone={o.role === "buying" ? "green" : "amber"} />
+          <Avatar name={o.other} size={52} tone={o.role === "buying" ? "green" : "amber"} userId={o.otherId} />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
               <span className="font-bold text-ink">{o.other}</span>

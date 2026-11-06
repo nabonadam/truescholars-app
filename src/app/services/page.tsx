@@ -109,7 +109,7 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
                     <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-bold text-ink">{s.fastestDays}-day delivery</span>
                   </div>
                   <div className="flex flex-col gap-1.5 p-3.5">
-                    <div className="flex items-center gap-2 text-xs"><Avatar name={s.expertName ?? "?"} size={22} /><b>{s.expertName}</b></div>
+                    <div className="flex items-center gap-2 text-xs"><Avatar name={s.expertName ?? "?"} size={22} userId={s.expertUserId} /><b>{s.expertName}</b></div>
                     <div className="line-clamp-2 text-sm font-bold">{s.title}</div>
                     <div className="text-xs text-ink-muted">From <b className="text-ink">{cedi(s.fromMinor)}</b></div>
                   </div>
@@ -157,7 +157,7 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
             {experts.map((s) => (
               <li key={s.expertUserId}>
                 <Link href={`/services/${s.id}`} className="flex h-full flex-col items-center gap-2 rounded-md border border-line bg-white p-5 text-center text-ink no-underline transition-shadow hover:shadow-lg">
-                  <Avatar name={s.expertName ?? "?"} size={64} />
+                  <Avatar name={s.expertName ?? "?"} size={64} userId={s.expertUserId} />
                   <b className="font-display text-lg">{s.expertName}</b>
                   <span className="line-clamp-2 text-sm text-ink-muted">{s.expertHeadline}</span>
                   <span className="mt-auto flex flex-wrap items-center justify-center gap-2 text-xs">
@@ -249,7 +249,7 @@ function ServiceCard({ s }: { s: BrowseService }) {
       </div>
       <div className="flex flex-1 flex-col gap-2.5 p-4">
         <div className="flex items-center gap-2 text-sm">
-          <Avatar name={s.expertName ?? "?"} size={28} />
+          <Avatar name={s.expertName ?? "?"} size={28} userId={s.expertUserId} />
           <b className="truncate">{s.expertName}</b>
           <span className="ml-auto flex-none rounded-full bg-parchment px-2 py-0.5 text-[11px] font-bold">{LEVEL_LABEL[s.level]}</span>
         </div>

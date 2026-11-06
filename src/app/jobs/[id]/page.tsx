@@ -267,7 +267,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
           <div className="card flex flex-col gap-4">
             <h2 className="font-sans text-sm font-bold tracking-wider text-ink-muted uppercase">About the client</h2>
             <div className="flex items-center gap-3">
-              <Avatar name={client.name} size={44} tone="amber" />
+              <Avatar name={client.name} size={44} tone="amber" userId={job.clientId} />
               <div>
                 <div className="font-bold">{client.name.split(" ")[0]}</div>
                 <div className="text-xs text-ink-muted">Member since {memberSince(client.memberSince)}</div>
@@ -336,7 +336,7 @@ function ProposalCard({ p, jobId, open, best, budgetMax }: { p: ProposalView; jo
   return (
     <article className={`flex flex-col gap-4 rounded-md border bg-white p-5 sm:p-6 ${best ? "border-amber shadow-md" : "border-line"} ${p.status === "DECLINED" ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-start gap-4">
-        <Avatar name={p.expert.name} size={56} />
+        <Avatar name={p.expert.name} size={56} userId={p.expert.userId} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-display text-lg font-bold">{p.expert.name}</h3>

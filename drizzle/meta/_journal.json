@@ -57,6 +57,13 @@
       "when": 1793935394766,
       "tag": "0007_open_dispute_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793939738286,
+      "tag": "0008_account_settings",
+      "breakpoints": true
     }
   ]
 }

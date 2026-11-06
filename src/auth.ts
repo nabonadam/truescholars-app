@@ -11,6 +11,13 @@ import { grantRole, isAdminEmail } from "@/server/vetting";
 
 type AppRole = "CLIENT" | "EXPERT" | "ADMIN";
 
+declare module "@auth/core/jwt" {
+  interface JWT {
+    roles?: AppRole[];
+    sv?: number;
+  }
+}
+
 declare module "next-auth" {
   interface Session {
     user: { id: string; roles: AppRole[] } & DefaultSession["user"];
@@ -53,7 +60,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       async jwt({ token, user }) {
         const userId = user?.id ?? token.sub;
         if (userId) {
-          const [row] = await db.select({ roles: users.roles, email: users.email }).from(users).where(eq(users.id, userId));
+          const [row] = await db
+            .select({ roles: users.roles, email: users.email, name: users.name, image: users.image, sv: users.sessionVersion })
+            .from(users)
+            .where(eq(users.id, userId));
+          if (!row) return null; // account removed
+          // A password change bumps the version: sessions from before it end here (other devices are signed out).
+          if (user) token.sv = row.sv;
+          else if ((token.sv ?? 0) !== row.sv) return null;
+          token.name = row.name; // name and photo changes show up straight away
+          token.picture = row.image;
           let roles = row?.roles ?? ["CLIENT"];
           // Emails listed in ADMIN_EMAILS are promoted to ADMIN the next time their session refreshes.
           if (row && isAdminEmail(row.email) && !roles.includes("ADMIN")) {
@@ -66,6 +82,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       },
       async session({ session, token }) {
         if (token.sub) session.user.id = token.sub;
+        session.user.name = (token.name as string | null | undefined) ?? session.user.name;
+        session.user.image = (token.picture as string | null | undefined) ?? null;
         session.user.roles = (token.roles as AppRole[] | undefined) ?? ["CLIENT"];
         return session;
       },

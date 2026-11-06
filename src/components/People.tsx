@@ -1,16 +1,4 @@
-export const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase() || "?";
-
-export function Avatar({ name, size = 48, tone = "green" }: { name: string; size?: number; tone?: "green" | "amber" }) {
-  return (
-    <span
-      className={`grid flex-none place-items-center rounded-full font-display font-bold ${tone === "green" ? "bg-green text-amber" : "bg-amber text-ink"}`}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
-      aria-hidden="true"
-    >
-      {initialsOf(name)}
-    </span>
-  );
-}
+export { Avatar, initialsOf } from "./UserAvatar";
 
 export function Stars({ rating, count, small = false }: { rating: number | null; count: number; small?: boolean }) {
   if (rating === null || count === 0) return <span className={`text-ink-muted ${small ? "text-xs" : "text-sm"}`}>No reviews yet</span>;

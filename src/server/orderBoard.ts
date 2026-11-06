@@ -72,6 +72,7 @@ export async function orderBoard(db: DB, userId: string, now = new Date()) {
         status: o.status,
         role,
         other,
+        otherId: role === "buying" ? o.expertId : o.clientId,
         category,
         tier: o.tier,
         totalMinor: o.totalMinor,
