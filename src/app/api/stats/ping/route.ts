@@ -1,9 +1,9 @@
 import { ping } from "@/server/stats";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
-/** Called when the workspace opens, so a sleeping engine is awake by the first command. */
+/** Wakes the engine (it sleeps after a quiet spell on free hosting) and says when it is ready. */
 export async function POST() {
-  await ping();
-  return Response.json({ ok: true });
+  return Response.json({ awake: await ping() });
 }

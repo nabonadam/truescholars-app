@@ -352,6 +352,11 @@ function Welcome({ sugg, aiEnabled, onAsk, onCmd }: { sugg: ReturnType<typeof su
 
 function Pending({ text, ask }: { text: string; ask: boolean }) {
   const isPlain = ask && !looksLikeStata(text);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 7000);
+    return () => clearTimeout(t);
+  }, []);
   return (
     <div className="ts-rise">
       {isPlain && <Asked text={text} />}
@@ -366,6 +371,7 @@ function Pending({ text, ask }: { text: string; ask: boolean }) {
             <div className="mt-1 font-mono text-[13px] text-amber"><span className="ts-caret">▌</span></div>
           </>
         )}
+        {slow && <p className="mt-2 font-mono text-[12px] text-white/45">starting the statistics engine; after a quiet spell this takes up to a minute…</p>}
       </div>
     </div>
   );

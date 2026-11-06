@@ -32,31 +32,58 @@ type Overview = { nObs: number; nVars: number; variables: VarMeta[] };
 
 // ───────── engine ─────────
 
-export async function engine<T>(route: string, body: unknown, raw = false): Promise<T> {
-  const url = process.env.STATS_URL;
-  if (!url) throw new StatsError("The statistics engine is not connected yet.");
-  let res: Response;
-  try {
-    res = await fetch(url.replace(/\/$/, "") + route, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-stats-key": process.env.STATS_KEY ?? "" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000),
-    });
-  } catch {
-    throw new StatsError("The statistics engine is waking up. Give it a few seconds and try again.");
+const engineBase = () => process.env.STATS_URL?.replace(/\/$/, "");
+const WAKE_MS = 100_000; // a sleeping free-plan engine takes 30-60 s to start
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Waits until the engine answers /health. On the free hosting plan it sleeps after ~15 minutes
+ * without use, and while it starts the host answers 503 "loading" straight away.
+ */
+export async function ping(maxMs = WAKE_MS) {
+  const base = engineBase();
+  if (!base) return false;
+  const until = Date.now() + maxMs;
+  while (Date.now() < until) {
+    const ok = await fetch(base + "/health", { signal: AbortSignal.timeout(15_000), cache: "no-store" })
+      .then((r) => r.ok)
+      .catch(() => false);
+    if (ok) return true;
+    await pause(2_500);
   }
-  if (!res.ok) {
-    const detail = await res.json().then((j: { detail?: string }) => j.detail).catch(() => null);
-    throw new StatsError(typeof detail === "string" ? detail : "The statistics engine could not finish that. Try again.");
-  }
-  return (raw ? res.arrayBuffer() : res.json()) as Promise<T>;
+  return false;
 }
 
-/** Wakes a sleeping engine (free hosting sleeps after inactivity). */
-export async function ping() {
-  const url = process.env.STATS_URL;
-  if (url) await fetch(url.replace(/\/$/, "") + "/health", { signal: AbortSignal.timeout(60_000) }).catch(() => null);
+const WAKING = new Set([502, 503, 504]);
+
+export async function engine<T>(route: string, body: unknown, raw = false): Promise<T> {
+  const base = engineBase();
+  if (!base) throw new StatsError("The statistics engine is not connected yet.");
+  for (let attempt = 0; ; attempt++) {
+    let res: Response | null = null;
+    try {
+      res = await fetch(base + route, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-stats-key": process.env.STATS_KEY ?? "" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(180_000),
+        cache: "no-store",
+      });
+    } catch {
+      res = null; // unreachable: probably still starting
+    }
+    if (res && !WAKING.has(res.status)) {
+      if (!res.ok) {
+        const detail = await res.json().then((j: { detail?: string }) => j.detail).catch(() => null);
+        throw new StatsError(typeof detail === "string" ? detail : "The statistics engine could not finish that. Try again.");
+      }
+      return (raw ? res.arrayBuffer() : res.json()) as Promise<T>;
+    }
+    // Asleep, starting or restarting: wait for it once, then try again.
+    if (attempt >= 1 || !(await ping())) {
+      throw new StatsError("The statistics engine is taking longer than usual to start. Please try again in a minute.");
+    }
+  }
 }
 
 // ───────── sessions ─────────

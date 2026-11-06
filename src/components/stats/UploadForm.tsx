@@ -16,9 +16,23 @@ export function UploadForm({ maxMb }: { maxMb: number }) {
   const busy = stage.kind === "upload" || stage.kind === "read";
 
   // Wake the engine while the person is still choosing a file.
+  const [engine, setEngine] = useState<"starting" | "ready" | "slow">("starting");
+  const [slowRead, setSlowRead] = useState(false);
   useEffect(() => {
-    fetch("/api/stats/ping", { method: "POST" }).catch(() => null);
+    let live = true;
+    fetch("/api/stats/ping", { method: "POST" })
+      .then((r) => r.json())
+      .then((j: { awake?: boolean }) => live && setEngine(j.awake ? "ready" : "slow"))
+      .catch(() => live && setEngine("slow"));
+    return () => {
+      live = false;
+    };
   }, []);
+  useEffect(() => {
+    if (stage.kind !== "read") return setSlowRead(false);
+    const t = setTimeout(() => setSlowRead(true), 6000);
+    return () => clearTimeout(t);
+  }, [stage.kind]);
 
   const send = (f: File | undefined | null) => {
     if (!f || busy) return;
@@ -68,7 +82,11 @@ export function UploadForm({ maxMb }: { maxMb: number }) {
               )}
             </div>
             <p className="mt-2.5 text-[13px] text-ink-muted">
-              {stage.kind === "upload" ? "Uploading…" : "Reading variables, labels and missing values. Large files take a little longer."}
+              {stage.kind === "upload"
+                ? "Uploading…"
+                : slowRead && engine !== "ready"
+                  ? "Starting the statistics engine. After a quiet spell this takes up to a minute; your file is safe."
+                  : "Reading variables, labels and missing values. Large files take a little longer."}
             </p>
           </div>
         ) : (
@@ -80,6 +98,10 @@ export function UploadForm({ maxMb }: { maxMb: number }) {
         )}
       </label>
       {stage.kind === "error" && <p className="mt-2 text-sm text-red-700">{stage.message}</p>}
+      <p className="mt-2 flex items-center gap-2 text-xs text-ink-muted" aria-live="polite">
+        <span className={`h-2 w-2 rounded-full ${engine === "ready" ? "bg-green" : "animate-pulse bg-amber"}`} />
+        {engine === "ready" ? "Statistics engine ready" : engine === "starting" ? "Starting the statistics engine…" : "The engine is still starting; you can upload now and it will wait."}
+      </p>
     </div>
   );
 }
