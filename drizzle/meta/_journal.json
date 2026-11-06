@@ -22,6 +22,13 @@
       "when": 1793922466133,
       "tag": "0002_files",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793924692594,
+      "tag": "0003_notifications",
+      "breakpoints": true
     }
   ]
 }

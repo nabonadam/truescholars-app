@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { payOrderAction } from "@/app/actions/orders";
+import { OrderProgress } from "@/components/OrderProgress";
+import { progressStep } from "@/server/dashboard";
 import { AutoRefresh, ClientDecision, DeliveryForm, MessageComposer, ReviewForm } from "@/components/OrderRoomForms";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { ORDER_STATUS } from "@/lib/status";
 import { fileMeta, formatBytes } from "@/server/files";
 import { requireUser } from "@/server/guards";
-import { autoApproveDue, listDeliveries, listMessages, reviewsForOrder } from "@/server/orderRoom";
+import { markOrderNotificationsRead } from "@/server/notifications";
+import { autoApproveDue, listDeliveries, listMessages, markThreadRead, reviewsForOrder } from "@/server/orderRoom";
 import { getOrderForUser } from "@/server/orders";
 
 export const metadata: Metadata = { title: "Order" };
@@ -64,6 +67,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const status = ORDER_STATUS[order.status];
   const other = role === "client" ? expert : client;
   const isAdminView = role === "admin";
+  if (!isAdminView) await Promise.all([markThreadRead(db, order.id, user.id), markOrderNotificationsRead(db, user.id, order.id)]);
   const myReview = revs.find((r) => r.authorId === user.id);
   const theirReview = revs.find((r) => r.authorId !== user.id);
   const expertFirst = expert.name?.split(" ")[0] ?? "the expert";
@@ -83,8 +87,19 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             {isAdminView ? `${client.name} (client) and ${expert.name} (expert)` : role === "client" ? `with ${expert.name}` : `for ${client.name}`} · {formatMoney(order.totalMinor, order.currency)} · opened {fmtDate(order.createdAt)}
           </p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-sm font-bold ${status.tone}`}>{status.label}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          {order.status !== "AWAITING_PAYMENT" && order.status !== "CANCELLED" && (
+            <Link href={`/orders/${order.id}/receipt`} className="text-sm font-bold text-green">Receipt</Link>
+          )}
+          <span className={`rounded-full px-3 py-1 text-sm font-bold ${status.tone}`}>{status.label}</span>
+        </div>
       </div>
+
+      {order.status !== "AWAITING_PAYMENT" && order.status !== "CANCELLED" && (
+        <div className="card">
+          <OrderProgress step={progressStep(order.status, milestones.map((m) => m.status))} />
+        </div>
+      )}
 
       {order.status === "AWAITING_PAYMENT" && role === "client" && (
         <div className="card flex flex-wrap items-center gap-4 border-amber bg-amber-tint">

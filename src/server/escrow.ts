@@ -6,7 +6,9 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { DB } from "@/db";
 import { ledgerEntries, milestones, orders } from "@/db/schema";
+import { formatMoney } from "@/lib/money";
 import { planFund, planPartial, planRefund, planRelease, type PlannedEntry } from "@/lib/ledger";
+import { notify } from "./notifications";
 
 export class EscrowError extends Error {}
 
@@ -62,7 +64,7 @@ export async function fundMilestone(
   db: DB,
   p: { milestoneId: string; amountMinor: number; currency: string; reference: string },
 ): Promise<"funded" | "already-funded"> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<"funded" | "already-funded"> => {
     const { milestone, order } = await lockMilestone(tx, p.milestoneId);
 
     const [existing] = await tx
@@ -87,6 +89,29 @@ export async function fundMilestone(
     }
     return "funded";
   });
+  if (result === "funded") {
+    const o = await orderOfMilestone(db, p.milestoneId);
+    if (o) {
+      await notify(db, {
+        userId: o.expertId,
+        kind: "ORDER_PAID",
+        title: `New order paid: ${o.title}`,
+        body: `${formatMoney(p.amountMinor, p.currency)} is now held in escrow. You can start work.`,
+        link: `/orders/${o.id}`,
+        orderId: o.id,
+      });
+    }
+  }
+  return result;
+}
+
+async function orderOfMilestone(db: DB, milestoneId: string) {
+  const [row] = await db
+    .select({ id: orders.id, title: orders.title, clientId: orders.clientId, expertId: orders.expertId, currency: orders.currency, feeBps: orders.feeBps })
+    .from(milestones)
+    .innerJoin(orders, eq(orders.id, milestones.orderId))
+    .where(eq(milestones.id, milestoneId));
+  return row ?? null;
 }
 
 /** Marks the order COMPLETED once every milestone is settled (approved or refunded). */
@@ -103,7 +128,7 @@ async function completeOrderIfSettled(tx: Tx, orderId: string) {
  * escrow goes to the expert, minus the platform fee.
  */
 export async function releaseMilestone(db: DB, p: { milestoneId: string; approvedBy: string } | { milestoneId: string; auto: true }) {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const { milestone, order } = await lockMilestone(tx, p.milestoneId);
     if ("auto" in p) {
       if (!milestone.autoApproveAt || milestone.autoApproveAt > new Date()) throw new EscrowError("Auto-approval is not due yet");
@@ -129,6 +154,19 @@ export async function releaseMilestone(db: DB, p: { milestoneId: string; approve
     await completeOrderIfSettled(tx, order.id);
     return { releasedMinor: held };
   });
+  const o = await orderOfMilestone(db, p.milestoneId);
+  if (o) {
+    const net = result.releasedMinor - Math.round((result.releasedMinor * o.feeBps) / 10_000);
+    await notify(db, {
+      userId: o.expertId,
+      kind: "PAYMENT_RELEASED",
+      title: "auto" in p ? `Payment released automatically: ${o.title}` : `Approved and paid: ${o.title}`,
+      body: `${formatMoney(net, o.currency)} has been added to your earnings.`,
+      link: `/orders/${o.id}`,
+      orderId: o.id,
+    });
+  }
+  return result;
 }
 
 /** Admin decision on a dispute, or a cancellation before delivery: refund the escrow to the client. */

@@ -367,6 +367,36 @@ export const paymentEvents = pgTable("payment_events", {
   updatedAt: updatedAt(),
 });
 
+// ───────────────────────── Notifications ─────────────────────────
+
+export const notificationKindEnum = pgEnum("notification_kind", [
+  "MESSAGE",
+  "ORDER_PAID",
+  "DELIVERED",
+  "REVISION_REQUESTED",
+  "PAYMENT_RELEASED",
+  "REVIEW_RECEIVED",
+  "APPLICATION_DECIDED",
+]);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: notificationKindEnum("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"),
+    orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notifications_user_time").on(t.userId, t.createdAt)],
+);
+
 // ───────────────────────── Files ─────────────────────────
 
 const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({

@@ -36,6 +36,16 @@ h3 {
   letter-spacing: -0.02em;
 }
 
+@media print {
+  .site-header {
+    display: none;
+  }
+  html,
+  body {
+    background: #ffffff;
+  }
+}
+
 /* Shared form + button styles */
 @layer components {
   .btn {

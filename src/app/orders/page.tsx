@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { requireUser } from "@/server/guards";
+import { unreadByOrder } from "@/server/orderRoom";
 import { listOrdersForUser } from "@/server/orders";
 import { ORDER_STATUS } from "@/lib/status";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Orders() {
   const user = await requireUser();
-  const rows = await listOrdersForUser(getDb(), user.id);
+  const [rows, unread] = await Promise.all([listOrdersForUser(getDb(), user.id), unreadByOrder(getDb(), user.id)]);
   const buying = rows.filter((r) => r.clientId === user.id);
   const selling = rows.filter((r) => r.expertId === user.id);
 
@@ -30,6 +31,9 @@ export default async function Orders() {
                   {o.createdAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                 </div>
               </div>
+              {(unread.get(o.id) ?? 0) > 0 && (
+                <span className="rounded-full bg-amber px-2.5 py-1 text-xs font-bold text-ink">{unread.get(o.id)} new message{unread.get(o.id) === 1 ? "" : "s"}</span>
+              )}
               <span className="font-display font-bold">{formatMoney(o.totalMinor, o.currency)}</span>
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${ORDER_STATUS[o.status].tone}`}>{ORDER_STATUS[o.status].label}</span>
             </Link>

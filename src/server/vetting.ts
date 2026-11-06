@@ -3,6 +3,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { DB } from "@/db";
 import { expertApplications, expertProfiles, users } from "@/db/schema";
+import { notify } from "./notifications";
 
 export class VettingError extends Error {}
 
@@ -103,7 +104,7 @@ export async function getApplication(db: DB, id: string) {
 
 /** Approve: marks the application, creates the expert profile and grants the EXPERT role, atomically. */
 export async function approveApplication(db: DB, p: { applicationId: string; note?: string }) {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [app] = await tx.select().from(expertApplications).where(eq(expertApplications.id, p.applicationId)).for("update");
     if (!app) throw new VettingError("Application not found");
     if (app.status === "APPROVED" || app.status === "REJECTED") throw new VettingError(`Application is already ${app.status.toLowerCase()}`);
@@ -122,6 +123,14 @@ export async function approveApplication(db: DB, p: { applicationId: string; not
     await grantRole(tx as unknown as DB, app.userId, "EXPERT");
     return { userId: app.userId };
   });
+  await notify(db, {
+    userId: result.userId,
+    kind: "APPLICATION_DECIDED",
+    title: "You're approved as a True Scholars expert",
+    body: "Welcome to the network. Create your first service so clients can hire you.",
+    link: "/expert/services/new",
+  });
+  return result;
 }
 
 export async function rejectApplication(db: DB, p: { applicationId: string; note: string }) {
@@ -133,6 +142,13 @@ export async function rejectApplication(db: DB, p: { applicationId: string; note
     .update(expertApplications)
     .set({ status: "REJECTED", reviewerNote: p.note.trim(), reviewedAt: new Date() })
     .where(eq(expertApplications.id, app.id));
+  await notify(db, {
+    userId: app.userId,
+    kind: "APPLICATION_DECIDED",
+    title: "An update on your expert application",
+    body: "Your application wasn't approved this time. See the reviewer's note and reapply when ready.",
+    link: "/apply",
+  });
 }
 
 export async function markInReview(db: DB, applicationId: string) {
