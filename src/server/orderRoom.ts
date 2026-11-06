@@ -49,7 +49,7 @@ export async function sendMessage(db: DB, p: { orderId: string; senderId: string
     kind: "MESSAGE",
     title: `New message from ${sender?.name?.split(" ")[0] ?? "your contact"}`,
     body: body ? (body.length > 140 ? `${body.slice(0, 140)}…` : body) : "Sent you a file.",
-    link: `/orders/${order.id}`,
+    link: `/messages?c=${order.id}`,
     orderId: order.id,
   });
   return msg;
@@ -112,7 +112,7 @@ export async function orderPulse(db: DB, orderId: string): Promise<string> {
 /** Inbox: every conversation the user is in, with the latest message and unread count, newest first. */
 export async function listConversations(db: DB, userId: string) {
   const mine = await db
-    .select({ threadId: threads.id, orderId: threads.orderId, title: orders.title, clientId: orders.clientId, expertId: orders.expertId, status: orders.status, createdAt: orders.createdAt })
+    .select({ threadId: threads.id, orderId: threads.orderId, title: orders.title, clientId: orders.clientId, expertId: orders.expertId, status: orders.status, totalMinor: orders.totalMinor, currency: orders.currency, createdAt: orders.createdAt, starred: threadMembers.starred })
     .from(threadMembers)
     .innerJoin(threads, eq(threads.id, threadMembers.threadId))
     .innerJoin(orders, eq(orders.id, threads.orderId))
@@ -137,6 +137,10 @@ export async function listConversations(db: DB, userId: string) {
         orderId: t.orderId as string,
         title: t.title,
         status: t.status,
+        totalMinor: t.totalMinor,
+        currency: t.currency,
+        starred: t.starred,
+        otherId,
         role: t.clientId === userId ? ("buying" as const) : ("selling" as const),
         otherName: people.find((p) => p.id === otherId)?.name ?? "Unknown",
         last: last && { body: last.body || (last.files.length ? "Sent a file" : ""), mine: last.senderId === userId, at: last.createdAt },
@@ -145,6 +149,28 @@ export async function listConversations(db: DB, userId: string) {
       };
     })
     .sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime());
+}
+
+/** Stars or unstars a conversation for this user (a personal bookmark, invisible to the other person). */
+export async function setStarred(db: DB, orderId: string, userId: string, starred: boolean) {
+  const [thread] = await db.select({ id: threads.id }).from(threads).where(eq(threads.orderId, orderId));
+  if (!thread) throw new OrderRoomError("Conversation not found");
+  const res = await db
+    .update(threadMembers)
+    .set({ starred })
+    .where(and(eq(threadMembers.threadId, thread.id), eq(threadMembers.userId, userId)))
+    .returning({ s: threadMembers.starred });
+  if (res.length === 0) throw new OrderRoomError("You're not part of this conversation");
+}
+
+/** Fingerprint of everything in a user's inbox; changes when any message arrives in any of their conversations. */
+export async function inboxPulse(db: DB, userId: string): Promise<string> {
+  const [r] = await db
+    .select({ n: count(messages.id), last: sql<string | null>`max(${messages.createdAt})::text` })
+    .from(threadMembers)
+    .innerJoin(messages, eq(messages.threadId, threadMembers.threadId))
+    .where(eq(threadMembers.userId, userId));
+  return `${r?.n ?? 0}|${r?.last ?? "-"}`;
 }
 
 /** Flagged messages for admin review, newest first. */

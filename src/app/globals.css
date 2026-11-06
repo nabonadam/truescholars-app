@@ -78,3 +78,15 @@ h3 {
     @apply text-[13px] font-bold tracking-[0.08em] text-green uppercase;
   }
 }
+
+/* Messages: the chat fills exactly the space under the header (whatever height the header wraps to). */
+body:has(.chat-shell) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+body:has(.chat-shell) > main {
+  flex: 1;
+  min-height: 0;
+}

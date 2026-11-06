@@ -446,6 +446,7 @@ export const threadMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     lastReadAt: timestamp("last_read_at", { mode: "date" }),
+    starred: boolean("starred").notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.threadId, t.userId] })],
 );

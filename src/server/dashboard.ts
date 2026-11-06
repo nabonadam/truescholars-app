@@ -75,7 +75,7 @@ export async function attentionItems(db: DB, userId: string, now = new Date()): 
     }
     const n = unread.get(o.id) ?? 0;
     if (n > 0) {
-      items.push({ key: `msg-${o.id}`, icon: "message", tone: "solid", href, cta: "Reply", title: `${n} new message${n === 1 ? "" : "s"} from ${other}`, detail: `About “${title}”.` });
+      items.push({ key: `msg-${o.id}`, icon: "message", tone: "solid", href: `/messages?c=${o.id}`, cta: "Reply", title: `${n} new message${n === 1 ? "" : "s"} from ${other}`, detail: `About “${title}”.` });
     }
   }
   return items.sort((a, b) => Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)));

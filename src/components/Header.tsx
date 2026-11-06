@@ -4,7 +4,7 @@ import { signOutAction } from "@/app/actions/auth";
 import { getDb } from "@/db";
 import { unreadNotificationCount } from "@/server/notifications";
 import { unreadByOrder } from "@/server/orderRoom";
-import { Icon } from "./Icons";
+import { HeaderBadges } from "./HeaderBadges";
 import { Logo } from "./Logo";
 
 export async function Header() {
@@ -30,30 +30,7 @@ export async function Header() {
             {user.roles.includes("EXPERT") && <Link href="/expert/services" className={`${link} hidden md:inline`}>My services</Link>}
             {user.roles.includes("ADMIN") && <Link href="/admin/applications" className={`${link} hidden md:inline`}>Admin</Link>}
             <Link href="/dashboard" className={link}>Dashboard</Link>
-            <Link
-              href="/messages"
-              aria-label={unreadMsgs > 0 ? `Messages, ${unreadMsgs} unread` : "Messages"}
-              className="relative grid size-11 place-items-center rounded-full text-white hover:bg-white/10"
-            >
-              <Icon name="message" size={22} />
-              {unreadMsgs > 0 && (
-                <span className="absolute top-1 right-1 grid min-w-5 place-items-center rounded-full bg-amber px-1 text-[11px] font-bold text-ink">
-                  {unreadMsgs > 9 ? "9+" : unreadMsgs}
-                </span>
-              )}
-            </Link>
-            <Link
-              href="/notifications"
-              aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-              className="relative grid size-11 place-items-center rounded-full text-white hover:bg-white/10"
-            >
-              <Icon name="bell" size={22} />
-              {unread > 0 && (
-                <span className="absolute top-1 right-1 grid min-w-5 place-items-center rounded-full bg-amber px-1 text-[11px] font-bold text-ink">
-                  {unread > 9 ? "9+" : unread}
-                </span>
-              )}
-            </Link>
+            <HeaderBadges messages={unreadMsgs} notifications={unread} />
             <form action={signOutAction}>
               <button className="inline-flex min-h-11 items-center rounded-full border border-white/30 px-4 text-sm font-bold text-white">Sign out</button>
             </form>

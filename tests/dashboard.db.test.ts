@@ -8,7 +8,7 @@ import { attentionItems, progressStep } from "@/server/dashboard";
 import { fundMilestone } from "@/server/escrow";
 import { saveUploads } from "@/server/files";
 import { listNotifications, markOrderNotificationsRead, unreadNotificationCount } from "@/server/notifications";
-import { approveDelivery, listConversations, markThreadRead, orderPulse, sendMessage, submitDelivery, unreadByOrder } from "@/server/orderRoom";
+import { approveDelivery, inboxPulse, listConversations, markThreadRead, orderPulse, sendMessage, setStarred, submitDelivery, unreadByOrder } from "@/server/orderRoom";
 import { createOrderFromService } from "@/server/orders";
 import { saveService } from "@/server/services";
 import { approveApplication, submitApplication } from "@/server/vetting";
@@ -119,5 +119,19 @@ describe("inbox and live updates", () => {
     expect(b).not.toBe(a);
     await fundMilestone(db, { milestoneId, amountMinor: 50_000, currency: "GHS", reference: "ps_9" });
     expect(await orderPulse(db, orderId)).not.toBe(b);
+  });
+
+  it("stars are personal, and the inbox pulse moves with any new message", async () => {
+    await setStarred(db, orderId, client, true);
+    expect((await listConversations(db, client))[0].starred).toBe(true);
+    expect((await listConversations(db, expert))[0].starred).toBe(false);
+    await setStarred(db, orderId, client, false);
+    expect((await listConversations(db, client))[0].starred).toBe(false);
+    await expect(setStarred(db, orderId, "stranger", true)).rejects.toThrow(/not part/);
+
+    const a = await inboxPulse(db, client);
+    expect(await inboxPulse(db, client)).toBe(a);
+    await sendMessage(db, { orderId, senderId: expert, body: "New file ready" });
+    expect(await inboxPulse(db, client)).not.toBe(a);
   });
 });

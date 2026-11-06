@@ -1,0 +1,1 @@
+ALTER TABLE "thread_members" ADD COLUMN "starred" boolean DEFAULT false NOT NULL;

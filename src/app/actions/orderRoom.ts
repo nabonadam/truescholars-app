@@ -5,7 +5,7 @@ import { getDb } from "@/db";
 import { EscrowError } from "@/server/escrow";
 import { FileError, saveUploads } from "@/server/files";
 import { requireUser } from "@/server/guards";
-import { approveDelivery, leaveReview, OrderRoomError, requestRevision, sendMessage, submitDelivery } from "@/server/orderRoom";
+import { approveDelivery, leaveReview, OrderRoomError, requestRevision, sendMessage, setStarred, submitDelivery } from "@/server/orderRoom";
 
 export type FormState = { error?: string; ok?: number } | undefined;
 
@@ -28,7 +28,14 @@ export async function sendMessageAction(_prev: FormState, form: FormData): Promi
     return asState(err);
   }
   revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/messages");
   return { ok: Date.now() }; // changes each time so the form can reset
+}
+
+export async function toggleStarAction(form: FormData) {
+  const user = await requireUser();
+  await setStarred(getDb(), String(form.get("orderId")), user.id, form.get("starred") === "1");
+  revalidatePath("/messages");
 }
 
 export async function deliverAction(_prev: FormState, form: FormData): Promise<FormState> {

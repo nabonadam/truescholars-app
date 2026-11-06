@@ -32,7 +32,7 @@ function useResetOnOk(state: FormState) {
  * Near-real-time updates: checks a tiny fingerprint of the order every 3 seconds (only while the tab
  * is visible) and reloads the page data only when something changed. Checks immediately on return.
  */
-export function LivePulse({ orderId, initial, seconds = 3 }: { orderId: string; initial: string; seconds?: number }) {
+export function LivePulse({ url, initial, seconds = 3 }: { url: string; initial: string; seconds?: number }) {
   const router = useRouter();
   const last = useRef(initial);
   useEffect(() => {
@@ -44,7 +44,7 @@ export function LivePulse({ orderId, initial, seconds = 3 }: { orderId: string; 
       if (busy || document.visibilityState !== "visible") return;
       busy = true;
       try {
-        const res = await fetch(`/api/orders/${orderId}/pulse`, { cache: "no-store" });
+        const res = await fetch(url, { cache: "no-store" });
         if (res.ok) {
           const { v } = (await res.json()) as { v: string };
           if (v !== last.current) {
@@ -64,7 +64,7 @@ export function LivePulse({ orderId, initial, seconds = 3 }: { orderId: string; 
       clearInterval(t);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [orderId, router, seconds]);
+  }, [url, router, seconds]);
   return null;
 }
 
@@ -80,14 +80,27 @@ export function AutoRefresh({ seconds = 15 }: { seconds?: number }) {
   return null;
 }
 
-export function MessageComposer({ orderId }: { orderId: string }) {
+export function MessageComposer({ orderId, rows = 3 }: { orderId: string; rows?: number }) {
   const [state, action, pending] = useActionState<FormState, FormData>(sendMessageAction, undefined);
   const ref = useResetOnOk(state);
   return (
     <form ref={ref} action={action} className="flex flex-col gap-2">
       <input type="hidden" name="orderId" value={orderId} />
       <label htmlFor="body" className="sr-only">Message</label>
-      <textarea id="body" name="body" rows={3} maxLength={5000} placeholder="Write a message…" className="field" />
+      <textarea
+        id="body"
+        name="body"
+        rows={rows}
+        maxLength={5000}
+        placeholder="Write a message… (Enter to send, Shift+Enter for a new line)"
+        className="field"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            if (!pending) e.currentTarget.form?.requestSubmit();
+          }
+        }}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <label className="cursor-pointer text-sm font-bold text-green">
           <input type="file" name="files" multiple accept={ACCEPT} className="block max-w-56 text-xs text-ink-muted file:mr-2 file:rounded-full file:border-0 file:bg-green-tint file:px-3 file:py-2 file:font-bold file:text-green" />

@@ -8,7 +8,8 @@ import { ClientDecision, LivePulse, DeliveryForm, MessageComposer, ReviewForm } 
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { ORDER_STATUS } from "@/lib/status";
-import { fileMeta, formatBytes } from "@/server/files";
+import { fileMeta } from "@/server/files";
+import { ChatThread, FileLinks } from "@/components/ChatThread";
 import { requireUser } from "@/server/guards";
 import { markOrderNotificationsRead } from "@/server/notifications";
 import { autoApproveDue, listDeliveries, listMessages, markThreadRead, orderPulse, reviewsForOrder } from "@/server/orderRoom";
@@ -28,25 +29,6 @@ const MILESTONE: Record<string, string> = {
 
 const fmtDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const fmtTime = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-
-function FileLinks({ ids, meta }: { ids: string[]; meta: Map<string, { name: string; sizeBytes: number }> }) {
-  if (ids.length === 0) return null;
-  return (
-    <ul className="flex flex-wrap gap-2">
-      {ids.map((id) => {
-        const f = meta.get(id);
-        return f ? (
-          <li key={id}>
-            <a href={`/api/files/${id}`} className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-sm font-bold text-green no-underline">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
-              {f.name} <span className="font-normal text-ink-muted">{formatBytes(f.sizeBytes)}</span>
-            </a>
-          </li>
-        ) : null;
-      })}
-    </ul>
-  );
-}
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -75,7 +57,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6">
-      <LivePulse orderId={order.id} initial={pulse} />
+      <LivePulse url={`/api/orders/${order.id}/pulse`} initial={pulse} />
       <Link href={isAdminView ? "/admin/messages" : "/orders"} className="text-sm font-bold text-green">{isAdminView ? "← Flagged messages" : "← All orders"}</Link>
       {isAdminView && (
         <p className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">Admin view: read-only. You can see the conversation and deliveries but can&apos;t act on this order.</p>
@@ -206,28 +188,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         {/* Conversation */}
         <div id="messages" className="card flex scroll-mt-4 flex-col gap-4 lg:sticky lg:top-4">
           <h2 className="text-xl font-bold">{isAdminView ? "Conversation" : `Messages with ${other.name?.split(" ")[0] ?? "them"}`}</h2>
-          <ol className="flex max-h-[28rem] flex-col-reverse gap-3 overflow-y-auto" aria-live="polite">
-            {msgs.length === 0 && <li className="text-sm text-ink-muted">No messages yet. Say hello and share anything that helps get started.</li>}
-            {[...msgs].reverse().map((m) => {
-              const mine = m.senderId === user.id;
-              return (
-                <li key={m.id} className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
-                  {m.body && (
-                    <div className={`max-w-[90%] rounded-md px-4 py-2 text-sm ${mine ? "bg-green text-white" : "bg-parchment text-ink"}`}>
-                      <p className="whitespace-pre-line">{m.body}</p>
-                    </div>
-                  )}
-                  <FileLinks ids={m.files} meta={meta} />
-                  {m.flagged && (
-                    <p className="max-w-[90%] rounded-sm bg-amber-tint px-3 py-2 text-xs text-amber-deep" role="note">
-                      Contact details detected. For your protection, keep messages and payment on The True Scholars. Our team reviews flagged messages.
-                    </p>
-                  )}
-                  <span className="text-xs text-ink-muted">{mine ? "You" : m.senderName} · {fmtTime(m.createdAt)}</span>
-                </li>
-              );
-            })}
-          </ol>
+          <ChatThread msgs={msgs} meta={meta} viewerId={user.id} className="max-h-[28rem]" empty="No messages yet. Say hello and share anything that helps get started." />
           {order.status !== "CANCELLED" && !isAdminView && <MessageComposer orderId={order.id} />}
           <p className="text-xs text-ink-muted">Keep communication and payment on The True Scholars: it&apos;s what protects you if something goes wrong.</p>
         </div>
