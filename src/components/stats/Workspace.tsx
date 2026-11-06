@@ -361,13 +361,18 @@ function Asked({ text, time }: { text: string; time?: string }) {
       <span className="mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-full bg-amber text-ink"><Icon name="spark" size={14} /></span>
       <div className="min-w-0">
         <p className="text-[15.5px] leading-snug font-medium text-ink">{text}</p>
-        {time && <p suppressHydrationWarning className="mt-0.5 text-[11.5px] text-ink-muted">{time}</p>}
+        {time && <p className="mt-0.5 text-[11.5px] text-ink-muted"><When iso={time} /></p>}
       </div>
     </div>
   );
 }
 
-const when = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+/** Times in the viewer's own clock (the server renders in UTC, so the time is filled in after loading). */
+function When({ iso }: { iso: string }) {
+  const [t, setT] = useState("");
+  useEffect(() => setT(new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })), [iso]);
+  return <>{t}</>;
+}
 
 function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunView; sessionId: string; firstTable: number; aiEnabled: boolean; onEdit: (c: string) => void }) {
   const [busy, start] = useTransition();
@@ -387,7 +392,7 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   if (run.status === "CLARIFY") {
     return (
       <div className="ts-rise">
-        <Asked text={run.input} time={when(run.createdAt)} />
+        <Asked text={run.input} time={run.createdAt} />
         <div className="ml-10 rounded-sm border-l-4 border-amber bg-white p-4 text-[15px]">{run.explanation}</div>
       </div>
     );
@@ -395,7 +400,7 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   if (run.status === "PLAN") {
     return (
       <div className="ts-rise">
-        <Asked text={run.input} time={when(run.createdAt)} />
+        <Asked text={run.input} time={run.createdAt} />
         <div className="overflow-hidden rounded-sm border border-green/30 bg-white shadow-[0_10px_30px_-18px_rgba(11,36,24,0.6)] sm:ml-10">
           <div className="flex items-center gap-2 border-b border-line bg-green-tint px-4 py-2.5 text-[13px] font-bold text-green">
             <Icon name="wand" size={15} /> Here is the plan. Check it, edit if you like, then run.
@@ -429,12 +434,12 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   const hasTables = run.results.some((r) => r.ok && r.tables?.length);
   return (
     <article className="ts-rise">
-      {english && <Asked text={run.input} time={when(run.createdAt)} />}
+      {english && <Asked text={run.input} time={run.createdAt} />}
       {english && run.explanation && <p className="mb-2.5 text-[13.5px] text-ink-muted sm:pl-10">{run.explanation}</p>}
       <div className="overflow-hidden rounded-sm bg-[#0c1f16] shadow-[0_12px_32px_-18px_rgba(11,36,24,0.7)]">
         <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-1.5 text-[11px] text-white/40">
           <span className="flex gap-1"><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /></span>
-          <span suppressHydrationWarning className="flex-1 font-mono">Results{!english && ` · ${when(run.createdAt)}`}</span>
+          <span className="flex-1 font-mono">Results{!english && <> · <When iso={run.createdAt} /></>}</span>
           <button type="button" onClick={() => onEdit(run.results.map((r) => r.command).join("\n") || run.commands.join("\n"))} className="rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white" title="Edit and run again">
             Edit
           </button>
