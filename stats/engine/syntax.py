@@ -47,6 +47,24 @@ COMMANDS = {
     "count": "count",
 }
 
+# Real Stata commands we deliberately don't run, with what to do instead.
+NOT_HERE = {
+    ("ssc", "net", "ado", "adoupdate", "update", "which"): "Installing Stata packages (ssc/net install) isn't possible here: this workspace runs its own engine that speaks Stata's language, not Stata itself. Ask in plain English for what the package does, or use the built-in commands.",
+    ("use", "import", "insheet", "sysuse", "webuse", "infile", "clear"): "Your data is already loaded from your upload. To work with a different file, start a new session with it.",
+    ("save", "saveold", "export", "outsheet", "outreg2", "esttab", "estout", "putdocx", "putexcel", "asdoc", "log", "cmdlog"): "Saving and exporting work through the Export menu: Word or Excel tables, the do-file, and your data as .dta or .csv.",
+    ("graph", "histogram", "hist", "scatter", "twoway", "line", "kdensity", "graphbox", "boxplot", "qnorm", "pnorm"): "Graphs aren't available yet; they're coming soon. Tables and tests all work.",
+    ("cd", "dir", "ls", "shell", "set", "version", "capture", "quietly", "noisily", "display", "di", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "sort", "gsort", "merge", "append", "reshape", "collapse", "egen", "svy", "svyset", "xtreg", "xtset", "tsset", "margins", "predict", "estat", "test", "lincom", "help", "search"): "This command isn't available in the workspace yet. Ask in plain English and the assistant will use the commands that are, or tell you if it can't.",
+}
+
+
+def _not_here(word: str) -> str | None:
+    w = word.lower()
+    for words, message in NOT_HERE.items():
+        if w in words:
+            return message
+    return None
+
+
 DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring"}
 
 
@@ -150,7 +168,8 @@ def parse(line: str) -> Command:
         rest = "," + tail + " " + rest
     name = canonical(word)
     if not name:
-        raise StataError(f"command {word} is unrecognized")
+        hint = _not_here(word)
+        raise StataError(f"{word}: {hint}" if hint else f"command {word} is unrecognized. See the list of available commands on the Statistics Assistant page.")
     main, opts = _split_top(rest, ",")
     cmd = Command(raw=raw, name=name, by=by, options=_parse_options(opts) if opts else {})
     # in range
