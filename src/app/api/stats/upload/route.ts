@@ -2,6 +2,8 @@ import { Readable } from "node:stream";
 import { createGzip } from "node:zlib";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
+import { ENDED } from "@/lib/statsCopy";
+import { accessFor, canRun } from "@/server/statsAccess";
 import { StatsError, checkUpload, createSession, maxDatasetMb } from "@/server/stats";
 
 export const runtime = "nodejs";
@@ -14,6 +16,7 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return Response.json({ error: "Sign in again to upload." }, { status: 401 });
+  if (!canRun(await accessFor(getDb(), session.user))) return Response.json({ error: ENDED }, { status: 403 });
   const name = decodeURIComponent(req.headers.get("x-file-name") ?? "").trim();
   const declared = Number(req.headers.get("content-length") ?? 0);
   try {

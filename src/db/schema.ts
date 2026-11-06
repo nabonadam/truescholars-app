@@ -118,6 +118,17 @@ export const users = pgTable("users", {
 });
 
 /** Profile photos, stored small (the browser resizes them to 320 px before upload). */
+// Statistics Assistant access: a free trial clock (starts on first use) and any access granted after it.
+export const statAccess = pgTable("stat_access", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  trialStartedAt: timestamp("trial_started_at", { mode: "date" }).notNull().defaultNow(),
+  accessUntil: timestamp("access_until", { mode: "date" }),
+  note: text("note"),
+  updatedAt: updatedAt(),
+});
+
 export const avatars = pgTable("avatars", {
   userId: text("user_id")
     .primaryKey()

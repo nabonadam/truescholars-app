@@ -1,6 +1,6 @@
 import { googleSignInAction } from "@/app/actions/auth";
 
-export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+export function AuthShell({ title, subtitle, children, next }: { title: string; subtitle: string; children: React.ReactNode; next?: string }) {
   const google = Boolean(process.env.AUTH_GOOGLE_ID);
   return (
     <section className="mx-auto max-w-md px-4 py-12 sm:py-16">
@@ -12,6 +12,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         {google && (
           <>
             <form action={googleSignInAction}>
+              {next && <input type="hidden" name="next" value={next} />}
               <button className="btn-outline w-full border border-line">Continue with Google</button>
             </form>
             <div className="flex items-center gap-3 text-xs text-ink-muted">

@@ -43,7 +43,7 @@ export async function Header() {
         ) : (
           <>
             <Link href="/services" className={`${link} hidden md:inline`}>Find experts</Link>
-            <a href={site("/#tools")} className={`${link} hidden lg:inline`}>AI tools</a>
+            <Link href="/tools/stats" className={`${link} hidden lg:inline`}>Statistics <span className="ml-0.5 rounded-full bg-amber px-1.5 py-px text-[10.5px] font-bold text-ink">Free trial</span></Link>
             <a href={site("/#how")} className={`${link} hidden lg:inline`}>How it works</a>
             <Link href="/jobs" className={`${link} hidden lg:inline`}>For experts</Link>
             <Link href="/sign-in" className="px-2 text-sm font-medium text-white no-underline">Log in</Link>

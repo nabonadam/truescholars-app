@@ -4,7 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
+import { ENDED } from "@/lib/statsCopy";
+import { accessFor, canRun } from "@/server/statsAccess";
 import { StatsError, cancel, confirm, createSampleSession, deleteSession, interpretRun, renameSession, resetData, submit } from "@/server/stats";
+
+/** Running analyses needs an active trial or access; viewing and downloading never does. */
+async function runner() {
+  const user = await requireUser();
+  const access = await accessFor(getDb(), user);
+  if (!canRun(access)) throw new StatsError(ENDED);
+  return user;
+}
 
 export type StatsState = { error?: string; ok?: number; runId?: string } | undefined;
 
@@ -14,7 +24,12 @@ const known = (err: unknown): StatsState => {
 };
 
 export async function sampleAction(): Promise<StatsState> {
-  const user = await requireUser();
+  let user;
+  try {
+    user = await runner();
+  } catch (err) {
+    return known(err);
+  }
   let id: string;
   try {
     id = await createSampleSession(getDb(), user.id);
@@ -27,7 +42,12 @@ export async function sampleAction(): Promise<StatsState> {
 const page = (id: string) => revalidatePath(`/tools/stats/${id}`);
 
 export async function submitAction(sessionId: string, input: string, mode: "auto" | "stata" | "english"): Promise<StatsState> {
-  const user = await requireUser();
+  let user;
+  try {
+    user = await runner();
+  } catch (err) {
+    return known(err);
+  }
   try {
     const runId = await submit(getDb(), user.id, sessionId, input, mode);
     page(sessionId);
@@ -39,7 +59,12 @@ export async function submitAction(sessionId: string, input: string, mode: "auto
 }
 
 export async function confirmAction(sessionId: string, runId: string, commands?: string): Promise<StatsState> {
-  const user = await requireUser();
+  let user;
+  try {
+    user = await runner();
+  } catch (err) {
+    return known(err);
+  }
   try {
     await confirm(getDb(), user.id, runId, commands);
     page(sessionId);
@@ -58,7 +83,12 @@ export async function cancelAction(sessionId: string, runId: string): Promise<St
 }
 
 export async function interpretAction(sessionId: string, runId: string): Promise<StatsState> {
-  const user = await requireUser();
+  let user;
+  try {
+    user = await runner();
+  } catch (err) {
+    return known(err);
+  }
   try {
     await interpretRun(getDb(), user.id, runId);
   } catch (err) {
@@ -69,7 +99,12 @@ export async function interpretAction(sessionId: string, runId: string): Promise
 }
 
 export async function resetAction(sessionId: string): Promise<StatsState> {
-  const user = await requireUser();
+  let user;
+  try {
+    user = await runner();
+  } catch (err) {
+    return known(err);
+  }
   try {
     await resetData(getDb(), user.id, sessionId);
   } catch (err) {

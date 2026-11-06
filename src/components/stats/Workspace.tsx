@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { cancelAction, confirmAction, deleteAction, interpretAction, renameAction, resetAction, submitAction } from "@/app/actions/stats";
 import { looksLikeStata } from "@/lib/stata";
+import { CONTACT } from "@/lib/statsCopy";
 import type { CommandResult } from "@/server/stats";
 import type { VarMeta } from "@/server/statsAi";
 import { Icon } from "../Icons";
@@ -45,7 +46,9 @@ function suggestions(vars: VarMeta[]) {
   return out;
 }
 
-export function Workspace({ session, runs, aiEnabled }: { session: SessionView; runs: RunView[]; aiEnabled: boolean }) {
+export type AccessView = { canRun: boolean; label: string | null; urgent: boolean };
+
+export function Workspace({ session, runs, aiEnabled, access }: { session: SessionView; runs: RunView[]; aiEnabled: boolean; access: AccessView }) {
   const [mode, setMode] = useState<Mode>(aiEnabled ? "ask" : "stata");
   const [input, setInput] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -146,11 +149,11 @@ export function Workspace({ session, runs, aiEnabled }: { session: SessionView; 
 
       {/* main column */}
       <section className="flex min-w-0 flex-1 flex-col">
-        <TopBar session={session} hasTables={tableNo > 0} onVars={() => setVarsOpen(true)} onDoFile={() => setDoOpen(true)} />
+        <TopBar session={session} access={access} hasTables={tableNo > 0} onVars={() => setVarsOpen(true)} onDoFile={() => setDoOpen(true)} />
 
         <div ref={feed} className="lab-paper flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[920px] px-3 py-6 sm:px-6">
-            {!runs.length && !pending && <Welcome sugg={sugg} aiEnabled={aiEnabled} onAsk={(t) => { setMode("ask"); setInput(t); box.current?.focus(); }} onCmd={putCommand} />}
+            {!runs.length && !pending && access.canRun && <Welcome sugg={sugg} aiEnabled={aiEnabled} onAsk={(t) => { setMode("ask"); setInput(t); box.current?.focus(); }} onCmd={putCommand} />}
             <div className="space-y-7">
               {runs.map((r, i) => (
                 <RunBlock key={r.id} run={r} sessionId={session.id} firstTable={numbered[i]} aiEnabled={aiEnabled} onEdit={putCommand} />
@@ -160,7 +163,16 @@ export function Workspace({ session, runs, aiEnabled }: { session: SessionView; 
           </div>
         </div>
 
-        {/* composer */}
+        {!access.canRun ? (
+          <div className="border-t border-line bg-parchment px-3 py-4 sm:px-6">
+            <div className="mx-auto flex max-w-[920px] flex-col items-start gap-3 rounded-[18px] bg-green px-5 py-4 text-white sm:flex-row sm:items-center">
+              <Icon name="clock" size={22} className="flex-none text-amber" />
+              <p className="flex-1 text-[14.5px]">
+                <b>Your free trial has ended.</b> Your results and downloads are still here. To keep running analyses, write to <a href={`mailto:${CONTACT}`} className="font-bold text-amber">{CONTACT}</a>.
+              </p>
+            </div>
+          </div>
+        ) : (
         <div className="border-t border-line bg-parchment px-3 pt-2.5 pb-3 sm:px-6">
           <div className="mx-auto max-w-[920px]">
             {!input && !pending && runs.length > 0 && (
@@ -210,6 +222,7 @@ export function Workspace({ session, runs, aiEnabled }: { session: SessionView; 
             </div>
           </div>
         </div>
+        )}
       </section>
 
       {doOpen && <DoFileDrawer sessionId={session.id} onClose={() => setDoOpen(false)} />}
@@ -219,7 +232,7 @@ export function Workspace({ session, runs, aiEnabled }: { session: SessionView; 
 
 // ───────── top bar ─────────
 
-function TopBar({ session, hasTables, onVars, onDoFile }: { session: SessionView; hasTables: boolean; onVars: () => void; onDoFile: () => void }) {
+function TopBar({ session, access, hasTables, onVars, onDoFile }: { session: SessionView; access: AccessView; hasTables: boolean; onVars: () => void; onDoFile: () => void }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(session.title);
   const [busy, start] = useTransition();
@@ -248,6 +261,7 @@ function TopBar({ session, hasTables, onVars, onDoFile }: { session: SessionView
           <span className="truncate font-mono">{session.fileName}</span>
           <span>·</span>
           <span className="whitespace-nowrap">{session.nObs.toLocaleString()} obs × {session.nVars} vars</span>
+          {access.label && <span className={`whitespace-nowrap rounded-full px-2 py-px font-bold ${access.urgent ? "bg-amber text-ink" : "bg-green-tint text-green"}`}>{access.label}</span>}
           {session.history.length > 0 && <DataChanges session={session} busy={busy} onReset={() => start(() => void resetAction(session.id))} />}
         </div>
       </div>

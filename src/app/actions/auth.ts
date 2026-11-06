@@ -9,6 +9,12 @@ import { users } from "@/db/schema";
 
 export type FormState = { error?: string } | undefined;
 
+/** Where to go after signing in: only paths on this site, never another domain. */
+function nextPath(form: FormData | undefined, fallback: string) {
+  const n = String(form?.get("next") ?? "");
+  return n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") ? n : fallback;
+}
+
 const signUpSchema = z.object({
   name: z.string().trim().min(2, "Please enter your full name"),
   email: z.string().trim().toLowerCase().email("Please enter a valid email"),
@@ -28,7 +34,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
   // Everyone starts as a client; experts become EXPERT only after vetting approval.
   await db.insert(users).values({ name, email, passwordHash: await hashPassword(password), roles: ["CLIENT"] });
 
-  await signIn("credentials", { email, password, redirectTo: intent === "expert" ? "/apply" : "/dashboard" });
+  await signIn("credentials", { email, password, redirectTo: intent === "expert" ? "/apply" : nextPath(form, "/dashboard") });
   return undefined;
 }
 
@@ -37,7 +43,7 @@ export async function signInAction(_prev: FormState, form: FormData): Promise<Fo
     await signIn("credentials", {
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
-      redirectTo: "/dashboard",
+      redirectTo: nextPath(form, "/dashboard"),
     });
   } catch (err) {
     if (err instanceof AuthError) return { error: "Email or password is incorrect." };
@@ -46,8 +52,8 @@ export async function signInAction(_prev: FormState, form: FormData): Promise<Fo
   return undefined;
 }
 
-export async function googleSignInAction() {
-  await signIn("google", { redirectTo: "/dashboard" });
+export async function googleSignInAction(form?: FormData) {
+  await signIn("google", { redirectTo: nextPath(form, "/dashboard") });
 }
 
 export async function signOutAction() {

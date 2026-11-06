@@ -6,6 +6,7 @@ const TABS = [
   { href: "/admin/disputes", label: "Disputes" },
   { href: "/admin/payouts", label: "Payouts" },
   { href: "/admin/messages", label: "Flagged messages" },
+  { href: "/admin/stats", label: "Statistics access" },
 ] as const;
 
 export function AdminTabs({ active, counts = {} }: { active: (typeof TABS)[number]["href"]; counts?: Partial<Record<(typeof TABS)[number]["href"], number>> }) {

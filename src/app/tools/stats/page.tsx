@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { getDb } from "@/db";
-import { requireUser } from "@/server/guards";
+import { auth } from "@/auth";
+import { CONTACT } from "@/lib/statsCopy";
 import { listSessions, maxDatasetMb } from "@/server/stats";
+import { type Access, accessFor, timeLeft, trialDays } from "@/server/statsAccess";
 import { ago } from "@/lib/time";
 import { Icon } from "@/components/Icons";
 import { SampleButton, UploadForm } from "@/components/stats/UploadForm";
@@ -17,9 +19,13 @@ const CAN_DO = [
   { title: "No assumptions", text: "Mann-Whitney, Kruskal-Wallis and Wilcoxon signed-rank tests", cmds: ["ranksum", "kwallis", "signrank"] },
 ];
 
+const NEXT = "/tools/stats";
+
 export default async function StatsHome() {
-  const user = await requireUser();
-  const sessions = await listSessions(getDb(), user.id);
+  const user = (await auth())?.user;
+  const db = getDb();
+  const access = user ? await accessFor(db, user) : null; // first visit starts the free trial
+  const sessions = user ? await listSessions(db, user.id) : [];
 
   return (
     <div>
@@ -38,6 +44,14 @@ export default async function StatsHome() {
             <p className="mt-4 max-w-lg text-[17px] text-on-green-muted">
               Type a question in plain English or write Stata yourself. You see the exact commands, the full output as Stata prints it, an APA table ready for your thesis, and a do-file that reproduces it all.
             </p>
+            {!user && (
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <Link href={`/sign-up?next=${NEXT}`} className="btn-amber min-h-12 px-6 text-base">Start your free {trialDays()}-day trial</Link>
+                <Link href={`/sign-in?next=${NEXT}`} className="font-bold text-white underline decoration-amber decoration-2 underline-offset-4">I have an account</Link>
+                <span className="basis-full text-[13px] text-on-green-muted">No card needed. Full access for {trialDays()} days.</span>
+              </div>
+            )}
+            {access && <AccessChip access={access} />}
             <div className="mt-6 flex flex-wrap gap-2 text-[13px] text-on-green-muted">
               {["Stata syntax", "APA 7 tables", "Word & Excel export", "Do-file included"].map((t) => (
                 <span key={t} className="flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1"><Icon name="check" size={13} className="text-amber" /> {t}</span>
@@ -49,7 +63,11 @@ export default async function StatsHome() {
       </section>
 
       <section className="mx-auto max-w-6xl px-5 py-10">
+        {user && (
         <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
+          {access?.kind === "ended" ? (
+            <TrialEnded />
+          ) : (
           <div>
             <h2 className="text-2xl font-extrabold">Start a session</h2>
             <div className="mt-1 mb-4 text-ink-muted">
@@ -60,6 +78,7 @@ export default async function StatsHome() {
               <Icon name="lock" size={15} className="mt-0.5 flex-none" /> The assistant reads variable names, labels and summary numbers to plan your analysis. Individual rows never leave our engine.
             </p>
           </div>
+          )}
           <div>
             <h2 className="text-2xl font-extrabold">Your sessions</h2>
             {sessions.length ? (
@@ -82,6 +101,8 @@ export default async function StatsHome() {
             )}
           </div>
         </div>
+        )}
+        {!user && <TrialSteps />}
 
         <h2 className="mt-14 text-2xl font-extrabold">What it runs</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -136,6 +157,64 @@ function Preview() {
         <div className="grid grid-cols-[1fr_auto_auto] gap-x-3"><span>Age</span><span>0.07</span><span>.053</span></div>
         <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 border-b border-black pb-0.5"><span>Urban</span><span>6.62</span><span>&lt; .001</span></div>
       </div>
+    </div>
+  );
+}
+
+function AccessChip({ access }: { access: Access }) {
+  const [text, tone] =
+    access.kind === "admin"
+      ? ["Admin · unlimited access", "bg-white/10 text-white"]
+      : access.kind === "trial"
+        ? [`Free trial · ${timeLeft(access.endsAt)} left`, "bg-amber text-ink"]
+        : access.kind === "granted"
+          ? [`Access until ${access.endsAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`, "bg-white/10 text-white"]
+          : ["Free trial ended", "bg-white/10 text-amber"];
+  return (
+    <div className="mt-6">
+      <span className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold ${tone}`}>
+        <Icon name="clock" size={15} /> {text}
+      </span>
+    </div>
+  );
+}
+
+function TrialEnded() {
+  return (
+    <div className="rounded-md border border-amber/40 bg-white p-6 sm:p-7">
+      <span className="grid h-12 w-12 place-items-center rounded-[14px] bg-amber-tint text-amber-deep"><Icon name="clock" size={22} /></span>
+      <h2 className="mt-4 text-2xl font-extrabold">Your free trial has ended</h2>
+      <p className="mt-2 text-ink-muted">
+        Thanks for trying the Statistics Assistant. Your sessions, tables and do-files are still here and you can download them any time. Paid plans are on the way; to keep running analyses now, write to us and we&apos;ll switch your access back on.
+      </p>
+      <a href={`mailto:${CONTACT}?subject=${encodeURIComponent("Statistics Assistant access")}`} className="btn-primary mt-5">
+        Email {CONTACT}
+      </a>
+    </div>
+  );
+}
+
+function TrialSteps() {
+  const steps = [
+    { n: "1", title: "Create a free account", text: "Takes a minute. No card, no commitment." },
+    { n: "2", title: "Upload your data or use our sample", text: "Stata, SPSS, Excel or CSV. Your file stays private." },
+    { n: "3", title: "Ask, run, export", text: `Two full days to run every analysis and download every table.` },
+  ];
+  return (
+    <div className="rounded-md bg-white p-6 sm:p-8">
+      <h2 className="text-2xl font-extrabold">Try it free for {trialDays()} days</h2>
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        {steps.map((s) => (
+          <div key={s.n} className="flex gap-3">
+            <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-green font-bold text-amber">{s.n}</span>
+            <div>
+              <div className="font-bold">{s.title}</div>
+              <div className="text-sm text-ink-muted">{s.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <Link href={`/sign-up?next=${NEXT}`} className="btn-amber mt-6">Start your free trial</Link>
     </div>
   );
 }

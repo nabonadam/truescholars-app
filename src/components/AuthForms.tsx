@@ -13,10 +13,11 @@ function ErrorNote({ state }: { state: FormState }) {
   );
 }
 
-export function SignInForm() {
+export function SignInForm({ next }: { next?: string }) {
   const [state, action, pending] = useActionState(signInAction, undefined);
   return (
     <form action={action} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label htmlFor="email" className="label">Email</label>
         <input id="email" name="email" type="email" autoComplete="email" required className="field" />
@@ -30,16 +31,17 @@ export function SignInForm() {
         {pending ? "Signing in…" : "Sign in"}
       </button>
       <p className="text-center text-sm text-ink-muted">
-        New here? <Link href="/sign-up" className="font-bold text-green">Create an account</Link>
+        New here? <Link href={next ? `/sign-up?next=${encodeURIComponent(next)}` : "/sign-up"} className="font-bold text-green">Create an account</Link>
       </p>
     </form>
   );
 }
 
-export function SignUpForm({ asExpert }: { asExpert: boolean }) {
+export function SignUpForm({ asExpert, next }: { asExpert: boolean; next?: string }) {
   const [state, action, pending] = useActionState(signUpAction, undefined);
   return (
     <form action={action} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <fieldset className="grid grid-cols-2 gap-2">
         <legend className="label">I want to…</legend>
         <label className="flex cursor-pointer items-center gap-2 rounded-sm border border-line bg-white px-3 py-3 text-sm has-checked:border-green has-checked:bg-green-tint">
@@ -69,7 +71,7 @@ export function SignUpForm({ asExpert }: { asExpert: boolean }) {
         {pending ? "Creating your account…" : "Create account"}
       </button>
       <p className="text-center text-sm text-ink-muted">
-        Already have an account? <Link href="/sign-in" className="font-bold text-green">Sign in</Link>
+        Already have an account? <Link href={next ? `/sign-in?next=${encodeURIComponent(next)}` : "/sign-in"} className="font-bold text-green">Sign in</Link>
       </p>
     </form>
   );
