@@ -4,14 +4,14 @@ import { notFound } from "next/navigation";
 import { payOrderAction } from "@/app/actions/orders";
 import { OrderProgress } from "@/components/OrderProgress";
 import { progressStep } from "@/server/dashboard";
-import { AutoRefresh, ClientDecision, DeliveryForm, MessageComposer, ReviewForm } from "@/components/OrderRoomForms";
+import { ClientDecision, LivePulse, DeliveryForm, MessageComposer, ReviewForm } from "@/components/OrderRoomForms";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { ORDER_STATUS } from "@/lib/status";
 import { fileMeta, formatBytes } from "@/server/files";
 import { requireUser } from "@/server/guards";
 import { markOrderNotificationsRead } from "@/server/notifications";
-import { autoApproveDue, listDeliveries, listMessages, markThreadRead, reviewsForOrder } from "@/server/orderRoom";
+import { autoApproveDue, listDeliveries, listMessages, markThreadRead, orderPulse, reviewsForOrder } from "@/server/orderRoom";
 import { getOrderForUser } from "@/server/orders";
 
 export const metadata: Metadata = { title: "Order" };
@@ -57,10 +57,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   if (!data) notFound();
   const { order, milestones, client, expert, role } = data;
 
-  const [msgs, dels, revs] = await Promise.all([
+  const [msgs, dels, revs, pulse] = await Promise.all([
     listMessages(db, order.id),
     listDeliveries(db, milestones.map((m) => m.id)),
     reviewsForOrder(db, order.id),
+    orderPulse(db, order.id),
   ]);
   const meta = new Map((await fileMeta(db, [...msgs.flatMap((m) => m.files), ...dels.flatMap((d) => d.files)])).map((f) => [f.id, f]));
   const answers = (order.requirements as { question: string; answer: string }[] | null) ?? [];
@@ -74,7 +75,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6">
-      <AutoRefresh />
+      <LivePulse orderId={order.id} initial={pulse} />
       <Link href={isAdminView ? "/admin/messages" : "/orders"} className="text-sm font-bold text-green">{isAdminView ? "← Flagged messages" : "← All orders"}</Link>
       {isAdminView && (
         <p className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">Admin view: read-only. You can see the conversation and deliveries but can&apos;t act on this order.</p>
@@ -203,11 +204,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Conversation */}
-        <div className="card flex flex-col gap-4 lg:sticky lg:top-4">
+        <div id="messages" className="card flex scroll-mt-4 flex-col gap-4 lg:sticky lg:top-4">
           <h2 className="text-xl font-bold">{isAdminView ? "Conversation" : `Messages with ${other.name?.split(" ")[0] ?? "them"}`}</h2>
-          <ol className="flex max-h-[28rem] flex-col gap-3 overflow-y-auto" aria-live="polite">
+          <ol className="flex max-h-[28rem] flex-col-reverse gap-3 overflow-y-auto" aria-live="polite">
             {msgs.length === 0 && <li className="text-sm text-ink-muted">No messages yet. Say hello and share anything that helps get started.</li>}
-            {msgs.map((m) => {
+            {[...msgs].reverse().map((m) => {
               const mine = m.senderId === user.id;
               return (
                 <li key={m.id} className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>

@@ -28,7 +28,47 @@ function useResetOnOk(state: FormState) {
   return ref;
 }
 
-/** Re-fetches the order every 15 seconds so new messages and status changes appear. */
+/**
+ * Near-real-time updates: checks a tiny fingerprint of the order every 3 seconds (only while the tab
+ * is visible) and reloads the page data only when something changed. Checks immediately on return.
+ */
+export function LivePulse({ orderId, initial, seconds = 3 }: { orderId: string; initial: string; seconds?: number }) {
+  const router = useRouter();
+  const last = useRef(initial);
+  useEffect(() => {
+    last.current = initial;
+  }, [initial]);
+  useEffect(() => {
+    let busy = false;
+    const check = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      try {
+        const res = await fetch(`/api/orders/${orderId}/pulse`, { cache: "no-store" });
+        if (res.ok) {
+          const { v } = (await res.json()) as { v: string };
+          if (v !== last.current) {
+            last.current = v;
+            router.refresh();
+          }
+        }
+      } catch {
+        /* offline: try again next tick */
+      } finally {
+        busy = false;
+      }
+    };
+    const t = setInterval(check, seconds * 1000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [orderId, router, seconds]);
+  return null;
+}
+
+/** Re-fetches the page every N seconds (used on lists such as the inbox). */
 export function AutoRefresh({ seconds = 15 }: { seconds?: number }) {
   const router = useRouter();
   useEffect(() => {

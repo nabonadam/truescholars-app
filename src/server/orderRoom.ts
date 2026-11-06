@@ -94,6 +94,59 @@ export async function unreadByOrder(db: DB, userId: string): Promise<Map<string,
   return new Map(rows.filter((r) => r.orderId).map((r) => [r.orderId as string, Number(r.n)]));
 }
 
+/** A cheap fingerprint of an order's live state; changes whenever a message or status changes. */
+export async function orderPulse(db: DB, orderId: string): Promise<string> {
+  const [o] = await db.select({ status: orders.status, updatedAt: orders.updatedAt }).from(orders).where(eq(orders.id, orderId));
+  if (!o) return "gone";
+  const [last] = await db
+    .select({ id: messages.id, n: sql<number>`count(*) over ()`.mapWith(Number) })
+    .from(messages)
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(eq(threads.orderId, orderId))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  const ms = await db.select({ s: milestones.status, u: milestones.updatedAt }).from(milestones).where(eq(milestones.orderId, orderId));
+  return [o.status, o.updatedAt.getTime(), last?.id ?? "-", last?.n ?? 0, ...ms.map((m) => `${m.s}:${m.u.getTime()}`)].join("|");
+}
+
+/** Inbox: every conversation the user is in, with the latest message and unread count, newest first. */
+export async function listConversations(db: DB, userId: string) {
+  const mine = await db
+    .select({ threadId: threads.id, orderId: threads.orderId, title: orders.title, clientId: orders.clientId, expertId: orders.expertId, status: orders.status, createdAt: orders.createdAt })
+    .from(threadMembers)
+    .innerJoin(threads, eq(threads.id, threadMembers.threadId))
+    .innerJoin(orders, eq(orders.id, threads.orderId))
+    .where(eq(threadMembers.userId, userId));
+  if (mine.length === 0) return [];
+
+  const threadIds = mine.map((t) => t.threadId);
+  const latest = await db
+    .selectDistinctOn([messages.threadId], { threadId: messages.threadId, body: messages.body, files: messages.files, senderId: messages.senderId, createdAt: messages.createdAt })
+    .from(messages)
+    .where(inArray(messages.threadId, threadIds))
+    .orderBy(messages.threadId, desc(messages.createdAt));
+  const otherIds = [...new Set(mine.map((t) => (t.clientId === userId ? t.expertId : t.clientId)))];
+  const people = await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, otherIds));
+  const unread = await unreadByOrder(db, userId);
+
+  return mine
+    .map((t) => {
+      const otherId = t.clientId === userId ? t.expertId : t.clientId;
+      const last = latest.find((l) => l.threadId === t.threadId) ?? null;
+      return {
+        orderId: t.orderId as string,
+        title: t.title,
+        status: t.status,
+        role: t.clientId === userId ? ("buying" as const) : ("selling" as const),
+        otherName: people.find((p) => p.id === otherId)?.name ?? "Unknown",
+        last: last && { body: last.body || (last.files.length ? "Sent a file" : ""), mine: last.senderId === userId, at: last.createdAt },
+        unread: unread.get(t.orderId as string) ?? 0,
+        sortAt: last?.createdAt ?? t.createdAt,
+      };
+    })
+    .sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime());
+}
+
 /** Flagged messages for admin review, newest first. */
 export async function listFlaggedMessages(db: DB, limit = 100) {
   return db

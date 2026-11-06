@@ -8,7 +8,7 @@ import { attentionItems, progressStep } from "@/server/dashboard";
 import { fundMilestone } from "@/server/escrow";
 import { saveUploads } from "@/server/files";
 import { listNotifications, markOrderNotificationsRead, unreadNotificationCount } from "@/server/notifications";
-import { approveDelivery, markThreadRead, sendMessage, submitDelivery, unreadByOrder } from "@/server/orderRoom";
+import { approveDelivery, listConversations, markThreadRead, orderPulse, sendMessage, submitDelivery, unreadByOrder } from "@/server/orderRoom";
 import { createOrderFromService } from "@/server/orders";
 import { saveService } from "@/server/services";
 import { approveApplication, submitApplication } from "@/server/vetting";
@@ -95,5 +95,29 @@ describe("unread messages and notifications", () => {
     expect(clientKinds).toEqual(["DELIVERED"]);
     const paid = (await listNotifications(db, expert)).find((n) => n.kind === "PAYMENT_RELEASED");
     expect(paid?.body).toContain("GH₵425.00"); // 500 − 15%
+  });
+});
+
+describe("inbox and live updates", () => {
+  it("lists conversations with the latest message and unread count", async () => {
+    expect((await listConversations(db, client))[0].last).toBeNull();
+    await sendMessage(db, { orderId, senderId: client, body: "Hello Cosmos" });
+    await sendMessage(db, { orderId, senderId: expert, body: "Hi Akosua, received." });
+    const [c] = await listConversations(db, client);
+    expect(c).toMatchObject({ otherName: "Cosmos Nabonadam", role: "buying", unread: 1 });
+    expect(c.last).toMatchObject({ body: "Hi Akosua, received.", mine: false });
+    const [e] = await listConversations(db, expert);
+    expect(e).toMatchObject({ otherName: "Akosua Mensah", role: "selling", unread: 1 });
+    expect(await listConversations(db, "stranger")).toEqual([]);
+  });
+
+  it("the pulse changes when a message arrives or status changes, and not otherwise", async () => {
+    const a = await orderPulse(db, orderId);
+    expect(await orderPulse(db, orderId)).toBe(a);
+    await sendMessage(db, { orderId, senderId: expert, body: "Quick question" });
+    const b = await orderPulse(db, orderId);
+    expect(b).not.toBe(a);
+    await fundMilestone(db, { milestoneId, amountMinor: 50_000, currency: "GHS", reference: "ps_9" });
+    expect(await orderPulse(db, orderId)).not.toBe(b);
   });
 });

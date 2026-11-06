@@ -13,7 +13,7 @@ import { attentionItems, progressStep } from "@/server/dashboard";
 import { expertAvailable } from "@/server/escrow";
 import { requireUser } from "@/server/guards";
 import { unreadNotificationCount } from "@/server/notifications";
-import { listFlaggedMessages } from "@/server/orderRoom";
+import { listFlaggedMessages, unreadByOrder } from "@/server/orderRoom";
 import { clientEscrowTotal, listOrdersForUser } from "@/server/orders";
 import { listServicesForExpert } from "@/server/services";
 import { getApplicationForUser, listApplications } from "@/server/vetting";
@@ -65,7 +65,7 @@ export default async function Dashboard() {
   const isExpert = user.roles.includes("EXPERT");
   const isAdmin = user.roles.includes("ADMIN");
 
-  const [orders, attention, inEscrow, available, services, application, openApps, flagged, unreadNotes] = await Promise.all([
+  const [orders, attention, inEscrow, available, services, application, openApps, flagged, unreadNotes, unreadMap] = await Promise.all([
     listOrdersForUser(db, user.id),
     attentionItems(db, user.id),
     clientEscrowTotal(db, user.id),
@@ -75,7 +75,9 @@ export default async function Dashboard() {
     isAdmin ? listApplications(db).then((r) => r.filter((a) => a.status === "SUBMITTED" || a.status === "IN_REVIEW").length) : Promise.resolve(0),
     isAdmin ? listFlaggedMessages(db).then((r) => r.length) : Promise.resolve(0),
     unreadNotificationCount(db, user.id),
+    unreadByOrder(db, user.id),
   ]);
+  const unreadMsgs = [...unreadMap.values()].reduce((a, b) => a + b, 0);
 
   const buying = orders.filter((o) => o.clientId === user.id);
   const selling = orders.filter((o) => o.expertId === user.id);
@@ -113,6 +115,9 @@ export default async function Dashboard() {
             <Link href="/services" className="btn-amber"><Icon name="search" size={18} /> Find an expert</Link>
             <Link href="/orders" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/40 px-5 text-[15px] font-bold text-white no-underline">
               My orders
+            </Link>
+            <Link href="/messages" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/40 px-5 text-[15px] font-bold text-white no-underline">
+              <Icon name="message" size={18} /> Messages{unreadMsgs > 0 ? ` (${unreadMsgs})` : ""}
             </Link>
             <Link href="/notifications" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/40 px-5 text-[15px] font-bold text-white no-underline">
               <Icon name="bell" size={18} /> Notifications{unreadNotes > 0 ? ` (${unreadNotes})` : ""}

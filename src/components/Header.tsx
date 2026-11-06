@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { signOutAction } from "@/app/actions/auth";
 import { getDb } from "@/db";
 import { unreadNotificationCount } from "@/server/notifications";
+import { unreadByOrder } from "@/server/orderRoom";
 import { Icon } from "./Icons";
 import { Logo } from "./Logo";
 
@@ -10,6 +11,11 @@ export async function Header() {
   const session = await auth().catch(() => null); // no database yet → treat as signed out
   const user = session?.user;
   const unread = user ? await unreadNotificationCount(getDb(), user.id).catch(() => 0) : 0;
+  const unreadMsgs = user
+    ? await unreadByOrder(getDb(), user.id)
+        .then((m) => [...m.values()].reduce((a, b) => a + b, 0))
+        .catch(() => 0)
+    : 0;
   const link = "text-sm font-medium text-on-green-muted no-underline hover:text-white whitespace-nowrap";
   return (
     <header className="site-header bg-green text-white">
@@ -17,13 +23,25 @@ export async function Header() {
         <Link href="/" className="mr-auto no-underline">
           <Logo onDark />
         </Link>
-        <Link href="/services" className={link}>Find experts</Link>
+        <Link href="/services" className={`${link} ${user ? "hidden sm:inline" : ""}`}>Find experts</Link>
         {user ? (
           <>
             <Link href="/orders" className={`${link} hidden md:inline`}>Orders</Link>
             {user.roles.includes("EXPERT") && <Link href="/expert/services" className={`${link} hidden md:inline`}>My services</Link>}
             {user.roles.includes("ADMIN") && <Link href="/admin/applications" className={`${link} hidden md:inline`}>Admin</Link>}
             <Link href="/dashboard" className={link}>Dashboard</Link>
+            <Link
+              href="/messages"
+              aria-label={unreadMsgs > 0 ? `Messages, ${unreadMsgs} unread` : "Messages"}
+              className="relative grid size-11 place-items-center rounded-full text-white hover:bg-white/10"
+            >
+              <Icon name="message" size={22} />
+              {unreadMsgs > 0 && (
+                <span className="absolute top-1 right-1 grid min-w-5 place-items-center rounded-full bg-amber px-1 text-[11px] font-bold text-ink">
+                  {unreadMsgs > 9 ? "9+" : unreadMsgs}
+                </span>
+              )}
+            </Link>
             <Link
               href="/notifications"
               aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
