@@ -50,7 +50,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const db = getDb();
   await autoApproveDue(db); // so an overdue approval never waits on a scheduler
-  const data = await getOrderForUser(db, id, user.id);
+  const data = await getOrderForUser(db, id, user.id, { admin: user.roles.includes("ADMIN") });
   if (!data) notFound();
   const { order, milestones, client, expert, role } = data;
 
@@ -63,6 +63,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const answers = (order.requirements as { question: string; answer: string }[] | null) ?? [];
   const status = ORDER_STATUS[order.status];
   const other = role === "client" ? expert : client;
+  const isAdminView = role === "admin";
   const myReview = revs.find((r) => r.authorId === user.id);
   const theirReview = revs.find((r) => r.authorId !== user.id);
   const expertFirst = expert.name?.split(" ")[0] ?? "the expert";
@@ -70,13 +71,16 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6">
       <AutoRefresh />
-      <Link href="/orders" className="text-sm font-bold text-green">← All orders</Link>
+      <Link href={isAdminView ? "/admin/messages" : "/orders"} className="text-sm font-bold text-green">{isAdminView ? "← Flagged messages" : "← All orders"}</Link>
+      {isAdminView && (
+        <p className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">Admin view: read-only. You can see the conversation and deliveries but can&apos;t act on this order.</p>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className="eyebrow">Order</span>
           <h1 className="text-2xl font-bold sm:text-3xl">{order.title}</h1>
           <p className="text-ink-muted">
-            {role === "client" ? `with ${expert.name}` : `for ${client.name}`} · {formatMoney(order.totalMinor, order.currency)} · opened {fmtDate(order.createdAt)}
+            {isAdminView ? `${client.name} (client) and ${expert.name} (expert)` : role === "client" ? `with ${expert.name}` : `for ${client.name}`} · {formatMoney(order.totalMinor, order.currency)} · opened {fmtDate(order.createdAt)}
           </p>
         </div>
         <span className={`rounded-full px-3 py-1 text-sm font-bold ${status.tone}`}>{status.label}</span>
@@ -138,6 +142,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                         </p>
                         <ClientDecision orderId={order.id} milestoneId={m.id} revisionsLeft={revisionsLeft} expertFirstName={expertFirst} />
                       </>
+                    ) : isAdminView ? (
+                      <p className="text-sm text-ink-muted">Delivered; waiting for the client&apos;s decision.</p>
                     ) : (
                       <p className="text-sm text-ink-muted">
                         Waiting for {client.name?.split(" ")[0] ?? "the client"} to approve.
@@ -150,7 +156,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             );
           })}
 
-          {order.status === "COMPLETED" && (
+          {order.status === "COMPLETED" && !isAdminView && (
             <div className="card flex flex-col gap-4">
               <h2 className="text-xl font-bold">Reviews</h2>
               {myReview ? (
@@ -183,7 +189,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
         {/* Conversation */}
         <div className="card flex flex-col gap-4 lg:sticky lg:top-4">
-          <h2 className="text-xl font-bold">Messages with {other.name?.split(" ")[0] ?? "them"}</h2>
+          <h2 className="text-xl font-bold">{isAdminView ? "Conversation" : `Messages with ${other.name?.split(" ")[0] ?? "them"}`}</h2>
           <ol className="flex max-h-[28rem] flex-col gap-3 overflow-y-auto" aria-live="polite">
             {msgs.length === 0 && <li className="text-sm text-ink-muted">No messages yet. Say hello and share anything that helps get started.</li>}
             {msgs.map((m) => {
@@ -196,12 +202,17 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                     </div>
                   )}
                   <FileLinks ids={m.files} meta={meta} />
+                  {m.flagged && (
+                    <p className="max-w-[90%] rounded-sm bg-amber-tint px-3 py-2 text-xs text-amber-deep" role="note">
+                      Contact details detected. For your protection, keep messages and payment on The True Scholars. Our team reviews flagged messages.
+                    </p>
+                  )}
                   <span className="text-xs text-ink-muted">{mine ? "You" : m.senderName} · {fmtTime(m.createdAt)}</span>
                 </li>
               );
             })}
           </ol>
-          {order.status !== "CANCELLED" && <MessageComposer orderId={order.id} />}
+          {order.status !== "CANCELLED" && !isAdminView && <MessageComposer orderId={order.id} />}
           <p className="text-xs text-ink-muted">Keep communication and payment on The True Scholars: it&apos;s what protects you if something goes wrong.</p>
         </div>
       </div>

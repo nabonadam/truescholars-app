@@ -90,10 +90,11 @@ export async function listOrdersForUser(db: DB, userId: string) {
     .orderBy(desc(orders.createdAt));
 }
 
-/** Order details, only for its client or expert. */
-export async function getOrderForUser(db: DB, orderId: string, userId: string) {
+/** Order details, only for its client or expert (or, read-only, an admin). */
+export async function getOrderForUser(db: DB, orderId: string, userId: string, opts: { admin?: boolean } = {}) {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-  if (!order || (order.clientId !== userId && order.expertId !== userId)) return null;
+  const participant = order && (order.clientId === userId || order.expertId === userId);
+  if (!order || (!participant && !opts.admin)) return null;
   const ms = await db.select().from(milestones).where(eq(milestones.orderId, orderId)).orderBy(milestones.position);
   const people = await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(or(eq(users.id, order.clientId), eq(users.id, order.expertId)));
   return {
@@ -101,8 +102,20 @@ export async function getOrderForUser(db: DB, orderId: string, userId: string) {
     milestones: ms,
     client: people.find((u) => u.id === order.clientId)!,
     expert: people.find((u) => u.id === order.expertId)!,
-    role: order.clientId === userId ? ("client" as const) : ("expert" as const),
+    role: order.clientId === userId ? ("client" as const) : order.expertId === userId ? ("expert" as const) : ("admin" as const),
   };
+}
+
+/** Money a client currently has held in escrow across their orders. */
+export async function clientEscrowTotal(db: DB, clientId: string): Promise<number> {
+  const rows = await db
+    .select({ amount: milestones.amountMinor, status: milestones.status })
+    .from(milestones)
+    .innerJoin(orders, eq(orders.id, milestones.orderId))
+    .where(eq(orders.clientId, clientId));
+  return rows
+    .filter((r) => r.status === "FUNDED" || r.status === "DELIVERED" || r.status === "REVISION_REQUESTED")
+    .reduce((s, r) => s + r.amount, 0);
 }
 
 export { getExpertProfileByUser };

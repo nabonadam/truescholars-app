@@ -48,11 +48,32 @@ export async function listMessages(db: DB, orderId: string) {
   const [thread] = await db.select().from(threads).where(eq(threads.orderId, orderId));
   if (!thread) return [];
   return db
-    .select({ id: messages.id, body: messages.body, files: messages.files, createdAt: messages.createdAt, senderId: messages.senderId, senderName: users.name })
+    .select({ id: messages.id, body: messages.body, files: messages.files, flagged: messages.flagged, createdAt: messages.createdAt, senderId: messages.senderId, senderName: users.name })
     .from(messages)
     .innerJoin(users, eq(users.id, messages.senderId))
     .where(eq(messages.threadId, thread.id))
     .orderBy(asc(messages.createdAt));
+}
+
+/** Flagged messages for admin review, newest first. */
+export async function listFlaggedMessages(db: DB, limit = 100) {
+  return db
+    .select({
+      id: messages.id,
+      body: messages.body,
+      createdAt: messages.createdAt,
+      senderName: users.name,
+      senderEmail: users.email,
+      orderId: threads.orderId,
+      orderTitle: orders.title,
+    })
+    .from(messages)
+    .innerJoin(users, eq(users.id, messages.senderId))
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .leftJoin(orders, eq(orders.id, threads.orderId))
+    .where(eq(messages.flagged, true))
+    .orderBy(desc(messages.createdAt))
+    .limit(limit);
 }
 
 // ───────────── Deliveries, revisions, approval ─────────────

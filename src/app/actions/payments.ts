@@ -10,6 +10,7 @@ import { initializeTransaction, isTestMode, newReference } from "@/lib/paystack"
 export async function startTestPayment() {
   const session = await auth();
   if (!session?.user?.email) redirect("/sign-in");
+  if (!session.user.roles.includes("ADMIN")) throw new Error("Only admins can run payment checks.");
   if (!isTestMode()) throw new Error("Test payments are only available with Paystack test keys.");
 
   const reference = newReference("test");

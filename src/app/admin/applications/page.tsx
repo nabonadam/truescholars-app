@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AdminTabs } from "@/components/AdminTabs";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
 import { listApplications } from "@/server/vetting";
@@ -35,6 +36,7 @@ export default async function AdminApplications({ searchParams }: { searchParams
         <span className="eyebrow">Admin</span>
         <h1 className="text-3xl font-bold">Expert applications</h1>
       </div>
+      <AdminTabs active="/admin/applications" />
 
       <nav className="flex flex-wrap gap-2" aria-label="Filter applications">
         {FILTERS.map((f) => (

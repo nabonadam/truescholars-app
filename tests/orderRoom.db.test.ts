@@ -79,6 +79,10 @@ describe("messages", () => {
     expect(flagged).toHaveLength(1);
     expect(looksLikeContactDetails("email me at a.b@uni.edu.gh")).toBe(true);
     expect(looksLikeContactDetails("Model 2 has 1,204 observations")).toBe(false);
+    for (const t of ["call 0241234567", "024 123 4567", "+233241234567", "+233 24-123-4567", "wa.me/233241234567", "my WhatsApp is"]) {
+      expect(looksLikeContactDetails(t), t).toBe(true);
+    }
+    expect(looksLikeContactDetails("Delivery due 12 Nov 2026, 3 revisions")).toBe(false);
   });
 });
 
