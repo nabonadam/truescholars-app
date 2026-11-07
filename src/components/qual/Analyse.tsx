@@ -368,8 +368,8 @@ function ThemeCard({ studyId, t, byId, pids, total }: { studyId: string; t: Them
 /** Research question at the centre, themes around it, their codes fanning out beyond each theme. */
 function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: CodebookEntry[] }) {
   const byId = Object.fromEntries(book.map((k) => [k.id, k]));
-  const W = 1200, H = 980, cx = W / 2, cy = H / 2;
-  const R = 255;
+  const W = 1320, H = 900, cx = W / 2, cy = H / 2;
+  const R = 290;
   const MAX = 6;
   const colours = ["#0f3d2a", "#b5651d", "#1a6b52", "#7a4b1c", "#2f5d8a", "#6b3a5d", "#4a6b1a"];
   const wrap = (text: string, n: number, max: number) => {
@@ -395,27 +395,35 @@ function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: 
           const all = t.codes.map((c) => byId[c]).filter(Boolean).sort((p, q) => q.rids.length - p.rids.length);
           const codes = all.slice(0, MAX);
           const colour = colours[i % colours.length];
-          const spread = Math.min(Math.PI * 0.8, (Math.PI * 2) / themes.length * 0.95);
           return (
             <g key={t.id}>
               <line x1={cx} y1={cy} x2={x} y2={y} stroke={colour} strokeWidth={3} opacity={0.45} />
-              {codes.map((k, j) => {
-                const b = a + (codes.length > 1 ? -spread / 2 + (spread * j) / (codes.length - 1) : 0);
-                const kx = x + Math.cos(b) * 135, ky = y + Math.sin(b) * 135;
-                const right = Math.cos(b) > 0.25, left = Math.cos(b) < -0.25;
-                const anchor = right ? "start" : left ? "end" : "middle";
-                const tx = kx + (right ? 9 : left ? -9 : 0);
-                const ty = ky + (right || left ? 4 : Math.sin(b) > 0 ? 18 : -10);
+              {(() => {
+                // codes as tidy columns beside the theme: outward side for side themes, split for top/bottom ones
+                const c = Math.cos(a);
+                const left = Math.abs(c) < 0.35 ? codes.slice(0, Math.ceil(codes.length / 2)) : c < 0 ? codes : [];
+                const right = Math.abs(c) < 0.35 ? codes.slice(Math.ceil(codes.length / 2)) : c >= 0 ? codes : [];
+                const col = (list: CodebookEntry[], side: -1 | 1) =>
+                  list.map((k, j) => {
+                    const kx = x + side * 128;
+                    const ky = y + (j - (list.length - 1) / 2) * 25;
+                    return (
+                      <g key={k.id}>
+                        <line x1={x + side * 100} y1={y} x2={kx} y2={ky} stroke={colour} strokeWidth={1.2} opacity={0.4} />
+                        <circle cx={kx} cy={ky} r={5} fill={colour} />
+                        <text x={kx + side * 9} y={ky + 4.5} textAnchor={side > 0 ? "start" : "end"} fontSize={13} fill="#2b3d33">{short(k.label, 26)}</text>
+                      </g>
+                    );
+                  });
                 return (
-                  <g key={k.id}>
-                    <line x1={x} y1={y} x2={kx} y2={ky} stroke={colour} strokeWidth={1.2} opacity={0.35} />
-                    <circle cx={kx} cy={ky} r={5} fill={colour} />
-                    <text x={tx} y={ty} textAnchor={anchor} fontSize={13} fill="#2b3d33">{short(k.label)}</text>
-                  </g>
+                  <>
+                    {col(left, -1)}
+                    {col(right, 1)}
+                  </>
                 );
-              })}
+              })()}
               {all.length > MAX && (
-                <text x={x} y={y + 52} textAnchor="middle" fontSize={11.5} fill="#6b7d72">+{all.length - MAX} more</text>
+                <text x={x} y={y + (Math.sin(a) < -0.5 ? -46 : 54)} textAnchor="middle" fontSize={11.5} fill="#6b7d72">+{all.length - MAX} more</text>
               )}
               <rect x={x - 100} y={y - 36} width={200} height={72} rx={16} fill={colour} />
               {(() => {
