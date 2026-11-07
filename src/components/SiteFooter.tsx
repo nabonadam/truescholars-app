@@ -9,7 +9,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; external?:
       { label: "Find experts", href: "/services" },
       { label: "Post a job", href: "/jobs/new" },
       { label: "AI tools", href: site("/#tools"), external: true },
-      { label: "How it works", href: site("/#how"), external: true },
+      { label: "How it works", href: site("/how-it-works/"), external: true },
     ],
   },
   {
@@ -17,15 +17,16 @@ const COLUMNS: { title: string; links: { label: string; href: string; external?:
     links: [
       { label: "Find work", href: "/jobs" },
       { label: "Apply to join", href: "/apply" },
-      { label: "How vetting works", href: site("/#why"), external: true },
+      { label: "How vetting works", href: site("/how-vetting-works/"), external: true },
     ],
   },
   {
     title: "Trust",
     links: [
-      { label: "Academic integrity", href: site("/#why"), external: true },
+      { label: "Academic integrity", href: site("/academic-integrity/"), external: true },
       { label: "Privacy", href: site("/privacy-policy/"), external: true },
-      { label: "Terms & refunds", href: site("/#why"), external: true },
+      { label: "Terms of service", href: site("/terms/"), external: true },
+      { label: "Refund policy", href: site("/refund-policy/"), external: true },
     ],
   },
 ];
