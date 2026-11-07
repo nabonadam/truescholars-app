@@ -59,6 +59,7 @@ function fakeClaude(prompts: string[]) {
         keyTerms: [{ term: "adaptation", text: "Changes farmers make in response to climate", quote: "Most adapted by planting drought-tolerant maize" }],
         keywords: ["climate change", "adaptation"],
         quality: { rating: "moderate", notes: "Small qualitative sample." },
+        bibliographic: { title: "Rainfall variability and farmer adaptation in Northern Ghana", authors: [{ family: "Mensah", given: "Ama" }, { family: "Owusu", given: "Kofi" }], year: 2021, journal: "Journal of Rural Studies" },
       };
     } else if (prompt.includes("Synthesise them")) {
       out = {
@@ -171,6 +172,19 @@ describe("analysis", () => {
 
     await editParagraph(db, owner, id, "S2", 0, "My own words.");
     expect((await getAnalysisState<WriteState>(db, id)).sections!.S2[0].edited).toBe("My own words.");
+  });
+});
+
+describe("papers Crossref doesn't know", () => {
+  it("take their authors from the paper itself when it is read", async () => {
+    const id = await createReview(db, owner, { title: "R", researchQuestion: "How do farmers adapt to rainfall variability?" });
+    await addPdf(db, owner, id, PDF, "thesis.pdf", { crossref: async () => ({ verify: { checked: true, found: false, message: "No matching record" } }) });
+    expect((await listPapers(db, id))[0].meta.authors ?? []).toEqual([]);
+    vi.stubGlobal("fetch", fakeClaude([]));
+    await readPapers(db, owner, id);
+    const [p] = await listPapers(db, id);
+    expect(p.meta.authors?.map((a) => a.family)).toEqual(["Mensah", "Owusu"]);
+    expect(p.meta.year).toBe(2021);
   });
 });
 

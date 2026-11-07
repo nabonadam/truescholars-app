@@ -34,6 +34,7 @@ export type Card = {
   keyTerms: (Point & { term: string })[];
   keywords: string[];
   quality: { rating: "strong" | "moderate" | "weak" | "unclear"; notes: string };
+  bibliographic?: { title?: string; authors: { family: string; given?: string }[]; year?: number; journal?: string };
 };
 
 export type Theme = { id: string; name: string; claim: string; description: string; papers: { p: string; stance: "supports" | "contradicts" | "extends" | "nuances"; point: string }[] };
@@ -110,6 +111,7 @@ export async function readPaper(p: Paper, pages: string[]): Promise<Card> {
     keyTerms?: (RawPoint & { term?: string })[];
     keywords?: string[];
     quality?: { rating?: string; notes?: string };
+    bibliographic?: { title?: string; authors?: { family?: string; given?: string }[]; year?: number | string; journal?: string };
   };
   const r = await claudeJson<Raw>(
     ROLE,
@@ -120,9 +122,10 @@ export async function readPaper(p: Paper, pages: string[]): Promise<Card> {
       `- design: type (one of: ${DESIGNS.join(", ")}) and a one-sentence description of the method.\n- sample: who or what was studied, and how many.\n` +
       `- findings: 3 to 7 key findings, each one sentence.\n- conclusions: the main conclusion and implications.\n- limitations: 1 to 4, as stated by the authors or evident from the design.\n` +
       `- keyTerms: 2 to 6 key concepts with how THIS paper defines or uses them (text = the definition).\n- keywords: 4 to 8 keywords.\n` +
-      `- quality: rating (strong, moderate, weak or unclear) for how well the design supports the conclusions, with a one-sentence reason.\n\n` +
+      `- quality: rating (strong, moderate, weak or unclear) for how well the design supports the conclusions, with a one-sentence reason.\n` +
+      `- bibliographic: the paper's title, authors (family and given names, in order), year and journal or publisher, exactly as printed on the paper.\n\n` +
       `TEXT (page numbers in [[page n]] markers):\n${source}\n\n` +
-      `JSON: {"summary": {"introduction": "", "methods": "", "findings": "", "conclusions": ""}, "aim": {"text": "", "quote": ""}, "theory": {"text": "", "quote": ""}, "context": {"text": "", "quote": "", "country": "", "setting": "", "population": ""}, "design": {"type": "", "text": "", "quote": ""}, "sample": {"text": "", "quote": ""}, "findings": [{"text": "", "quote": ""}], "conclusions": {"text": "", "quote": ""}, "limitations": [{"text": "", "quote": ""}], "keyTerms": [{"term": "", "text": "", "quote": ""}], "keywords": [""], "quality": {"rating": "", "notes": ""}}`,
+      `JSON: {"summary": {"introduction": "", "methods": "", "findings": "", "conclusions": ""}, "aim": {"text": "", "quote": ""}, "theory": {"text": "", "quote": ""}, "context": {"text": "", "quote": "", "country": "", "setting": "", "population": ""}, "design": {"type": "", "text": "", "quote": ""}, "sample": {"text": "", "quote": ""}, "findings": [{"text": "", "quote": ""}], "conclusions": {"text": "", "quote": ""}, "limitations": [{"text": "", "quote": ""}], "keyTerms": [{"term": "", "text": "", "quote": ""}], "keywords": [""], "quality": {"rating": "", "notes": ""}, "bibliographic": {"title": "", "authors": [{"family": "", "given": ""}], "year": 2020, "journal": ""}}`,
     6000,
   );
   const quotePages = hasText ? pages : [meta.abstract ?? ""];
@@ -142,6 +145,12 @@ export async function readPaper(p: Paper, pages: string[]): Promise<Card> {
     keyTerms: (r.keyTerms ?? []).slice(0, 8).map((k) => ({ term: s(k.term, 80), ...point(k, quotePages) })).filter((k) => k.term),
     keywords: (r.keywords ?? []).map((k) => s(k, 60)).filter(Boolean).slice(0, 10),
     quality: { rating, notes: s(r.quality?.notes, 400) },
+    bibliographic: {
+      title: s(r.bibliographic?.title, 400) || undefined,
+      authors: (r.bibliographic?.authors ?? []).map((a) => ({ family: s(a.family, 80), given: s(a.given, 80) || undefined })).filter((a) => a.family).slice(0, 40),
+      year: Number(r.bibliographic?.year) > 1500 && Number(r.bibliographic?.year) < 2100 ? Number(r.bibliographic?.year) : undefined,
+      journal: s(r.bibliographic?.journal, 300) || undefined,
+    },
   };
 }
 
@@ -157,7 +166,11 @@ export async function readPapers(db: DB, ownerId: string, reviewId: string, opts
     todo.map(async (p) => {
       try {
         const card = await readPaper(p, await paperPages(db, p.id));
-        await db.update(litPapers).set({ card, cardStatus: "done", cardError: null }).where(eq(litPapers.id, p.id));
+        // papers Crossref doesn't know (theses, reports, local journals) get their details from the paper itself
+        const m = p.meta as PaperMeta;
+        const b = card.bibliographic;
+        const meta = !m.authors?.length && b?.authors.length ? { ...m, authors: b.authors, year: m.year ?? b.year ?? null, journal: m.journal ?? b.journal, title: m.title || b.title } : m;
+        await db.update(litPapers).set({ card, meta, cardStatus: "done", cardError: null }).where(eq(litPapers.id, p.id));
       } catch (err) {
         const msg = err instanceof LitError || (err instanceof Error && /busy|unreadable/i.test(err.message)) ? err.message : "This paper couldn't be read.";
         await db.update(litPapers).set({ cardStatus: "failed", cardError: msg }).where(eq(litPapers.id, p.id));
@@ -269,7 +282,7 @@ export async function makeOutline(db: DB, ownerId: string, reviewId: string, tar
     ROLE,
     `${ctx}\n\nPlan a CRITICAL literature review of about ${words} words, organised by ideas (themes), not by author or paper. Ten pages of real synthesis beat fifty pages of summaries.\n` +
       `Sections: a short introduction (scope and how the review is organised), one section per major theme or closely related group of themes (each building an argument: what is established, where evidence conflicts and why, what remains unclear), a section on gaps that leads to the research question, and a brief conclusion. 4 to 8 sections in total.\n` +
-      `For each: heading, purpose (one sentence: the argument this section makes), points (3 to 5 bullet points to cover, in order), themes (theme ids it draws on), words (its share of the length).\n\n` +
+      `For each: heading, purpose (one sentence: the argument this section makes), points (3 to 5 bullet points to cover, in order), themes (theme ids it draws on), words (its share of the length; the shares must add up to ${words}).\n\n` +
       `THEMES:\n${syn.themes.map((t) => `${t.id} ${t.name}: ${t.claim}`).join("\n")}\n\nCONTRADICTIONS:\n${syn.contradictions.map((c) => `- ${c.statement}`).join("\n") || "-"}\n\nGAPS:\n${syn.gaps.map((g) => `- ${g.gap}`).join("\n") || "-"}\n\n` +
       `JSON: {"sections": [{"heading": "", "purpose": "", "points": [""], "themes": ["T1"], "words": 500}]}`,
     4000,
@@ -322,7 +335,7 @@ export async function writeSection(db: DB, ownerId: string, reviewId: string, se
   const relevant = themes.length ? themes : state.synthesis.themes;
   const raw = await claudeJson<{ paragraphs: { sentences: { text: string; sources?: string[]; evidence?: string[] }[] }[] }>(
     ROLE,
-    `${ctx}\n\nWrite ONE section of a critical literature review: "${sec.heading}" (about ${sec.words} words).\nIts argument: ${sec.purpose}\nCover, in order:\n${sec.points.map((p) => `- ${p}`).join("\n")}\n(Other sections cover: \n${others}\nso don't repeat them.)\n\n` +
+    `${ctx}\n\nWrite ONE section of a critical literature review: "${sec.heading}". Strict length: no more than ${sec.words} words in total.\nIts argument: ${sec.purpose}\nCover, in order:\n${sec.points.map((p) => `- ${p}`).join("\n")}\n(Other sections cover: \n${others}\nso don't repeat them.)\n\n` +
       `HOW TO WRITE IT (critical, idea-led):\n- Each paragraph opens with a topic sentence that makes a claim about the literature, then compares and evaluates evidence across papers, and ends by saying what it means for the research question.\n` +
       `- Never start a sentence with an author or paper ("Smith (2019) found…", "P03 shows…"). Never name authors in the text at all: list them in "sources" and the citation is added automatically.\n` +
       `- Synthesise: group papers that agree, contrast those that don't and explain why (context, method, sample), and judge the strength of the evidence.\n- Be concise. No summaries of single papers. No padding, no headings inside the section.\n\n` +
