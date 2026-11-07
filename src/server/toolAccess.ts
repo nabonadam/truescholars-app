@@ -64,7 +64,7 @@ export async function requestToolUpgrade(db: DB, tool: Tool, user: { id: string;
 }
 
 /** Gives a person access for `days` more days from now (or from the end of their current access). */
-export async function grantToolAccess(db: DB, tool: Tool, email: string, days: number, note?: string, now = new Date()) {
+export async function grantToolAccess(db: DB, tool: Tool, email: string, days: number, note?: string, now = new Date(), opts: { quiet?: boolean } = {}) {
   const [u] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.email, email.trim().toLowerCase()));
   if (!u) throw new Error("No account uses that email.");
   if (!(days > 0 && days <= 3650)) throw new Error("Choose between 1 and 3650 days.");
@@ -74,7 +74,7 @@ export async function grantToolAccess(db: DB, tool: Tool, email: string, days: n
   const from = [now, row.accessUntil ?? now, trialEnd].reduce((a, b) => (b > a ? b : a));
   const until = new Date(from.getTime() + days * DAY);
   await db.update(toolAccess).set({ accessUntil: until, upgradeRequestedAt: null, note: note?.trim() || row.note }).where(where(u.id, tool));
-  await notify(db, {
+  if (!opts.quiet) await notify(db, {
     userId: u.id,
     kind: "TOOL_ACCESS",
     title: `Your ${TOOLS[tool].name} access is on`,

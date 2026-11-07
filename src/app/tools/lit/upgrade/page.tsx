@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icons";
 import { LitUpgradeButton } from "@/components/lit/NewReview";
+import { PlanPicker } from "@/components/PlanPicker";
 import { getDb } from "@/db";
+import { isTestMode, paystackConfigured } from "@/lib/paystack";
 import { requireUser } from "@/server/guards";
 import { peekToolAccess, timeLeft } from "@/server/toolAccess";
 
@@ -41,10 +43,14 @@ export default async function Upgrade() {
         <div className="card flex flex-col gap-4 p-7">
           <span className="eyebrow">Your access</span>
           <p className="text-lg font-bold">{status}</p>
-          <p className="text-ink-muted">
-            Online payment is launching soon. For now, request an upgrade: we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.
-          </p>
-          <LitUpgradeButton requested={!!upgradeRequestedAt} />
+          {access.kind === "admin" && <p className="rounded-sm bg-parchment p-2.5 text-[13px] text-ink-muted">Preview: this is what clients see. You don&apos;t need to pay.</p>}
+          {(paystackConfigured() ? <PlanPicker tool="lit" testMode={isTestMode()} /> : <p className="text-ink-muted">Online payment is being switched on. For now, ask us and we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.</p>)}
+          {access.kind !== "admin" && (
+            <details className="text-sm" open={!paystackConfigured()}>
+              <summary className="cursor-pointer font-bold text-ink-muted">Ask us instead (pay by bank or invoice)</summary>
+              <div className="mt-2"><LitUpgradeButton requested={!!upgradeRequestedAt} /></div>
+            </details>
+          )}
           {access.kind === "new" ? (
             <Link href="/tools/lit" className="btn-primary">Start your free trial first</Link>
           ) : (

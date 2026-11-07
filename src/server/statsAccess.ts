@@ -75,7 +75,7 @@ export function timeLeft(until: Date, now = new Date()) {
 // ───────── admin ─────────
 
 /** Gives a person access for `days` more days from now (or from the end of their current access). */
-export async function grantAccess(db: DB, email: string, days: number, note?: string, now = new Date()) {
+export async function grantAccess(db: DB, email: string, days: number, note?: string, now = new Date(), opts: { quiet?: boolean } = {}) {
   const [u] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.email, email.trim().toLowerCase()));
   if (!u) throw new Error("No account uses that email.");
   if (!(days > 0 && days <= 3650)) throw new Error("Choose between 1 and 3650 days.");
@@ -85,7 +85,7 @@ export async function grantAccess(db: DB, email: string, days: number, note?: st
   const from = [now, row.accessUntil ?? now, trialEnd].reduce((a, b) => (b > a ? b : a));
   const until = new Date(from.getTime() + days * DAY);
   await db.update(statAccess).set({ accessUntil: until, upgradeRequestedAt: null, note: note?.trim() || row.note }).where(eq(statAccess.userId, u.id));
-  await notify(db, { userId: u.id, kind: "TOOL_ACCESS", title: "Your Statistics Assistant access is on", body: `You can run analyses until ${until.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}.`, link: "/tools/stats" });
+  if (!opts.quiet) await notify(db, { userId: u.id, kind: "TOOL_ACCESS", title: "Your Statistics Assistant access is on", body: `You can run analyses until ${until.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}.`, link: "/tools/stats" });
   return { name: u.name, until };
 }
 

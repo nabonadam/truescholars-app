@@ -36,8 +36,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export interface PaymentMetadata {
-  purpose: "milestone" | "test";
+  purpose: "milestone" | "tool" | "test";
   milestoneId?: string;
+  plan?: string;
+  months?: number;
   userId: string;
 }
 

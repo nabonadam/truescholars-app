@@ -5,8 +5,9 @@ import type { DB } from "@/db";
 import { paymentEvents } from "@/db/schema";
 import type { VerifiedTransaction } from "@/lib/paystack";
 import { fundMilestone } from "./escrow";
+import { applyToolPayment } from "./toolPlans";
 
-export type ApplyResult = "funded" | "already-funded" | "recorded" | "not-successful";
+export type ApplyResult = "funded" | "already-funded" | "recorded" | "not-successful" | "access-on" | "invalid";
 
 export async function applyVerifiedTransaction(db: DB, tx: VerifiedTransaction): Promise<ApplyResult> {
   const meta = tx.metadata;
@@ -21,6 +22,8 @@ export async function applyVerifiedTransaction(db: DB, tx: VerifiedTransaction):
       userId: meta?.userId ?? null,
       purpose: meta?.purpose ?? "unknown",
       milestoneId: meta?.milestoneId ?? null,
+      plan: meta?.plan ?? null,
+      months: meta?.months ?? null,
       amountMinor: tx.amount,
       currency: tx.currency,
       status,
@@ -36,6 +39,10 @@ export async function applyVerifiedTransaction(db: DB, tx: VerifiedTransaction):
       currency: tx.currency,
       reference: tx.reference,
     });
+  }
+  if (meta?.purpose === "tool") {
+    const r = await applyToolPayment(db, tx);
+    return r === "invalid" ? "invalid" : "access-on";
   }
   return "recorded";
 }

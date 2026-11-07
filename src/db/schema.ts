@@ -400,8 +400,11 @@ export const paymentEvents = pgTable("payment_events", {
   id: id(),
   reference: text("reference").notNull().unique(),
   userId: text("user_id").references(() => users.id),
-  purpose: text("purpose").notNull(), // "milestone" | "test"
+  purpose: text("purpose").notNull(), // "milestone" | "tool" | "test"
   milestoneId: text("milestone_id").references(() => milestones.id),
+  plan: text("plan"), // tool plans: stats | qual | lit | all
+  months: integer("months"),
+  appliedAt: timestamp("applied_at", { mode: "date" }), // when a tool plan's access was switched on (once only)
   amountMinor: integer("amount_minor").notNull(),
   currency: text("currency").notNull(),
   status: text("status").notNull(), // "initialized" | "success" | "failed"
