@@ -5,9 +5,10 @@ import { timeLeft, trialDays } from "@/server/statsAccess";
 import { Icon, type IconName } from "./Icons";
 
 type StatsState = { access: Access | { kind: "new" }; upgradeRequestedAt: Date | null; sessions: number };
+type QualState = { access: Access | { kind: "new" }; upgradeRequestedAt: Date | null; studies: number };
 
 /** The AI tools on every dashboard: the Statistics Assistant up front, what's coming next beside it. */
-export function ToolsShelf({ stats }: { stats: StatsState }) {
+export function ToolsShelf({ stats, qual }: { stats: StatsState; qual: QualState }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -21,7 +22,7 @@ export function ToolsShelf({ stats }: { stats: StatsState }) {
         <StatsCard {...stats} />
         <div className="grid gap-4">
           <Upcoming icon="book" title="Literature Review" line="A structured, fully cited review of real studies from your research question." tags={["Real databases", "Your PDFs", "APA · Harvard"]} />
-          <Upcoming icon="mic" title="Qualitative Studio" line="Voice and text surveys, transcribed and thematically coded in one place." tags={["WhatsApp surveys", "Transcription", "Braun & Clarke"]} />
+          <QualCard {...qual} />
         </div>
       </div>
     </div>
@@ -96,6 +97,32 @@ function StatsCard({ access, upgradeRequestedAt, sessions }: StatsState) {
         </div>
       </div>
     </div>
+  );
+}
+
+function QualCard({ access, upgradeRequestedAt, studies }: QualState) {
+  const chip =
+    access.kind === "new" ? { text: `Free ${trialDays()}-day trial`, tone: "bg-amber text-ink" } :
+    access.kind === "trial" ? { text: `Trial · ${timeLeft(access.endsAt)} left`, tone: "bg-amber text-ink" } :
+    access.kind === "granted" ? { text: "Pro access", tone: "bg-green-tint text-green" } :
+    access.kind === "admin" ? { text: "Admin", tone: "bg-green-tint text-green" } :
+    { text: upgradeRequestedAt ? "Upgrade requested" : "Trial ended", tone: "bg-parchment text-ink-muted" };
+  const href = access.kind === "ended" && !upgradeRequestedAt && !studies ? "/tools/qual/upgrade" : "/tools/qual";
+  return (
+    <Link href={href} className="group flex gap-4 rounded-lg border border-green/25 bg-white p-5 no-underline transition hover:border-green">
+      <span className="grid h-11 w-11 flex-none place-items-center rounded-[13px] bg-green text-amber"><Icon name="mic" size={21} /></span>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-lg font-bold text-ink">Qualitative Studio</h3>
+          <span className="rounded-full bg-green px-2 py-0.5 text-[11px] font-bold tracking-wide text-white uppercase">New</span>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${chip.tone}`}>{chip.text}</span>
+        </div>
+        <p className="text-sm text-ink-muted">Voice and text surveys by one link, transcribed and thematically coded with real quotes.</p>
+        <span className="text-sm font-bold text-green">
+          {studies ? `${studies} stud${studies === 1 ? "y" : "ies"} →` : access.kind === "new" ? "Start free trial →" : access.kind === "ended" ? "Upgrade →" : "Start a study →"}
+        </span>
+      </div>
+    </Link>
   );
 }
 
