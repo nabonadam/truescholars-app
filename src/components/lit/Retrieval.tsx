@@ -152,7 +152,7 @@ function AskExpert({ review: r }: { review: ReviewInfo }) {
     <div className="card flex flex-col gap-4 p-6">
       <div>
         <h2 className="text-xl font-extrabold">Brief for literature retrieval</h2>
-        <p className="text-sm text-ink-muted">Sent privately to The True Scholars, not posted on the marketplace. We assign one dedicated expert and tell you the price (about GH₵15 to GH₵25 a paper). You pay into escrow only once you&apos;ve seen it, and the expert is paid only after you accept the papers.</p>
+        <p className="text-sm text-ink-muted">Sent privately to The True Scholars, not posted on the marketplace. We assign one dedicated expert and tell you the price (GH₵30 a paper in Ghana and the rest of Africa, US$4.50 elsewhere). You pay into escrow only once you&apos;ve seen it, and the expert is paid only after you accept the papers.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm font-bold">Papers wanted<input className="field mt-1" type="number" min={5} max={200} value={f.papersWanted} onChange={set("papersWanted")} /></label>

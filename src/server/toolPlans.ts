@@ -18,8 +18,12 @@ const day = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: 
 export async function applyToolPayment(db: DB, tx: VerifiedTransaction): Promise<"applied" | "already" | "invalid"> {
   const m = tx.metadata;
   if (!m || !isPlan(m.plan) || !isMonths(m.months)) return "invalid";
-  if (tx.currency !== "GHS" || tx.amount < planPrice(m.plan, m.months)) {
-    console.error("tool payment amount mismatch", tx.reference, tx.amount, m.plan, m.months);
+  // the amount we asked Paystack to charge, recorded at checkout (a US$ price depends on that day's rate)
+  const [asked] = await db.select({ amount: paymentEvents.amountMinor, purpose: paymentEvents.purpose }).from(paymentEvents).where(eq(paymentEvents.reference, tx.reference));
+  // never less than the cedi list price, even for a payment we have no checkout record of
+  const expected = Math.max(asked?.purpose === "tool" ? asked.amount : 0, planPrice(m.plan, m.months, "GHS") * 100);
+  if (tx.currency !== "GHS" || tx.amount < expected) {
+    console.error("tool payment amount mismatch", tx.reference, tx.amount, expected, m.plan, m.months);
     return "invalid";
   }
   const [claimed] = await db

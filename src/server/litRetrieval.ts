@@ -159,6 +159,7 @@ async function dropAssignment(db: DB, r: ReviewRow, back: "DRAFT" | "REQUESTED")
 export async function listRetrievalRequests(db: DB) {
   const owner = sql<string>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${col(litReviews.ownerId)})`;
   const ownerEmail = sql<string>`(select u.email from ${users} u where u.id = ${col(litReviews.ownerId)})`;
+  const ownerCountry = sql<string | null>`(select u.country from ${users} u where u.id = ${col(litReviews.ownerId)})`;
   const expert = sql<string | null>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${col(litReviews.expertUserId)})`;
   const total = sql<number | null>`(select o.total_minor from ${orders} o where o.id = ${col(litReviews.orderId)})`;
   const paid = sql<boolean>`exists (select 1 from ${milestones} m where m.order_id = ${col(litReviews.orderId)} and m.status <> 'PENDING_FUNDING')`;
@@ -178,6 +179,7 @@ export async function listRetrievalRequests(db: DB) {
       expertUserId: litReviews.expertUserId,
       owner,
       ownerEmail,
+      ownerCountry,
       expert,
       total,
       paid,

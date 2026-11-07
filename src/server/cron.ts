@@ -9,6 +9,7 @@ import { cronMarks, litReviews, milestones, orders, statAccess, toolAccess, user
 import { formatMoney } from "@/lib/money";
 import { notify } from "./notifications";
 import { autoApproveDue } from "./orderRoom";
+import { refreshUsdRate } from "./fx";
 import { moveToR2 } from "./qualStorage";
 import { trialDays as statsTrialDays } from "./statsAccess";
 import { TOOLS, toolTrialDays } from "./toolAccess";
@@ -112,6 +113,7 @@ export async function runHourly(db: DB, now = new Date()) {
     ["accessReminders", () => accessReminders(db, now)],
     ["retrievalReminders", () => retrievalReminders(db, now)],
     ["moveFilesToR2", () => moveToR2(db, 40)],
+    ["exchangeRate", () => refreshUsdRate(db, now)],
   ];
   for (const [name, job] of jobs) {
     try {

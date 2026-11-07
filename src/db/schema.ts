@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -840,4 +841,12 @@ export const litAnalyses = pgTable("lit_analyses", {
 export const cronMarks = pgTable("cron_marks", {
   key: text("key").primaryKey(),
   sentAt: timestamp("sent_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+/** Exchange rates (cedis per unit of the currency), refreshed daily by the hourly job. */
+export const fxRates = pgTable("fx_rates", {
+  code: text("code").primaryKey(), // "USD"
+  ghsPerUnit: doublePrecision("ghs_per_unit").notNull(),
+  source: text("source").notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });

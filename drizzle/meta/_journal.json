@@ -141,6 +141,13 @@
       "when": 1794067334684,
       "tag": "0019_cron_marks",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794073009098,
+      "tag": "0020_fx_rates",
+      "breakpoints": true
     }
   ]
 }

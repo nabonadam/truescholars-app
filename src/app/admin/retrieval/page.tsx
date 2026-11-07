@@ -8,12 +8,13 @@ import { ago } from "@/lib/time";
 import { requireUser } from "@/server/guards";
 import { markLinkNotificationsRead } from "@/server/notifications";
 import type { Brief } from "@/server/lit";
+import { RETRIEVAL_PER_PAPER, currencyForCountry, money } from "@/lib/plans";
+import { usdToGhs } from "@/server/fx";
 import { listRetrievalRequests, listRetrievers } from "@/server/litRetrieval";
 
 export const metadata: Metadata = { title: "Literature retrieval requests" };
 export const dynamic = "force-dynamic";
 
-const PER_PAPER = 20; // placeholder price per paper (GH₵) until real pricing is set
 
 const STAGE: Record<string, { text: string; tone: string }> = {
   REQUESTED: { text: "Needs an expert", tone: "bg-amber text-ink" },
@@ -27,7 +28,7 @@ export default async function AdminRetrieval() {
   const admin = await requireUser("ADMIN");
   const db = getDb();
   await markLinkNotificationsRead(db, admin.id, "/admin/retrieval");
-  const [rows, retrievers] = await Promise.all([listRetrievalRequests(db), listRetrievers(db)]);
+  const [rows, retrievers, fx] = await Promise.all([listRetrievalRequests(db), listRetrievers(db), usdToGhs(db)]);
   const open = rows.filter((r) => r.status === "REQUESTED");
   const rest = rows.filter((r) => r.status !== "REQUESTED" && r.status !== "DRAFT");
   return (
@@ -46,6 +47,9 @@ export default async function AdminRetrieval() {
         {open.map((r) => {
           const b = (r.brief ?? {}) as Brief;
           const papers = b.papersWanted ?? 20;
+          const cur = currencyForCountry(r.ownerCountry) ?? "GHS";
+          const listPrice = papers * RETRIEVAL_PER_PAPER[cur];
+          const suggested = cur === "GHS" ? listPrice : Math.ceil(listPrice * fx.rate);
           const brief: [string, string | number | undefined][] = [["Papers wanted", papers], ["Purpose", b.purpose], ["Discipline", b.discipline], ["Years", b.years], ["Regions", b.regions], ["Languages", b.languages], ["Include", b.include], ["Exclude", b.exclude], ["Notes", b.notes]];
           return (
             <article key={r.id} className="card grid gap-5 p-5 lg:grid-cols-[1fr_1.1fr]">
@@ -62,9 +66,10 @@ export default async function AdminRetrieval() {
                     <div key={k}><dt className="inline font-bold">{k}: </dt><dd className="inline text-ink-muted">{v}</dd></div>
                   ))}
                   <div><dt className="inline font-bold">Needed within: </dt><dd className="inline text-ink-muted">{r.requestDays ?? 7} days</dd></div>
+                  <div><dt className="inline font-bold">Suggested price: </dt><dd className="inline text-ink-muted">{papers} × {money(RETRIEVAL_PER_PAPER[cur], cur)} = {money(listPrice, cur)}{cur === "USD" ? ` ≈ ${money(suggested, "GHS")} (client in ${r.ownerCountry})` : ""}</dd></div>
                 </dl>
               </div>
-              <AssignForm reviewId={r.id} retrievers={retrievers} price={papers * PER_PAPER} days={r.requestDays ?? 7} />
+              <AssignForm reviewId={r.id} retrievers={retrievers} price={suggested} days={r.requestDays ?? 7} />
             </article>
           );
         })}

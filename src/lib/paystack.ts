@@ -40,6 +40,8 @@ export interface PaymentMetadata {
   milestoneId?: string;
   plan?: string;
   months?: number;
+  currency?: "GHS" | "USD"; // the price list the person chose (the charge itself is always in GHS)
+  price?: number; // the price they saw, in whole units of that currency
   userId: string;
 }
 

@@ -4,6 +4,10 @@ import { UpgradeButton } from "@/components/stats/UpgradeButton";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getDb } from "@/db";
 import { isTestMode, paystackConfigured } from "@/lib/paystack";
+import { currencyForCountry } from "@/lib/plans";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { usdToGhs } from "@/server/fx";
 import { requireUser } from "@/server/guards";
 import { peekAccess, timeLeft } from "@/server/statsAccess";
 
@@ -20,6 +24,7 @@ const FEATURES = [
 
 export default async function Upgrade() {
   const user = await requireUser();
+  const [[me], fx] = await Promise.all([getDb().select({ country: users.country }).from(users).where(eq(users.id, user.id)), usdToGhs(getDb())]);
   const { access, upgradeRequestedAt } = await peekAccess(getDb(), user);
   const status =
     access.kind === "admin" ? "You have unlimited access as an admin." :
@@ -44,7 +49,7 @@ export default async function Upgrade() {
           <span className="eyebrow">Your access</span>
           <p className="text-lg font-bold">{status}</p>
           {access.kind === "admin" && <p className="rounded-sm bg-parchment p-2.5 text-[13px] text-ink-muted">Preview: this is what clients see. You don&apos;t need to pay.</p>}
-          {(paystackConfigured() ? <PlanPicker tool="stats" testMode={isTestMode()} /> : <p className="text-ink-muted">Online payment is being switched on. For now, ask us and we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.</p>)}
+          {(paystackConfigured() ? <PlanPicker tool="stats" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-ink-muted">Online payment is being switched on. For now, ask us and we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.</p>)}
           {access.kind !== "admin" && (
             <details className="text-sm" open={!paystackConfigured()}>
               <summary className="cursor-pointer font-bold text-ink-muted">Ask us instead (pay by bank or invoice)</summary>
