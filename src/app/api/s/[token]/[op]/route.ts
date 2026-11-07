@@ -1,5 +1,8 @@
 import { after, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { qualStudies, users } from "@/db/schema";
+import { canUse, peekToolAccess } from "@/server/toolAccess";
 import { MAX_AUDIO_BYTES, QualError, clearAudio, resumeResponse, saveAnswer, saveAudio, startResponse, submitResponse, transcribeResponse, transcriptionOn } from "@/server/qual";
 
 export const runtime = "nodejs";
@@ -36,7 +39,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
         return NextResponse.json({ ok: true });
       case "submit": {
         const done = await submitResponse(db, token, rid, secret);
-        if (transcriptionOn()) after(() => transcribeResponse(getDb(), done.responseId).catch((e) => console.error("auto-transcribe", e)));
+        // Automatic transcription is a paid feature: only while the researcher has access.
+        if (transcriptionOn()) after(async () => {
+          const [owner] = await getDb().select({ id: users.id, roles: users.roles }).from(qualStudies).innerJoin(users, eq(users.id, qualStudies.ownerId)).where(eq(qualStudies.token, token));
+          if (!owner || !canUse((await peekToolAccess(getDb(), "qual", owner)).access as Parameters<typeof canUse>[0])) return;
+          await transcribeResponse(getDb(), done.responseId).catch((e) => console.error("auto-transcribe", e));
+        });
         return NextResponse.json({ ok: true });
       }
       default:
