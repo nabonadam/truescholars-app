@@ -6,15 +6,16 @@
 
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
-import { qualStudies, toolAccess, users } from "@/db/schema";
+import { litReviews, qualStudies, toolAccess, users } from "@/db/schema";
 import { notify } from "./notifications";
 import { timeLeft, type Access } from "./statsAccess";
 
 export { timeLeft, type Access };
 
-export type Tool = "qual";
+export type Tool = "qual" | "lit";
 export const TOOLS: Record<Tool, { name: string; path: string; adminPath: string }> = {
   qual: { name: "Qualitative Studio", path: "/tools/qual", adminPath: "/admin/qual" },
+  lit: { name: "Literature Review", path: "/tools/lit", adminPath: "/admin/lit" },
 };
 
 export const toolTrialDays = () => Math.max(1, Number(process.env.TOOL_TRIAL_DAYS ?? process.env.STATS_TRIAL_DAYS) || 2);
@@ -90,7 +91,10 @@ export async function endToolAccess(db: DB, tool: Tool, userId: string, now = ne
 }
 
 export async function listToolUsers(db: DB, tool: Tool, q?: string) {
-  const studies = sql<number>`(select count(*)::int from ${qualStudies} s where s.owner_id = ${toolAccess.userId})`;
+  const studies =
+    tool === "lit"
+      ? sql<number>`(select count(*)::int from ${litReviews} s where s.owner_id = ${toolAccess.userId})`
+      : sql<number>`(select count(*)::int from ${qualStudies} s where s.owner_id = ${toolAccess.userId})`;
   const base = db
     .select({ userId: toolAccess.userId, name: users.name, email: users.email, trialStartedAt: toolAccess.trialStartedAt, accessUntil: toolAccess.accessUntil, upgradeRequestedAt: toolAccess.upgradeRequestedAt, note: toolAccess.note, items: studies })
     .from(toolAccess)

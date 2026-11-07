@@ -24,6 +24,7 @@ const CTA: Record<NotificationKind, string> = {
   LEVEL_UP: "See your level",
   TOOL_ACCESS: "Open",
   STUDY_RESPONSE: "See the responses",
+  LIT_REVIEW: "Open the review",
 };
 
 /** Kinds that can arrive in bursts: only the first unread one per link is emailed. */

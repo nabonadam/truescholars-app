@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Icon } from "@/components/Icons";
+import { reviewForOrder } from "@/server/litRetrieval";
 import { payOrderAction } from "@/app/actions/orders";
 import { OrderProgress } from "@/components/OrderProgress";
 import { progressStep } from "@/server/dashboard";
@@ -50,6 +52,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
     disputesForOrder(db, order.id),
   ]);
   const openDisputes = orderDisputes.filter((x) => x.status === "OPEN");
+  const litReviewId = await reviewForOrder(db, order.id);
   const meta = new Map((await fileMeta(db, [...msgs.flatMap((m) => m.files), ...dels.flatMap((d) => d.files)])).map((f) => [f.id, f]));
   const answers = (order.requirements as { question: string; answer: string }[] | null) ?? [];
   const status = ORDER_STATUS[order.status];
@@ -68,6 +71,16 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
       <Link href={isAdminView ? "/admin/messages" : "/orders"} className="text-sm font-bold text-green">{isAdminView ? "← Flagged messages" : "← All orders"}</Link>
       {isAdminView && (
         <p className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">Admin view: read-only. You can see the conversation and deliveries but can&apos;t act on this order.</p>
+      )}
+      {litReviewId && !isAdminView && (
+        <Link href={`/tools/lit/${litReviewId}`} className="flex flex-wrap items-center gap-3 rounded-md bg-green-deep px-5 py-4 text-white no-underline">
+          <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-amber text-ink"><Icon name="book" size={18} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold">{role === "expert" ? "Deliver in the literature workspace" : "Review the literature in your review"}</span>
+            <span className="block text-sm text-on-green-muted">{role === "expert" ? "Add the papers, your relevance notes and the search log, then submit to the client." : "See each paper, its DOI and the expert's note; accept them, then submit for analysis."}</span>
+          </span>
+          <span className="font-bold text-amber">Open →</span>
+        </Link>
       )}
       {openDisputes.map((x) => (
         <Link key={x.id} href={`/disputes/${x.id}`} className="flex flex-wrap items-center gap-3 rounded-md bg-ink px-5 py-4 text-white no-underline">

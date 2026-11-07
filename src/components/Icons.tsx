@@ -86,6 +86,7 @@ const KIND: Record<string, { icon: IconName; tone: keyof typeof TONES }> = {
   LEVEL_UP: { icon: "trophy", tone: "amber" },
   TOOL_ACCESS: { icon: "chart", tone: "solid" },
   STUDY_RESPONSE: { icon: "mic", tone: "solid" },
+  LIT_REVIEW: { icon: "book", tone: "solid" },
 };
 
 export function KindIcon({ kind }: { kind: string }) {
