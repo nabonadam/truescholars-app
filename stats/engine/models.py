@@ -774,11 +774,11 @@ def sts(ds: Dataset, cmd: Command) -> Result:
     time = sub[s["t"]].astype(float)
     event = (sub[s["d"]].fillna(0) != 0).astype(int) if s["d"] else pd.Series(1, index=sub.index)
     if what == "test":
-        from lifelines.statistics import multivariate_logrank_test
+        from statsmodels.duration.survfunc import survdiff
 
         if not by:
             raise StataError("use: sts test groupvar")
-        res = multivariate_logrank_test(time, sub[by], event)
+        chi_lr, p_lr = survdiff(time.to_numpy(), event.to_numpy(), sub[by].to_numpy())
         lines = ["", f"Equality of survivor functions", "Log-rank test", "", f"{fmt.name(by)} |  Observed       Expected", "-------------+-------------------------"]
         rows = []
         lv = _levels(ds, sub[by], False)
@@ -787,20 +787,20 @@ def sts(ds: Dataset, cmd: Command) -> Result:
             o = int(event[sub[by] == g].sum())
             lines.append(f"{fmt.name(level_label(ds, by, g))} |{o:>10,}{e:>15.2f}")
             rows.append([level_label(ds, by, g), f"{o:,}", f"{e:.2f}"])
-        lines += ["-------------+-------------------------", f"{'Total':>12} |{int(event.sum()):>10,}{sum(exp_tot):>15.2f}", "", f"{'chi2(' + str(len(lv) - 1) + ') =':>14}{res.test_statistic:>9.2f}", f"{'Pr>chi2 =':>14}{res.p_value:>9.4f}"]
-        t = Table(f"Log-rank test by {nice(ds, by)}", [nice(ds, by), "Observed", "Expected"], rows, note=f"χ²({len(lv) - 1}) = {fmt.apa_num(res.test_statistic)}, p {('< .001' if res.p_value < 0.001 else '= ' + fmt.apa_p(res.p_value))}.")
-        return Result(log="\n".join(lines), tables=[t], summary={"test": "log-rank", "chi2": float(res.test_statistic), "p": float(res.p_value)})
+        lines += ["-------------+-------------------------", f"{'Total':>12} |{int(event.sum()):>10,}{sum(exp_tot):>15.2f}", "", f"{'chi2(' + str(len(lv) - 1) + ') =':>14}{chi_lr:>9.2f}", f"{'Pr>chi2 =':>14}{p_lr:>9.4f}"]
+        t = Table(f"Log-rank test by {nice(ds, by)}", [nice(ds, by), "Observed", "Expected"], rows, note=f"χ²({len(lv) - 1}) = {fmt.apa_num(chi_lr)}, p {('< .001' if p_lr < 0.001 else '= ' + fmt.apa_p(p_lr))}.")
+        return Result(log="\n".join(lines), tables=[t], summary={"test": "log-rank", "chi2": float(chi_lr), "p": float(p_lr)})
     if what in ("graph", "gr"):
-        from lifelines import KaplanMeierFitter
+        from statsmodels.duration.survfunc import SurvfuncRight
 
         from .graphs import PALETTE, _fig, _png, _result
 
         fig, ax = _fig()
         groups = [(None, np.ones(len(sub), dtype=bool))] if not by else [(g, (sub[by] == g).to_numpy()) for g in _levels(ds, sub[by], False)]
         for i, (g, m) in enumerate(groups):
-            km = KaplanMeierFitter().fit(time[m], event[m])
-            sf = km.survival_function_
-            ax.step(sf.index, sf.iloc[:, 0], where="post", color=PALETTE[i % len(PALETTE)], linewidth=1.6, label=level_label(ds, by, g) if by else None)
+            km = SurvfuncRight(time[m].to_numpy(), event[m].to_numpy())
+            xs, ys = np.r_[0.0, km.surv_times], np.r_[1.0, km.surv_prob]
+            ax.step(xs, ys, where="post", color=PALETTE[i % len(PALETTE)], linewidth=1.6, label=level_label(ds, by, g) if by else None)
         ax.set_ylim(0, 1.02)
         ax.set_xlabel("analysis time")
         ax.set_title("Kaplan–Meier survival estimate" + (f"s by {nice(ds, by)}" if by else ""))

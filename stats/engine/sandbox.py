@@ -20,7 +20,7 @@ import tempfile
 from .data import Dataset, StataError
 
 ALLOWED_IMPORTS = {
-    "pandas", "numpy", "scipy", "statsmodels", "linearmodels", "lifelines", "sklearn", "matplotlib",
+    "pandas", "numpy", "scipy", "statsmodels", "linearmodels", "sklearn", "matplotlib",
     "math", "statistics", "itertools", "collections", "functools", "re", "warnings", "datetime", "textwrap", "string",
 }
 BLOCKED_NAMES = {

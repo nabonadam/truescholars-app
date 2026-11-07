@@ -60,7 +60,7 @@ def hook(event, args):
 SAFE_BUILTINS = {k: getattr(builtins, k) for k in dir(builtins) if not k.startswith("_") and k not in {
     "open", "eval", "exec", "compile", "input", "globals", "locals", "vars", "getattr", "setattr", "delattr", "breakpoint", "exit", "quit",
     "help", "memoryview", "dir", "object", "type", "super", "classmethod", "staticmethod", "property", "copyright", "credits", "license"}}
-ALLOWED = {"pandas", "numpy", "scipy", "statsmodels", "linearmodels", "lifelines", "sklearn", "matplotlib", "math", "statistics", "itertools",
+ALLOWED = {"pandas", "numpy", "scipy", "statsmodels", "linearmodels", "sklearn", "matplotlib", "math", "statistics", "itertools",
            "collections", "functools", "re", "warnings", "datetime", "textwrap", "string"}
 
 
@@ -128,7 +128,7 @@ def show(obj, title="", note="", decimals=3):
             return _frame(t, title or "Model estimates", note, decimals)
         except Exception:  # noqa: BLE001
             return None
-    if hasattr(obj, "summary") and isinstance(getattr(obj, "summary"), pd.DataFrame):  # lifelines
+    if hasattr(obj, "summary") and isinstance(getattr(obj, "summary"), pd.DataFrame):  # fitted objects with a summary table
         return _frame(obj.summary, title or "Model estimates", note, decimals)
     print(obj)
     return None

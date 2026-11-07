@@ -103,14 +103,22 @@ def test_ivregress_factor_alpha(panel):
 
 
 def test_survival(panel):
-    from lifelines import CoxPHFitter
-    from lifelines.statistics import logrank_test
+    from statsmodels.duration.hazard_regression import PHReg
+    from statsmodels.duration.survfunc import survdiff
 
     r = ok(run_commands(Dataset(panel.copy()), ["stset time, failure(died)", "stcox x z", "sts test grp", "sts graph, by(grp)"]))
-    c = CoxPHFitter().fit(panel[["time", "died", "x", "z"]], "time", "died")
-    assert r[1]["summary"]["coefs"][0]["b"] == pytest.approx(c.params_["x"], rel=1e-3)
-    lr = logrank_test(panel.time[panel.grp == 0], panel.time[panel.grp == 1], panel.died[panel.grp == 0], panel.died[panel.grp == 1])
-    assert r[2]["summary"]["chi2"] == pytest.approx(lr.test_statistic)
+    c = PHReg(panel.time, panel[["x", "z"]], status=panel.died, ties="breslow").fit()
+    assert r[1]["summary"]["coefs"][0]["b"] == pytest.approx(c.params[0], rel=1e-6)
+    # log-rank by hand: sum over event times of (observed - expected) for group 1, over its hypergeometric variance
+    t, d, g = panel.time.to_numpy(), panel.died.to_numpy() == 1, panel.grp.to_numpy() == 1
+    oe = v = 0.0
+    for u in np.unique(t[d]):
+        risk = t >= u
+        n, n1 = risk.sum(), (risk & g).sum()
+        dd = (d & (t == u)).sum()
+        oe += (d & (t == u) & g).sum() - dd * n1 / n
+        v += dd * (n1 / n) * (1 - n1 / n) * (n - dd) / max(n - 1, 1)
+    assert r[2]["summary"]["chi2"] == pytest.approx(oe**2 / v) == pytest.approx(survdiff(t, d.astype(float), g.astype(int))[0])
     assert len(r[3]["images"]) == 1
     bad = run_commands(Dataset(panel.copy()), ["stcox x"])
     assert not bad[0]["ok"] and "stset" in bad[0]["error"]
