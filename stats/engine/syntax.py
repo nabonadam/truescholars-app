@@ -68,6 +68,21 @@ COMMANDS = {
     "twoway": "tw",
     "marginsplot": "marginsplot",
     "lroc": "lroc",
+    "svyset": "svyset",
+    "xtset": "xtset",
+    "xtreg": "xtreg",
+    "mixed": "mixed",
+    "ologit": "ologit",
+    "oprobit": "oprobit",
+    "mlogit": "mlogit",
+    "nbreg": "nbreg",
+    "ivregress": "ivregress",
+    "factor": "factor",
+    "rotate": "rotate",
+    "alpha": "alpha",
+    "stset": "stset",
+    "stcox": "stcox",
+    "sts": "sts",
 }
 
 # Real Stata commands we deliberately don't run, with what to do instead.
@@ -75,8 +90,8 @@ NOT_HERE = {
     ("ssc", "net", "ado", "adoupdate", "update", "which"): "Installing Stata packages (ssc/net install) isn't possible here: this workspace runs its own engine that speaks Stata's language, not Stata itself. Ask in plain English for what the package does, or use the built-in commands.",
     ("use", "import", "insheet", "sysuse", "webuse", "infile"): "Your data is already loaded from your upload. To work with a different file, start a new session with it.",
     ("save", "saveold", "export", "outsheet", "outreg2", "esttab", "estout", "putdocx", "putexcel", "asdoc", "log", "cmdlog"): "Saving and exporting work through the Export menu: Word or Excel tables, the do-file, and your data as .dta or .csv.",
-    ("line", "kdensity", "graphbox", "boxplot", "qnorm", "pnorm"): "Graphs aren't available yet; they're coming soon. Tables and tests all work.",
-    ("cd", "dir", "ls", "shell", "capture", "quietly", "noisily", "display", "di", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "merge", "append", "reshape", "collapse", "svy", "svyset", "xtreg", "xtset", "tsset", "test", "lincom", "help", "search"): "This command isn't available in the workspace yet. Ask in plain English and the assistant will use the commands that are, or tell you if it can't.",
+    ("kdensity", "graphbox", "boxplot", "qnorm", "pnorm", "melogit", "meologit", "mepoisson", "xtlogit", "xtprobit", "xtpoisson", "gsem", "sem", "streg", "heckman", "tobit", "zinb", "zip", "arima", "var", "pca", "cluster", "kmeans", "teffects", "psmatch2", "qreg", "glm", "fracreg", "betareg", "nl", "irt", "lca"): "This one isn't a built-in command yet. Describe it in plain English (for example 'run a multilevel logistic model of passed on hours with random intercepts for school') and the assistant will write and run it as an advanced analysis.",
+    ("cd", "dir", "ls", "shell", "capture", "quietly", "noisily", "display", "di", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "merge", "append", "reshape", "collapse", "tsset", "test", "lincom", "help", "search"): "This command isn't a built-in command yet. Ask for it in plain English: the assistant can run it as an advanced analysis.",
 }
 
 
@@ -88,7 +103,7 @@ def _not_here(word: str) -> str | None:
     return None
 
 
-DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring", "egen", "xtile", "sample", "set", "sort", "gsort", "predict"}
+DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring", "egen", "xtile", "sample", "set", "sort", "gsort", "predict", "svyset", "xtset", "stset"}
 
 
 def canonical(word: str) -> str | None:
@@ -123,6 +138,7 @@ class Command:
     options: dict[str, str | None] = field(default_factory=dict)
     weight: tuple[str, str] | None = None  # ("aw" | "pw" | "fw" | "iw", expression)
     _design: tuple | None = None  # set by estimation commands (terms, factor levels)
+    svy: bool = False  # svy: prefix
 
     def opt(self, *names: str) -> str | bool | None:
         """Option value by any of its spellings; True if given without arguments. Abbreviations
@@ -191,6 +207,10 @@ def parse(line: str) -> Command:
     if m:
         by = m.group(1).replace("(", " ").replace(")", " ").split()
         text = m.group(2)
+    svy = False
+    m = re.match(r"^svy\s*(?:,[^:]*)?:\s*(.*)$", text, re.I | re.S)
+    if m:
+        svy, text = True, m.group(1)
     word, _, rest = text.partition(" ")
     if "," in word:  # e.g. "describe,"
         word, _, tail = word.partition(",")
@@ -200,7 +220,7 @@ def parse(line: str) -> Command:
         hint = _not_here(word)
         raise StataError(f"{word}: {hint}" if hint else f"command {word} is unrecognized. See the list of available commands on the Statistics Assistant page.")
     main, opts = _split_top(rest, ",")
-    cmd = Command(raw=raw, name=name, by=by, options=_parse_options(opts) if opts else {})
+    cmd = Command(raw=raw, name=name, by=by, options=_parse_options(opts) if opts else {}, svy=svy)
     wm = re.search(r"\[\s*(aw|aweights?|pw|pweights?|fw|fweights?|iw|iweights?|weight)\s*=\s*([^\]]+)\]", main, re.I)
     if wm:
         kind = wm.group(1).lower()[:2]

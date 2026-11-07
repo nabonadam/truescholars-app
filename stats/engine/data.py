@@ -24,11 +24,12 @@ class Dataset:
     rng: np.random.Generator = field(default_factory=lambda: np.random.default_rng(123456789))  # set seed
     last_est: dict | None = None  # the last estimation (Stata's e()), for predict / estat / margins
     last_margins: dict | None = None  # for marginsplot
+    settings: dict = field(default_factory=dict)  # svyset / xtset / stset / last factor solution
 
     def copy(self) -> "Dataset":
         import copy
 
-        return Dataset(self.df.copy(), dict(self.var_labels), {k: dict(v) for k, v in self.value_labels.items()}, {k: dict(v) for k, v in self.label_sets.items()}, list(self.import_notes), copy.deepcopy(self.rng), self.last_est, self.last_margins)
+        return Dataset(self.df.copy(), dict(self.var_labels), {k: dict(v) for k, v in self.value_labels.items()}, {k: dict(v) for k, v in self.label_sets.items()}, list(self.import_notes), copy.deepcopy(self.rng), self.last_est, self.last_margins, copy.deepcopy(self.settings))
 
     def label(self, var: str) -> str:
         return self.var_labels.get(var, "")

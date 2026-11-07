@@ -60,7 +60,7 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
   const feed = useRef<HTMLDivElement>(null);
   const histIdx = useRef(-1);
 
-  const typed = useMemo(() => runs.flatMap((r) => (r.mode === "STATA" && r.status !== "RESET" ? [r.input] : r.status === "DONE" ? [r.commands.join("\n")] : [])).reverse(), [runs]);
+  const typed = useMemo(() => runs.flatMap((r) => (r.mode === "STATA" && r.status !== "RESET" ? [r.input] : r.status === "DONE" && r.mode !== "PYTHON" ? [r.commands.join("\n")] : [])).reverse(), [runs]);
   const sugg = useMemo(() => suggestions(session.variables), [session.variables]);
 
   useEffect(() => {
@@ -403,7 +403,8 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   const [busy, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState(run.commands.join("\n"));
-  const english = run.mode === "ENGLISH";
+  const python = run.mode === "PYTHON";
+  const english = run.mode === "ENGLISH" || python;
   const act = (fn: () => Promise<{ error?: string } | undefined>) => start(async () => { const r = await fn(); setErr(r?.error ?? null); });
 
   if (run.status === "IMPORT") {
@@ -452,19 +453,21 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
         <Asked text={run.input} time={run.createdAt} />
         <div className="overflow-hidden rounded-sm border border-green/30 bg-white shadow-[0_10px_30px_-18px_rgba(11,36,24,0.6)] sm:ml-10">
           <div className="flex items-center gap-2 border-b border-line bg-green-tint px-4 py-2.5 text-[13px] font-bold text-green">
-            <Icon name="wand" size={15} /> Here is the plan. Check it, edit if you like, then run.
+            <Icon name="wand" size={15} /> {python ? "Advanced analysis (Python). No built-in command does this, so the assistant wrote the code. Read it, edit if you like, then run." : "Here is the plan. Check it, edit if you like, then run."}
           </div>
           {run.explanation && <p className="px-4 pt-3 text-[14.5px] text-ink">{run.explanation}</p>}
           <div className="m-3 rounded-sm bg-[#0c1f16] px-3 py-2.5">
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              rows={Math.min(Math.max(draft.split("\n").length, 1), 10)}
+              rows={Math.min(Math.max(draft.split("\n").length, 1), python ? 22 : 10)}
               spellCheck={false}
-              className="w-full resize-none bg-transparent font-mono text-[13px] leading-[1.6] text-white outline-none"
-              aria-label="Commands to run"
+              wrap={python ? "off" : undefined}
+              className={`w-full resize-none bg-transparent font-mono text-[13px] leading-[1.6] text-white outline-none ${python ? "overflow-x-auto" : ""}`}
+              aria-label={python ? "Python code to run" : "Commands to run"}
             />
           </div>
+          {python && <p className="px-4 pb-2 text-[12.5px] text-ink-muted">It runs in a sealed sandbox: it can read your data, but it can't change it, open files or reach the internet.</p>}
           {err && <p className="px-4 pb-2 text-sm text-red-700">{err}</p>}
           <div className="flex items-center gap-2 px-3 pb-3">
             <button type="button" disabled={busy} onClick={() => act(() => confirmAction(sessionId, run.id, draft))} className="btn-amber min-h-10 px-4 text-sm">
@@ -489,16 +492,22 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
         <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-1.5 text-[11px] text-white/40">
           <span className="flex gap-1"><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /></span>
           <span className="flex-1 font-mono">Results{!english && <> · <When iso={run.createdAt} /></>}</span>
-          <button type="button" onClick={() => onEdit(run.results.map((r) => r.command).join("\n") || run.commands.join("\n"))} className="rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white" title="Edit and run again">
+          <button type="button" onClick={() => onEdit(python ? run.input : run.results.map((r) => r.command).join("\n") || run.commands.join("\n"))} className="rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white" title="Edit and run again">
             Edit
           </button>
-          <CopyButton text={run.results.map((r) => r.command).join("\n")} label="Copy code" className="rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white" />
+          <CopyButton text={python ? run.commands[0] ?? "" : run.results.map((r) => r.command).join("\n")} label="Copy code" className="rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white" />
           {hasTables && (
             <a href={`/api/stats/${sessionId}/export?fmt=docx&run=${run.id}`} className="rounded px-1.5 py-0.5 text-white/40 no-underline hover:bg-white/10 hover:text-white">
               Word
             </a>
           )}
         </div>
+        {python && (
+          <details className="group border-b border-white/[0.07] px-4 py-2 text-[12px] text-white/50">
+            <summary className="cursor-pointer select-none font-mono hover:text-white">Python code ({(run.commands[0] ?? "").split("\n").length} lines)</summary>
+            <pre className="mt-2 max-h-80 overflow-auto font-mono text-[12.5px] leading-[1.55] text-white/80">{run.commands[0]}</pre>
+          </details>
+        )}
         <div className="divide-y divide-white/[0.06]">
           {run.results.map((r, i) => {
             const first = tableN;

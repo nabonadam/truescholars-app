@@ -181,13 +181,18 @@ export async function submit(db: DB, ownerId: string, sessionId: string, input: 
     await execute(db, session, r.id, commands, text, false);
     return r.id;
   }
-  const recent = (await listRuns(db, sessionId)).filter((r) => r.status === "DONE").slice(-6).flatMap((r) => r.commands);
+  const recent = (await listRuns(db, sessionId)).filter((r) => r.status === "DONE").slice(-6).flatMap((r) => (r.mode === "PYTHON" ? [`* (Python analysis) ${r.input}`] : r.commands));
   let plan;
   try {
     plan = await translate(text, { vars: session.variables, nObs: session.nObs, history: session.history, recent });
   } catch (err) {
     if (err instanceof AiUnavailable) throw new StatsError(err.message);
     throw err;
+  }
+  if (plan.python) {
+    const [p] = await db.insert(statRuns).values({ sessionId, input: text, mode: "PYTHON", commands: [plan.python], status: "PLAN", explanation: plan.explanation }).returning({ id: statRuns.id });
+    await touch(db, sessionId);
+    return p.id;
   }
   const status = plan.commands.length ? "PLAN" : "CLARIFY";
   const [r] = await db
@@ -202,6 +207,12 @@ export async function submit(db: DB, ownerId: string, sessionId: string, input: 
 export async function confirm(db: DB, ownerId: string, runId: string, edited?: string) {
   const { run, session } = await mustRun(db, ownerId, runId);
   if (run.status !== "PLAN") throw new StatsError("This plan has already been handled.");
+  if (run.mode === "PYTHON") {
+    const code = (edited ?? run.commands[0] ?? "").trim();
+    if (!code) throw new StatsError("There is no code to run.");
+    if (code.length > 20_000) throw new StatsError("That code is too long.");
+    return executePython(db, session, runId, code, run.input);
+  }
   const commands = edited !== undefined ? splitCommands(edited) : run.commands;
   if (!commands.length) throw new StatsError("There is nothing to run.");
   await execute(db, session, runId, commands, run.input, true);
@@ -236,6 +247,21 @@ async function execute(db: DB, session: Session, runId: string, commands: string
     await touch(db, session.id);
   }
   if (explain && ok) await explainRun(db, runId, input, out.results).catch(() => null);
+}
+
+/** Open analysis: approved Python, run in the engine's sandbox. It reads the data; it never changes it. */
+async function executePython(db: DB, session: Session, runId: string, code: string, input: string) {
+  let out: { results: CommandResult[] };
+  try {
+    out = await engine("/python", { datasetId: session.datasetId, history: session.history, code, title: input.replace(/\s+/g, " ").slice(0, 80) });
+  } catch (err) {
+    await db.update(statRuns).set({ status: "ERROR", commands: [code], results: [{ command: "python", ok: false, error: err instanceof Error ? err.message : "failed" }] }).where(eq(statRuns.id, runId));
+    throw err;
+  }
+  const ok = out.results.every((r) => r.ok);
+  await db.update(statRuns).set({ status: ok ? "DONE" : "ERROR", commands: [code], results: out.results }).where(eq(statRuns.id, runId));
+  await touch(db, session.id);
+  if (ok) await explainRun(db, runId, input, out.results).catch(() => null);
 }
 
 async function explainRun(db: DB, runId: string, input: string, results: CommandResult[]) {
@@ -311,6 +337,12 @@ export function doFile(session: Session, runs: Run[]) {
       continue;
     }
     if (r.status !== "DONE" && r.status !== "ERROR") continue;
+    if (r.mode === "PYTHON") {
+      if (r.status !== "DONE") continue;
+      lines.push(`* ${r.input.replace(/\n/g, " ")}`, "* Advanced analysis run in Python (no Stata command does this directly). The code, for your records:");
+      lines.push(...(r.commands[0] ?? "").split("\n").map((l) => `*   ${l}`), "");
+      continue;
+    }
     const okCommands = r.results.filter((x) => x.ok).map((x) => x.command);
     if (!okCommands.length) continue;
     lines.push(r.mode === "ENGLISH" ? `* ${r.input.replace(/\n/g, " ")}` : "*" + "-".repeat(40));

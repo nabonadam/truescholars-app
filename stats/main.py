@@ -154,6 +154,26 @@ def _restore_estimation(ds: Dataset, body: RunBody):
             pass
 
 
+class PythonBody(LoadBody):
+    code: str
+    title: str = ""
+
+
+@app.post("/python", dependencies=[Depends(auth)])
+def python_(body: PythonBody):
+    """Open analysis: approved Python, run in the sandbox against the session's current data."""
+    from engine.sandbox import run_python
+
+    try:
+        ds = state(body.datasetId, body.history, writable=False)
+    except StataError as e:
+        raise HTTPException(422, f"Replaying your earlier commands failed: {e}") from e
+    try:
+        return {"results": [run_python(ds, body.code, body.title)], "changed": False}
+    except StataError as e:
+        return {"results": [{"command": f"python: {body.title}" if body.title else "python", "ok": False, "error": str(e)}], "changed": False}
+
+
 class ExportBody(BaseModel):
     title: str = ""
     tables: list[dict]

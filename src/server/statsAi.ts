@@ -20,7 +20,7 @@ export type VarMeta = {
   values?: string[];
 };
 
-export type Plan = { commands: string[]; explanation: string; clarification?: string };
+export type Plan = { commands: string[]; explanation: string; clarification?: string; python?: string };
 
 export class AiUnavailable extends Error {}
 
@@ -58,6 +58,13 @@ xtile q = x, nquantiles(4)    tabulate x, generate(x_)   (dummy set x_1 x_2 ...)
 After regress: predict yhat | predict e, residuals | predict rs, rstandard | estat hettest | estat vif | estat ic | swilk e
 After logit/logistic/probit/poisson: predict p (probability) | margins | margins x | margins, dydx(*) | margins, dydx(x) | margins x, atmeans | margins, at(age=(20(10)60)) | marginsplot | estat classification | lroc
 Graphs: histogram x [, normal percent bin(#) discrete] | graph bar (mean) y [aw=wt], over(x) [over(z)] | graph bar, over(x) (percent) | graph hbar ... | graph box y, over(x) | scatter y x || lfit y x | twoway (scatter y x) (lfitci y x) | twoway line y x, sort
+Survey design: svyset psu [pw=wt], strata(stratum) [fpc(fpcvar)] then svy: mean y | svy: proportion x | svy: tab x z [, col row] | svy: regress/logit/logistic/probit/poisson y xvars   (svy, subpop() is not available)
+Panel: xtset id [time] then xtreg y x1 x2, fe | xtreg y x1 x2, re | xtreg ..., fe vce(cluster id)
+Multilevel: mixed y x1 x2 || group:  | mixed y x1 || group: x1 (random slope) [, reml]
+Ordinal / nominal / counts: ologit y x [, or] | oprobit y x | mlogit y x [, baseoutcome(#) rrr] | nbreg count x [, irr]
+Instrumental variables: ivregress 2sls y exog1 (endog = inst1 inst2) [, robust small]
+Scales: factor v1-v10 [, pcf ipf factors(#)] then rotate [, promax] | alpha v1-v10 [, item std asis]
+Survival: stset time, failure(event) then stcox x1 x2 [, nohr robust] | sts graph [, by(group)] | sts test group
 Prefix: by var: <command>   (not with data-changing commands; bysort g: egen ... works)
 Factor variables: i.x (first level is base), ib2.x, ib(last).x, c.x, a#b, a##b
 Expressions: + - * / ^, == != > < >= <=, & | !, missing(), inrange(x,a,b), inlist(x,a,b), ln(), log10(), exp(), sqrt(), abs(), round(), cond()
@@ -75,9 +82,17 @@ const RULES = `Rules:
 - For predicted probabilities after logit/logistic use margins (margins x, or margins, at(...)) and marginsplot when they want a picture.
 - When they ask to check regression assumptions: predict e, residuals then swilk e, estat hettest and estat vif.
 - When they ask for a chart, choose: histogram for one numeric variable, graph bar (mean) y, over(x) for means by group, graph bar, over(x) for category shares, graph box for spread by group, scatter y x || lfit y x for two numeric variables.
+- Survey data (a PSU/cluster id, strata and a weight): svyset once, then svy: prefix. Panel data (repeated observations per id): xtset then xtreg (fe unless they ask for re; Hausman is a Python analysis). Students nested in schools/districts: mixed ... || school:.
 - Keep to the fewest commands that answer the request. Never invent results.
-- If the request cannot be answered with the supported commands, or a needed variable is missing or unclear, return no commands and ask one short clarification question.
-- explanation: one or two plain sentences saying what the commands do and why that test fits, for a student.`;
+- If a needed variable is missing or the request is unclear, return no commands and ask one short clarification question.
+- If no supported command can do it (for example a multilevel logistic model (melogit), quantile regression, tobit, Heckman, zero-inflated counts, PCA, cluster/k-means, propensity scores, Hausman test, ARIMA/time series, bootstrap, power analysis, simulation, a special chart), do not refuse: leave commands empty and write python instead.
+Python (only when no command fits):
+- The data is a pandas DataFrame df with the codebook's variable names (after the data changes listed). value_labels[var] maps codes to labels; var_labels[var] gives variable labels.
+- Ready to use: pd, np, sm (statsmodels.api), smf (statsmodels.formula.api), stats (scipy.stats), plt. You may import pandas, numpy, scipy, statsmodels, linearmodels, lifelines, sklearn, matplotlib, math, statistics, itertools, collections, functools, re, warnings, datetime.
+- Report with show(obj, title="...", note="...", decimals=3): a DataFrame/Series becomes an APA table; a fitted statsmodels/linearmodels result prints its summary and a coefficient table. Matplotlib figures are added automatically (or figure(fig, title="...")). print() adds text to the log. Call result(name=value, ...) with the key numbers for the write-up and note("...") for assumption warnings.
+- Not allowed (the code is rejected): files, network, os/sys/subprocess, open, eval/exec, getattr, names or strings containing __, str.format (use f-strings), global. Changes to df are not saved.
+- Use complete cases for the variables used (d = df[[...]].dropna()), seed randomness (np.random.default_rng(12345)), keep it under 60 lines with short comments a student can follow, and label tables and axes in plain words.
+- explanation: one or two plain sentences saying what the commands (or the Python) do and why that method fits, for a student.`;
 
 function codebook(vars: VarMeta[]): string {
   return vars
@@ -108,22 +123,23 @@ async function claude(body: Record<string, unknown>) {
 }
 
 export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: number; history: string[]; recent: string[] }): Promise<Plan> {
-  const system = `You are the analysis planner inside a Stata-style statistics workspace used by students and researchers in Ghana. You turn a request into Stata commands that our engine runs.\n\n${SYNTAX}\n\n${RULES}\n- Always answer by calling the plan tool, never with plain text.`;
+  const system = `You are the analysis planner inside a Stata-style statistics workspace used by students and researchers in Ghana. You turn a request into Stata commands that our engine runs, or, when no command fits, into a short Python analysis.\n\n${SYNTAX}\n\n${RULES}\n- Always answer by calling the plan tool, never with plain text.`;
   const user = `Dataset: ${ctx.nObs} observations.\nCodebook:\n${codebook(ctx.vars)}\n\nData changes already applied (in order):\n${ctx.history.join("\n") || "(none)"}\n\nRecent analyses:\n${ctx.recent.join("\n") || "(none)"}\n\nRequest: ${input}`;
   const out = await claude({
-    max_tokens: 1200,
+    max_tokens: 3000,
     system,
     messages: [{ role: "user", content: user }],
     tools: [
       {
         name: "plan",
-        description: "Return the Stata commands to run, or a clarification question.",
+        description: "Return the Stata commands to run; or, when no command fits, Python code; or a clarification question.",
         input_schema: {
           type: "object",
           properties: {
             commands: { type: "array", items: { type: "string" }, description: "Stata command lines, in order" },
             explanation: { type: "string" },
-            clarification: { type: "string", description: "Only when no commands can be given" },
+            python: { type: "string", description: "Python analysis code, only when no supported command fits (commands empty then)" },
+            clarification: { type: "string", description: "Only when neither commands nor python can be given" },
           },
           required: ["commands", "explanation"],
         },
@@ -147,6 +163,7 @@ export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: num
     commands: (plan.commands ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 12),
     explanation: plan.explanation?.trim() ?? "",
     clarification: plan.clarification?.trim() || undefined,
+    python: plan.python?.trim() && !(plan.commands ?? []).some((c) => c.trim()) ? plan.python.trim().slice(0, 20_000) : undefined,
   };
 }
 

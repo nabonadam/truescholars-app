@@ -9,3 +9,6 @@ openpyxl==3.1.5
 python-docx==1.2.0
 psycopg[binary]==3.3.8
 matplotlib==3.11.2
+linearmodels==7.1
+lifelines==0.30.3
+scikit-learn==1.9.1

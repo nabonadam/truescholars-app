@@ -12,6 +12,8 @@ from . import datamore as dm
 from . import inference as inf
 from . import graphs as gr
 from . import postest as pe
+from . import survey as sv
+from . import models as md
 from . import statcmds as sc
 from .data import Dataset, StataError, is_numeric
 from .result import Result
@@ -58,6 +60,21 @@ HANDLERS = {
     "scatter": gr.scatter,
     "twoway": gr.twoway,
     "marginsplot": gr.marginsplot,
+    "svyset": sv.svyset,
+    "xtset": md.xtset,
+    "xtreg": md.xtreg,
+    "mixed": md.mixed,
+    "ologit": md.ordered,
+    "oprobit": md.ordered,
+    "mlogit": md.mlogit,
+    "nbreg": md.nbreg,
+    "ivregress": md.ivregress,
+    "factor": md.factor,
+    "rotate": md.rotate,
+    "alpha": md.alpha,
+    "stset": md.stset,
+    "stcox": md.stcox,
+    "sts": md.sts,
     "predict": pe.predict,
     "estat": pe.estat,
     "margins": pe.margins,
@@ -85,6 +102,7 @@ NO_WEIGHTS = {
     "oneway": "weights with oneway aren't available yet; use regress y i.group [aw=w] (its F test is the one-way ANOVA)",
     "codebook": "weights not allowed with codebook",
     "describe": "weights not allowed with describe",
+    **{c: f"weights with {c} aren't built in yet; describe the weighted model in plain English and the assistant will run it as an advanced analysis" for c in ("xtreg", "mixed", "ologit", "oprobit", "mlogit", "nbreg", "ivregress", "factor", "alpha", "stcox", "sts")},
 }
 
 
@@ -104,6 +122,8 @@ def run_line(ds: Dataset, line: str) -> Result:
 
     _expr.RNG = ds.rng
     cmd = parse(stripped)
+    if cmd.svy:
+        return sv.svy_dispatch(ds, cmd)
     if cmd.weight and cmd.name in NO_WEIGHTS:
         raise StataError(NO_WEIGHTS[cmd.name])
     handler = HANDLERS[cmd.name]

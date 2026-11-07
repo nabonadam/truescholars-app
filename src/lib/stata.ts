@@ -7,6 +7,8 @@ export const STATA_COMMANDS = [
   "label", "mvdecode", "encode", "destring", "list", "count", "mean", "proportion", "ci", "prtest",
   "somersd", "lambda", "egen", "xtile", "sample", "set", "version", "sort", "gsort", "predict", "estat",
   "margins", "marginsplot", "lroc", "swilk", "histogram", "graph", "scatter", "twoway", "clear", "quietly",
+  "svyset", "xtset", "xtreg", "mixed", "ologit", "oprobit", "mlogit", "nbreg", "ivregress", "factor", "rotate", "alpha",
+  "stset", "stcox", "sts",
 ] as const;
 
 const ABBREV = new Set([
@@ -19,7 +21,8 @@ const KNOWN_ELSEWHERE = new Set([
   "ssc", "net", "ado", "which", "use", "import", "insheet", "sysuse", "webuse", "save", "saveold", "export", "outsheet",
   "outreg2", "esttab", "putdocx", "putexcel", "asdoc", "kdensity",
   "cd", "display", "di", "local", "global", "foreach", "forvalues", "merge", "append", "reshape",
-  "collapse", "svy", "svyset", "xtreg", "xtset", "help", "preserve", "restore",
+  "collapse", "svy", "help", "preserve", "restore", "melogit", "meologit", "mepoisson", "xtlogit", "xtprobit", "qreg", "tobit",
+  "heckman", "zinb", "zip", "pca", "glm", "sem", "gsem", "streg", "teffects", "arima",
 ]);
 
 const WORD = /^([a-z][a-z0-9]*)\b/i;

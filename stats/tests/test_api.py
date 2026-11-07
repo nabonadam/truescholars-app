@@ -91,3 +91,13 @@ def test_model_is_remembered_between_requests(client):
     assert r3["results"][0]["ok"] and r3["results"][0]["images"] and r3["results"][1]["ok"]
     r4 = client.post("/run", headers=H, json={"datasetId": "d", "history": [], "commands": ["estat vif"]}).json()
     assert not r4["results"][0]["ok"] and "last estimates not found" in r4["results"][0]["error"]
+
+
+def test_python_open_analysis(client):
+    hist = ["mvdecode income, mv(99999)", "gen lninc = ln(income)"]
+    code = "d = df[['wellbeing', 'lninc']].dropna()\nm = smf.ols('wellbeing ~ lninc', data=d).fit()\nshow(m, title='Wellbeing on log income')\nresult(n=len(d))"
+    r = client.post("/python", headers=H, json={"datasetId": "d", "history": hist, "code": code, "title": "ols"}).json()
+    res = r["results"][0]
+    assert res["ok"] and res["tables"][0]["title"] == "Wellbeing on log income" and res["summary"]["n"] > 100 and not r["changed"]
+    bad = client.post("/python", headers=H, json={"datasetId": "d", "history": [], "code": "import os"}).json()["results"][0]
+    assert not bad["ok"] and "not allowed" in bad["error"]
