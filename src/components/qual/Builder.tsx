@@ -127,11 +127,18 @@ export function Builder({ id, initial, token, status, unpublished, canPublish }:
           <h2 className="text-lg font-bold">Settings</h2>
           <div>
             <label className="label" htmlFor="s-lang">Language people will speak</label>
-            <select id="s-lang" className="field" value={d.settings.language} onChange={(e) => setS({ language: e.target.value as StudySettings["language"] })}>
+            <select id="s-lang" className="field" value={d.settings.language} onChange={(e) => { const language = e.target.value as StudySettings["language"]; setS(language !== "en" && language !== "none" && !d.settings.translate ? { language, translate: true } : { language }); }}>
               {Object.entries(LANGUAGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
             <p className="mt-1 text-[12px] text-ink-muted">Automatic transcription supports these languages. For Twi, Ewe, Dagbani and other local languages, choose “Don’t transcribe automatically” and type or paste transcripts.</p>
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={d.settings.translate} onChange={(e) => setS({ translate: e.target.checked })} className="mt-0.5 h-4 w-4 flex-none accent-green" />
+            <span>
+              <b>Translate answers into English</b>
+              <span className="block text-[12px] text-ink-muted">Voice transcripts and typed answers are translated for you, and the analysis works from the English. The originals are always kept, and exports include both. Works for answers in any language, including transcripts you type in.</span>
+            </span>
+          </label>
           <div>
             <label className="label" htmlFor="s-max">Longest voice answer</label>
             <select id="s-max" className="field" value={d.settings.maxSeconds} onChange={(e) => setS({ maxSeconds: Number(e.target.value) })}>

@@ -6,6 +6,8 @@ import { requireUser } from "@/server/guards";
 import { getStudy, listResponses, studySettings, transcriptionOn, usable } from "@/server/qual";
 import { fieldQuestions } from "@/server/qualExport";
 import { storageKind } from "@/server/qualStorage";
+import { aiOn } from "@/server/qualAnalysis";
+import { pendingTranslations } from "@/server/qualTranslate";
 import { canUse, toolAccessFor } from "@/server/toolAccess";
 
 export const metadata = { title: "Responses · Qualitative Studio" };
@@ -47,6 +49,8 @@ export default async function StudyResponses({ params }: { params: Promise<{ id:
       studyId={id}
       questions={qs}
       language={studySettings(s).language}
+      translate={studySettings(s).translate && aiOn()}
+      toTranslate={pendingTranslations(qs, good)}
       canWork={canUse(access)}
       transcriptionOn={transcriptionOn()}
       storage={storageKind()}

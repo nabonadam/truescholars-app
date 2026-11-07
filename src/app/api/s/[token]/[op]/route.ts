@@ -4,6 +4,8 @@ import { getDb } from "@/db";
 import { qualStudies, users } from "@/db/schema";
 import { canUse, peekToolAccess } from "@/server/toolAccess";
 import { audioResponse } from "@/server/audioResponse";
+import { translateResponse } from "@/server/qualTranslate";
+import { aiOn } from "@/server/qualAnalysis";
 import { MAX_AUDIO_BYTES, publicExplanation, QualError, clearAudio, resumeResponse, saveAnswer, saveAudio, startResponse, submitResponse, transcribeResponse, transcriptionOn } from "@/server/qual";
 import { QuotaError, metered } from "@/server/usage";
 import { clientIp, hit, readBody } from "@/server/rateLimit";
@@ -63,12 +65,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       case "submit": {
         const done = await submitResponse(db, token, rid, secret);
         // Automatic transcription is a paid feature: only while the researcher has access.
-        if (transcriptionOn()) after(async () => {
+        if (transcriptionOn() || aiOn()) after(async () => {
           const [owner] = await getDb().select({ id: users.id, roles: users.roles }).from(qualStudies).innerJoin(users, eq(users.id, qualStudies.ownerId)).where(eq(qualStudies.token, token));
           if (!owner || !canUse((await peekToolAccess(getDb(), "qual", owner)).access as Parameters<typeof canUse>[0])) return;
           // counted against the researcher's transcription allowance; over it, recordings wait for them to transcribe later
-          await metered(getDb(), owner, "qual", "qual.autotranscribe", () => transcribeResponse(getDb(), done.responseId)).catch((e) => {
+          if (transcriptionOn()) await metered(getDb(), owner, "qual", "qual.autotranscribe", () => transcribeResponse(getDb(), done.responseId)).catch((e) => {
             if (!(e instanceof QuotaError)) console.error("auto-transcribe", e);
+          });
+          // then, if the study asks for it, English translations of the open answers
+          await metered(getDb(), owner, "qual", "qual.autotranslate", () => translateResponse(getDb(), owner.id, done.studyId, done.responseId)).catch((e) => {
+            if (!(e instanceof QuotaError)) console.error("auto-translate", e);
           });
         });
         return NextResponse.json({ ok: true });

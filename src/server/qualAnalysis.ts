@@ -11,7 +11,7 @@
 import { eq } from "drizzle-orm";
 import type { DB } from "@/db";
 import { qualAnalyses } from "@/db/schema";
-import { answerText, answerable, pid, questionNumbers, type Question } from "@/lib/qual";
+import { analysisText, answerText, answerable, pid, questionNumbers, type Question } from "@/lib/qual";
 import { QualError, getStudy, listResponses, usable } from "./qual";
 import { fieldQuestions } from "./qualExport";
 import { guardAi, recordTokens } from "./usage";
@@ -52,7 +52,7 @@ export async function cases(db: DB, ownerId: string, studyId: string): Promise<{
     .map((r) => {
       const text = open
         .map((q) => {
-          const a = answerText(q, r.answers[q.id]);
+          const a = analysisText(q, r.answers[q.id]);
           return a ? `Q${nums[q.id]}. ${q.text}\n${a}` : "";
         })
         .filter(Boolean)

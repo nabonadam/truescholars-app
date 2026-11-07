@@ -20,6 +20,9 @@ export const LANGUAGES = {
   pt: "Portuguese",
   es: "Spanish",
   de: "German",
+  "zh-CN": "Chinese, Mandarin (Simplified)",
+  "zh-TW": "Chinese, Mandarin (Traditional)",
+  "zh-HK": "Chinese, Cantonese",
   none: "Don't transcribe automatically (type transcripts yourself)",
 } as const;
 export type Lang = keyof typeof LANGUAGES;
@@ -47,6 +50,7 @@ export const settingsSchema = z.object({
   askEmail: z.enum(["required", "optional", "no"]).default("no"),
   thankYou: z.string().trim().max(1500).default("Thank you. Your answers have been saved and will help this research."),
   notifyOwner: z.boolean().default(true),
+  translate: z.boolean().default(false), // translate open answers into English (originals are kept)
 });
 export type StudySettings = z.infer<typeof settingsSchema>;
 export const defaultSettings = (): StudySettings => settingsSchema.parse({});
@@ -61,6 +65,10 @@ export type Answer = {
   transcript?: string;
   tStatus?: "pending" | "done" | "failed" | "edited" | "none";
   tError?: string;
+  translation?: string; // English translation of the answer
+  trOf?: string; // fingerprint of the text that was translated; a mismatch means the answer changed since
+  trStatus?: "done" | "failed";
+  trError?: string;
 };
 export type Answers = Record<string, Answer>;
 
@@ -128,6 +136,33 @@ export function answerText(q: Question, a: Answer | undefined): string {
   if (q.type === "rating") return typeof a.rating === "number" ? String(a.rating) : "";
   return a.choice ?? "";
 }
+
+/** A short fingerprint of a string (same result on server and browser). */
+export function fingerprint(t: string) {
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return `${t.length}.${(h >>> 0).toString(36)}`;
+}
+
+/** Open questions (voice or text) are the ones translated. */
+export const translatable = (q: Question) => q.type === "voice" || q.type === "text";
+
+/** The English translation, when there is one for the answer as it stands now. */
+export function translationOf(q: Question, a: Answer | undefined): string | null {
+  if (!a?.translation || !translatable(q)) return null;
+  const src = answerText(q, a);
+  return src && a.trOf === fingerprint(src) ? a.translation : null;
+}
+
+/** Whether an answer still needs translating (none yet, or the answer changed since). */
+export function needsTranslation(q: Question, a: Answer | undefined) {
+  if (!translatable(q) || !a) return false;
+  const src = answerText(q, a);
+  return !!src && (a.trOf !== fingerprint(src) || !a.translation);
+}
+
+/** The text analysis works from: the English translation when there is a current one. */
+export const analysisText = (q: Question, a: Answer | undefined) => translationOf(q, a) ?? answerText(q, a);
 
 export const pid = (n: number) => `P${String(n).padStart(2, "0")}`;
 export const fmtSeconds = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;

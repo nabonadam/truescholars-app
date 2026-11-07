@@ -6,7 +6,7 @@
 
 import { Zip, ZipPassThrough, strToU8, zipSync } from "fflate";
 import type { DB } from "@/db";
-import { answerText, answerable, pid, questionNumbers, type PublishedStudy, type Question } from "@/lib/qual";
+import { answerText, answerable, pid, questionNumbers, translationOf, type PublishedStudy, type Question } from "@/lib/qual";
 import { getAudio } from "./qualStorage";
 import { type ListedResponse, type StudyRow, studyQuestions, studySettings, usable } from "./qual";
 
@@ -27,9 +27,12 @@ export function responsesCsv(s: StudyRow, rs: ListedResponse[], opts: { all?: bo
   const qs = answerable(fieldQuestions(s));
   const nums = questionNumbers(fieldQuestions(s));
   const rows = opts.all ? rs : usable(rs);
+  // an English column for each open question that has any translation
+  const translated = new Set(qs.filter((q) => rows.some((r) => translationOf(q, r.answers[q.id]))).map((q) => q.id));
   const head = ["Participant", "Name", "Email", "Status", "Test response", "Tags", "Started", "Submitted"];
   for (const q of qs) {
     head.push(`Q${nums[q.id]}. ${q.text}`);
+    if (translated.has(q.id)) head.push(`Q${nums[q.id]} (English translation)`);
     if (q.type === "voice") head.push(`Q${nums[q.id]} answered by`, `Q${nums[q.id]} audio file`, `Q${nums[q.id]} seconds`);
   }
   const lines = [head.map(cell).join(",")];
@@ -38,6 +41,7 @@ export function responsesCsv(s: StudyRow, rs: ListedResponse[], opts: { all?: bo
     for (const q of qs) {
       const a = r.answers[q.id];
       line.push(answerText(q, a));
+      if (translated.has(q.id)) line.push(translationOf(q, a) ?? "");
       if (q.type === "voice") line.push(a?.text?.trim() ? "typing" : a?.audio ? "voice" : "", a?.audio ? audioName(r, q, nums[q.id], a.audio.key) : "", a?.audio?.seconds ?? "");
     }
     lines.push(line.map(cell).join(","));
@@ -54,7 +58,10 @@ export function transcriptsZip(s: StudyRow, rs: ListedResponse[]) {
     const attrs = qs.filter((q) => q.type !== "voice" && q.type !== "text").map((q) => `${q.text}: ${answerText(q, r.answers[q.id]) || "(no answer)"}`);
     const body = qs
       .filter((q) => q.type === "voice" || q.type === "text")
-      .map((q) => `Q${nums[q.id]}. ${q.text}\n\n${answerText(q, r.answers[q.id]) || "(no answer)"}`)
+      .map((q) => {
+        const tr = translationOf(q, r.answers[q.id]);
+        return `Q${nums[q.id]}. ${q.text}\n\n${answerText(q, r.answers[q.id]) || "(no answer)"}${tr && tr !== answerText(q, r.answers[q.id]) ? `\n\n[English translation]\n${tr}` : ""}`;
+      })
       .join("\n\n\n");
     const text = [`${s.title}`, `Participant ${pid(r.n)}`, ...(attrs.length ? ["", ...attrs] : []), "", "─".repeat(40), "", body, ""].join("\n");
     files[`${pid(r.n)}.txt`] = strToU8(text.replace(/\n/g, "\r\n"));

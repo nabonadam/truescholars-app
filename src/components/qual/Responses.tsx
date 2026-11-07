@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { deleteResponseAction, flagAction, tagsAction, transcribeAllAction, transcriptAction } from "@/app/actions/qual";
-import { answerText, fmtSeconds, pid, questionNumbers, type Answers, type Question } from "@/lib/qual";
+import { deleteResponseAction, flagAction, tagsAction, transcribeAllAction, transcriptAction, translateAllAction } from "@/app/actions/qual";
+import { answerText, fmtSeconds, needsTranslation, pid, questionNumbers, translationOf, type Answer as Ans, type Answers, type Question } from "@/lib/qual";
 import { Icon } from "../Icons";
 
 type R = { id: string; n: number; name: string | null; email: string | null; status: string; flagged: boolean; tags: string[]; startedAt: string; submittedAt: string | null; answers: Answers };
@@ -12,7 +12,7 @@ type Totals = { submitted: number; inProgress: number; test: number; recordings:
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export function Responses(p: { studyId: string; questions: Question[]; language: string; canWork: boolean; transcriptionOn: boolean; storage: string; charts: Chart[]; days: { d: string; n: number }[]; totals: Totals; responses: R[] }) {
+export function Responses(p: { studyId: string; questions: Question[]; language: string; translate: boolean; toTranslate: number; canWork: boolean; transcriptionOn: boolean; storage: string; charts: Chart[]; days: { d: string; n: number }[]; totals: Totals; responses: R[] }) {
   const [filter, setFilter] = useState<"done" | "progress" | "test" | "all">("done");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
@@ -26,9 +26,28 @@ export function Responses(p: { studyId: string; questions: Question[]; language:
     const term = q.trim().toLowerCase();
     return p.responses
       .filter((r) => (filter === "all" ? true : filter === "test" ? r.flagged : filter === "progress" ? r.status !== "SUBMITTED" && !r.flagged : r.status === "SUBMITTED" && !r.flagged))
-      .filter((r) => !term || [pid(r.n), r.name, r.email, ...r.tags, ...p.questions.map((qq) => answerText(qq, r.answers[qq.id]))].join(" ").toLowerCase().includes(term))
+      .filter((r) => !term || [pid(r.n), r.name, r.email, ...r.tags, ...p.questions.flatMap((qq) => [answerText(qq, r.answers[qq.id]), translationOf(qq, r.answers[qq.id]) ?? ""])].join(" ").toLowerCase().includes(term))
       .reverse();
   }, [p.responses, p.questions, filter, q]);
+
+  const translateLoop = async () => {
+    let done = 0,
+      failed = 0;
+    for (let i = 0; i < 40; i++) {
+      const r = await translateAllAction(p.studyId);
+      if (r.error) return setMsg({ t: r.error, bad: true });
+      done += r.done ?? 0;
+      failed += r.failed ?? 0;
+      if (!r.remaining) break;
+      setMsg({ t: `Translated ${done} so far… ${r.remaining} to go.` });
+    }
+    setMsg({ t: `Translated ${done} answer${done === 1 ? "" : "s"} into English.${failed ? ` ${failed} failed; try again in a moment.` : ""}`, bad: failed > 0 && done === 0 });
+  };
+  const translateAll = () =>
+    start(async () => {
+      setMsg({ t: "Translating into English…" });
+      await translateLoop();
+    });
 
   const transcribeAll = () =>
     start(async () => {
@@ -44,6 +63,10 @@ export function Responses(p: { studyId: string; questions: Question[]; language:
         setMsg({ t: `Transcribed ${done} so far… ${r.remaining} to go.` });
       }
       setMsg({ t: `Transcribed ${done} recording${done === 1 ? "" : "s"}.${failed ? ` ${failed} failed; open the response to see why, or type the transcript.` : ""}`, bad: failed > 0 && done === 0 });
+      if (p.translate && done > 0) {
+        setMsg({ t: "Transcribed. Now translating into English…" });
+        await translateLoop();
+      }
     });
 
   const max = Math.max(1, ...p.days.map((x) => x.n));
@@ -65,9 +88,13 @@ export function Responses(p: { studyId: string; questions: Question[]; language:
               : p.transcriptionOn
                 ? "New recordings are transcribed automatically when a respondent submits. You can edit any transcript."
                 : "Automatic transcription isn't switched on yet. You can type transcripts into each response."}
+            {p.translate && " Open answers are translated into English for analysis; the originals are always kept."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {p.translate && p.toTranslate > 0 && (
+            <button className="btn-amber min-h-10 px-4 text-sm" disabled={busy || !p.canWork} onClick={translateAll}>{busy ? "Working…" : `Translate ${p.toTranslate} into English`}</button>
+          )}
           {p.transcriptionOn && p.language !== "none" && needsTranscript > 0 && (
             <button className="btn-amber min-h-10 px-4 text-sm" disabled={busy || !p.canWork} onClick={transcribeAll}>{busy ? "Transcribing…" : `Transcribe ${needsTranscript}`}</button>
           )}
@@ -223,10 +250,31 @@ function Answer({ q, n, r, studyId }: { q: Question; n: number; r: R; studyId: s
             </div>
           )}
           {a.text?.trim() && <p className="text-[14.5px]"><span className="text-xs font-bold text-ink-muted">Also typed: </span>{a.text}</p>}
+          <Translation q={q} a={a} />
         </div>
       ) : (
-        <p className="mt-1 text-[14.5px] whitespace-pre-line">{answerText(q, a)}{q.type === "voice" && <span className="ml-2 text-xs text-ink-muted">(typed)</span>}</p>
+        <>
+          <p className="mt-1 text-[14.5px] whitespace-pre-line">{answerText(q, a)}{q.type === "voice" && <span className="ml-2 text-xs text-ink-muted">(typed)</span>}</p>
+          <Translation q={q} a={a} />
+        </>
       )}
     </div>
   );
+}
+
+/** The English translation under an answer (the original stays above it). */
+function Translation({ q, a }: { q: Question; a: Ans | undefined }) {
+  const tr = translationOf(q, a);
+  if (tr) {
+    if (tr.trim() === answerText(q, a).trim()) return null; // it was already English
+    return (
+      <div className="mt-2 rounded-sm border-l-4 border-amber bg-white px-3 py-2 text-[14.5px] whitespace-pre-line">
+        <span className="mb-0.5 block text-[11px] font-bold tracking-wide text-ink-muted uppercase">English translation · AI</span>
+        {tr}
+      </div>
+    );
+  }
+  if (a?.trStatus === "failed" && needsTranslation(q, a)) return <p className="mt-1 text-xs text-red-700">Translation failed: {a.trError}. Use “Translate” above to try again.</p>;
+  if (a?.translation && needsTranslation(q, a)) return <p className="mt-1 text-xs text-ink-muted">The answer changed since it was translated; translate again to update the English.</p>;
+  return null;
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { translateStudy } from "@/server/qualTranslate";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
@@ -9,14 +10,16 @@ import {
   deleteResponse,
   deleteStudy,
   editTranscript,
+  getStudy,
   publishStudy,
   saveDraft,
   setFlag,
   setStudyOpen,
   setTags,
+  studySettings,
   transcribeStudy,
 } from "@/server/qual";
-import { PHASES, type Phase, editAnalysis, runPhase, saveSetup } from "@/server/qualAnalysis";
+import { PHASES, type Phase, aiOn, editAnalysis, runPhase, saveSetup } from "@/server/qualAnalysis";
 import { createFromTemplate, createSampleStudy, TEMPLATES, type TemplateKey } from "@/server/qualTemplates";
 import { canUse, requestToolUpgrade, toolAccessFor } from "@/server/toolAccess";
 import { QuotaError, metered } from "@/server/usage";
@@ -132,6 +135,10 @@ export async function transcriptAction(studyId: string, responseId: string, ques
   try {
     const user = await requireUser();
     await editTranscript(getDb(), user.id, responseId, questionId, text);
+    const s = await getStudy(getDb(), user.id, studyId);
+    if (s && studySettings(s).translate && aiOn()) {
+      await metered(getDb(), user, "qual", "qual.translate", () => translateStudy(getDb(), user.id, studyId, 3)).catch((e) => console.error("translate after edit", e));
+    }
     pages(studyId);
     return { ok: "Transcript saved", at: Date.now() };
   } catch (err) {
@@ -146,6 +153,18 @@ export async function transcribeAllAction(studyId: string): Promise<{ error?: st
     const r = await metered(getDb(), user, "qual", "qual.transcribe", () => transcribeStudy(getDb(), user.id, studyId, 15));
     pages(studyId);
     return { ok: "Transcribed", at: Date.now(), ...r };
+  } catch (err) {
+    return known(err) ?? {};
+  }
+}
+
+/** Translates up to 20 answers per call into English; the page calls again while some remain. */
+export async function translateAllAction(studyId: string): Promise<{ error?: string; ok?: string; at?: number; remaining?: number; done?: number; failed?: number }> {
+  try {
+    const user = await worker();
+    const r = await metered(getDb(), user, "qual", "qual.translate", () => translateStudy(getDb(), user.id, studyId, 20));
+    pages(studyId);
+    return { ok: "Translated", at: Date.now(), ...r };
   } catch (err) {
     return known(err) ?? {};
   }
