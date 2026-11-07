@@ -6,6 +6,7 @@
 
 import { desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
+import { col } from "@/db/col";
 import { statAccess, statRuns, statSessions, users } from "@/db/schema";
 import { notify } from "./notifications";
 
@@ -96,7 +97,7 @@ export async function endAccess(db: DB, userId: string, now = new Date()) {
 }
 
 export async function listStatsUsers(db: DB, q?: string) {
-  const runs = sql<number>`(select count(*)::int from ${statRuns} r join ${statSessions} s on s.id = r.session_id where s.owner_id = ${statAccess.userId} and r.status = 'DONE')`;
+  const runs = sql<number>`(select count(*)::int from ${statRuns} r join ${statSessions} s on s.id = r.session_id where s.owner_id = ${col(statAccess.userId)} and r.status = 'DONE')`;
   const base = db
     .select({ userId: statAccess.userId, name: users.name, email: users.email, trialStartedAt: statAccess.trialStartedAt, accessUntil: statAccess.accessUntil, upgradeRequestedAt: statAccess.upgradeRequestedAt, note: statAccess.note, runs })
     .from(statAccess)

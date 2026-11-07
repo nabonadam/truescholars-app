@@ -6,6 +6,7 @@
 
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
+import { col } from "@/db/col";
 import { litReviews, qualStudies, toolAccess, users } from "@/db/schema";
 import { notify } from "./notifications";
 import { timeLeft, type Access } from "./statsAccess";
@@ -93,8 +94,8 @@ export async function endToolAccess(db: DB, tool: Tool, userId: string, now = ne
 export async function listToolUsers(db: DB, tool: Tool, q?: string) {
   const studies =
     tool === "lit"
-      ? sql<number>`(select count(*)::int from ${litReviews} s where s.owner_id = ${toolAccess.userId})`
-      : sql<number>`(select count(*)::int from ${qualStudies} s where s.owner_id = ${toolAccess.userId})`;
+      ? sql<number>`(select count(*)::int from ${litReviews} s where s.owner_id = ${col(toolAccess.userId)})`
+      : sql<number>`(select count(*)::int from ${qualStudies} s where s.owner_id = ${col(toolAccess.userId)})`;
   const base = db
     .select({ userId: toolAccess.userId, name: users.name, email: users.email, trialStartedAt: toolAccess.trialStartedAt, accessUntil: toolAccess.accessUntil, upgradeRequestedAt: toolAccess.upgradeRequestedAt, note: toolAccess.note, items: studies })
     .from(toolAccess)

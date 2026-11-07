@@ -8,6 +8,7 @@
 
 import { and, asc, desc, eq, max, sql } from "drizzle-orm";
 import type { DB } from "@/db";
+import { col } from "@/db/col";
 import { litAnalyses, litPaperText, litPapers, litReviews } from "@/db/schema";
 import { type Author, type PaperMeta, type Style, isStyle } from "@/lib/cite";
 import { deleteAudio, deleteAudioPrefix, getAudio, putAudio } from "./qualStorage";
@@ -82,7 +83,7 @@ export function cleanBrief(b: Brief): Brief {
 }
 
 export async function listReviews(db: DB, ownerId: string) {
-  const papers = sql<number>`(select count(*)::int from ${litPapers} p where p.review_id = ${litReviews.id} and p.status = 'ACCEPTED')`;
+  const papers = sql<number>`(select count(*)::int from ${litPapers} p where p.review_id = ${col(litReviews.id)} and p.status = 'ACCEPTED')`;
   return db
     .select({ id: litReviews.id, title: litReviews.title, status: litReviews.status, updatedAt: litReviews.updatedAt, papers })
     .from(litReviews)

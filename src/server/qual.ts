@@ -10,6 +10,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import type { DB } from "@/db";
+import { col } from "@/db/col";
 import { qualResponses, qualStudies, users } from "@/db/schema";
 import {
   DEFAULT_INTRO,
@@ -48,7 +49,7 @@ export async function createStudy(db: DB, ownerId: string, p: { title?: string; 
 }
 
 export async function listStudies(db: DB, ownerId: string) {
-  const submitted = sql<number>`(select count(*)::int from ${qualResponses} r where r.study_id = ${qualStudies.id} and r.status = 'SUBMITTED' and not r.flagged)`;
+  const submitted = sql<number>`(select count(*)::int from ${qualResponses} r where r.study_id = ${col(qualStudies.id)} and r.status = 'SUBMITTED' and not r.flagged)`;
   return db
     .select({ id: qualStudies.id, title: qualStudies.title, status: qualStudies.status, updatedAt: qualStudies.updatedAt, publishedAt: qualStudies.publishedAt, questions: qualStudies.questions, responses: submitted })
     .from(qualStudies)

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "@/db";
 import * as schema from "@/db/schema";
 import { fundMilestone } from "@/server/escrow";
-import { addDoi, createReview, decidePaper, getReview, listPapers, recordPaper } from "@/server/lit";
+import { addDoi, createReview, decidePaper, getReview, listPapers, listReviews, recordPaper } from "@/server/lit";
 import { acceptLiterature, askReplacements, assignRetriever, cancelRequest, declineRequest, listRetrievalRequests, listRetrievers, methodsParagraph, requestRetrieval, reviewForOrder, saveSearchLog, submitRetrieval, unassignRetriever } from "@/server/litRetrieval";
 import { approveApplication, submitApplication } from "@/server/vetting";
 
@@ -61,7 +61,7 @@ describe("literature retrieval by an expert", () => {
     await unassignRetriever(db, id);
     expect(await getReview(db, expert, id)).toBeNull();
     expect((await db.select().from(schema.orders))[0].status).toBe("CANCELLED");
-    expect((await listRetrievalRequests(db))[0].status).toBe("REQUESTED");
+    expect((await listRetrievalRequests(db))[0]).toMatchObject({ status: "REQUESTED", paid: false, papers: 0 });
 
     // the client can withdraw; the admin can decline with a reason
     await cancelRequest(db, client, id);
@@ -109,6 +109,7 @@ describe("literature retrieval by an expert", () => {
     await submitRetrieval(db, expert, id, "Two strong papers.");
     await expect(cancelRequest(db, client, id)).rejects.toThrow(/can't be withdrawn/); // …not after
     expect((await getReview(db, client, id))!.status).toBe("REVIEWING");
+    expect(await listRetrievalRequests(db)).toMatchObject([{ papers: 2, paid: true, total: 25_000, owner: "Akosua", expert: "Ama" }]);
     const [del] = await db.select().from(schema.milestones).where(eq(schema.milestones.id, m.id));
     expect(del.status).toBe("DELIVERED");
     await expect(addDoi(db, expert, id, "10.1000/ccc", { crossref })).rejects.toThrow(/already been delivered/);
@@ -128,6 +129,7 @@ describe("literature retrieval by an expert", () => {
     papers = await listPapers(db, id);
     await decidePaper(db, client, papers.find((p) => p.status === "PENDING")!.id, true);
     await acceptLiterature(db, client, id);
+    expect((await listReviews(db, client))[0].papers).toBe(2);
     const done = (await getReview(db, client, id))!;
     expect(done.status).toBe("ANALYSIS");
     const [paid] = await db.select().from(schema.milestones).where(eq(schema.milestones.id, m.id));

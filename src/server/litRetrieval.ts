@@ -12,6 +12,7 @@
 
 import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
+import { col } from "@/db/col";
 import { expertProfiles, litPapers, litReviews, milestones, orders, proposals, threadMembers, threads, users } from "@/db/schema";
 import { approveDelivery, requestRevision, submitDelivery } from "./orderRoom";
 import { platformFeeBps } from "./orders";
@@ -156,12 +157,12 @@ async function dropAssignment(db: DB, r: ReviewRow, back: "DRAFT" | "REQUESTED")
 // ───────── admin: the queue, the retrievers, assigning ─────────
 
 export async function listRetrievalRequests(db: DB) {
-  const owner = sql<string>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${litReviews.ownerId})`;
-  const ownerEmail = sql<string>`(select u.email from ${users} u where u.id = ${litReviews.ownerId})`;
-  const expert = sql<string | null>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${litReviews.expertUserId})`;
-  const total = sql<number | null>`(select o.total_minor from ${orders} o where o.id = ${litReviews.orderId})`;
-  const paid = sql<boolean>`exists (select 1 from ${milestones} m where m.order_id = ${litReviews.orderId} and m.status <> 'PENDING_FUNDING')`;
-  const papers = sql<number>`(select count(*)::int from ${litPapers} p where p.review_id = ${litReviews.id} and p.source = 'EXPERT')`;
+  const owner = sql<string>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${col(litReviews.ownerId)})`;
+  const ownerEmail = sql<string>`(select u.email from ${users} u where u.id = ${col(litReviews.ownerId)})`;
+  const expert = sql<string | null>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${col(litReviews.expertUserId)})`;
+  const total = sql<number | null>`(select o.total_minor from ${orders} o where o.id = ${col(litReviews.orderId)})`;
+  const paid = sql<boolean>`exists (select 1 from ${milestones} m where m.order_id = ${col(litReviews.orderId)} and m.status <> 'PENDING_FUNDING')`;
+  const papers = sql<number>`(select count(*)::int from ${litPapers} p where p.review_id = ${col(litReviews.id)} and p.source = 'EXPERT')`;
   return db
     .select({
       id: litReviews.id,
@@ -191,8 +192,8 @@ export const openRequestCount = async (db: DB) => (await db.select({ id: litRevi
 
 /** Experts who signed up for literature retrieval, with how much they're working on now. */
 export async function listRetrievers(db: DB) {
-  const active = sql<number>`(select count(*)::int from ${litReviews} r where r.expert_user_id = ${expertProfiles.userId} and r.status in ('RETRIEVAL', 'REVIEWING'))`;
-  const done = sql<number>`(select count(*)::int from ${litReviews} r where r.expert_user_id = ${expertProfiles.userId} and r.status = 'ANALYSIS')`;
+  const active = sql<number>`(select count(*)::int from ${litReviews} r where r.expert_user_id = ${col(expertProfiles.userId)} and r.status in ('RETRIEVAL', 'REVIEWING'))`;
+  const done = sql<number>`(select count(*)::int from ${litReviews} r where r.expert_user_id = ${col(expertProfiles.userId)} and r.status = 'ANALYSIS')`;
   return db
     .select({ userId: expertProfiles.userId, name: users.name, email: users.email, headline: expertProfiles.headline, verifiedAt: expertProfiles.verifiedAt, active, done })
     .from(expertProfiles)

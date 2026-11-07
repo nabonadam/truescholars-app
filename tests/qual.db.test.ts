@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DB } from "@/db";
 import * as schema from "@/db/schema";
 import { newQuestion, type Question } from "@/lib/qual";
-import {
+import { listStudies,
   QualError, audioFor, ownerExplanation, publicExplanation, saveExplanation, createStudy, deleteResponse, deleteStudy, editTranscript, getStudy, hasUnpublishedChanges, listResponses, publicStudy,
   publishStudy, resumeResponse, saveAnswer, saveAudio, saveDraft, setFlag, startResponse, submitResponse, transcribeResponse, transcribeStudy, usable,
 } from "@/server/qual";
@@ -84,6 +84,7 @@ describe("responding", () => {
 
     const rs = await listResponses(db, owner.id, id);
     expect(rs[0].n).toBe(1);
+    expect((await listStudies(db, owner.id)).find((x) => x.id === id)!.responses).toBe(1);
     expect(rs[0].answers[qs[1].id].choice).toBe("Volta");
     const audio = await audioFor(db, owner.id, rs[0].id, qs[2].id);
     expect([...audio!.bytes]).toEqual([4, 5, 6, 7]);
