@@ -44,7 +44,7 @@ export function AccountMenu({ name, email, roles, image }: { name: string; email
         }
       : { title: "Working", items: [{ href: "/apply", label: "Become an expert" }] },
   ];
-  if (roles.includes("ADMIN")) groups.push({ title: "Admin", items: [{ href: "/admin", label: "Overview" }, { href: "/admin/applications", label: "Applications" }, { href: "/admin/disputes", label: "Disputes" }, { href: "/admin/payouts", label: "Payouts" }, { href: "/admin/messages", label: "Flagged messages" }] });
+  if (roles.includes("ADMIN")) groups.push({ title: "Admin", items: [{ href: "/admin", label: "Overview" }, { href: "/admin/applications", label: "Applications" }, { href: "/admin/disputes", label: "Disputes" }, { href: "/admin/payouts", label: "Payouts" }, { href: "/admin/retrieval", label: "Literature retrieval" }, { href: "/admin/messages", label: "Flagged messages" }, { href: "/admin/stats", label: "Statistics access" }, { href: "/admin/qual", label: "Qualitative access" }, { href: "/admin/lit", label: "Literature access" }] });
 
   return (
     <div ref={ref} className="relative">
