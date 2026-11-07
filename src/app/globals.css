@@ -148,3 +148,9 @@ body:has(.chat-shell) > .site-footer {
 .ts-indeterminate {
   animation: ts-indeterminate 1.2s ease-in-out infinite;
 }
+
+/* Grid items may shrink below their content's width, so a long title, table or word never pushes a
+   page wider than the phone screen (wide content scrolls inside its own box instead). */
+.grid > * {
+  min-width: 0;
+}
