@@ -192,6 +192,7 @@ export const expertApplications = pgTable("expert_applications", {
   cvUrl: text("cv_url"),
   sampleUrl: text("sample_url"),
   idDocumentUrl: text("id_document_url"),
+  litRetriever: boolean("lit_retriever").notNull().default(false), // wants private literature retrieval assignments
   status: applicationStatusEnum("status").notNull().default("SUBMITTED"),
   reviewerNote: text("reviewer_note"),
   reviewedAt: timestamp("reviewed_at", { mode: "date" }),
@@ -213,6 +214,8 @@ export const expertProfiles = pgTable("expert_profiles", {
   bidCredits: integer("bid_credits").notNull().default(20),
   creditsMonth: text("credits_month"), // "2026-11": month the free allowance was last topped up
   verifiedAt: timestamp("verified_at", { mode: "date" }),
+  // Literature retrievers are assigned privately by an admin; their requests never appear on the job board.
+  litRetriever: boolean("lit_retriever").notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -427,6 +430,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "TOOL_ACCESS",
   "STUDY_RESPONSE",
   "LIT_REVIEW",
+  "LIT_REQUEST",
 ]);
 
 export const notifications = pgTable(
@@ -766,13 +770,17 @@ export const litReviews = pgTable(
     researchQuestion: text("research_question").notNull().default(""),
     brief: jsonb("brief").notNull().default(sql`'{}'::jsonb`), // purpose, discipline, papers wanted, years, scope, inclusion/exclusion…
     style: text("style").notNull().default("apa"), // apa | harvard | mla | chicago | vancouver
-    // DRAFT → (RETRIEVAL → REVIEWING, when an expert finds the papers) → ANALYSIS
+    // DRAFT → (REQUESTED → RETRIEVAL → REVIEWING, when an expert finds the papers) → ANALYSIS
+    // REQUESTED: sent privately to the admins, who assign a dedicated literature retriever (never a public job)
     status: text("status").notNull().default("DRAFT"),
     jobId: text("job_id").references(() => jobs.id, { onDelete: "set null" }),
     orderId: text("order_id"),
     expertUserId: text("expert_user_id").references(() => users.id, { onDelete: "set null" }),
     searchLog: jsonb("search_log"), // the expert's databases, search strings, criteria and PRISMA counts
     deliveredAt: timestamp("delivered_at", { mode: "date" }),
+    requestedAt: timestamp("requested_at", { mode: "date" }),
+    requestDays: integer("request_days"), // how soon the client needs the literature
+    assignedAt: timestamp("assigned_at", { mode: "date" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

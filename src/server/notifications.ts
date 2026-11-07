@@ -25,6 +25,7 @@ const CTA: Record<NotificationKind, string> = {
   TOOL_ACCESS: "Open",
   STUDY_RESPONSE: "See the responses",
   LIT_REVIEW: "Open the review",
+  LIT_REQUEST: "Assign an expert",
 };
 
 /** Kinds that can arrive in bursts: only the first unread one per link is emailed. */

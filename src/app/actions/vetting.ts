@@ -22,6 +22,7 @@ const applicationSchema = z.object({
   pitch: z.string().trim().min(80, "Tell us a bit more (at least 80 characters)").max(1500),
   cvUrl: optionalUrl,
   sampleUrl: optionalUrl,
+  litRetriever: z.boolean(),
 });
 
 export async function submitApplicationAction(_prev: FormState, form: FormData): Promise<FormState> {
@@ -33,6 +34,7 @@ export async function submitApplicationAction(_prev: FormState, form: FormData):
     pitch: form.get("pitch"),
     cvUrl: form.get("cvUrl") ?? "",
     sampleUrl: form.get("sampleUrl") ?? "",
+    litRetriever: form.get("litRetriever") === "1",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form" };
   if (!parsed.data.cvUrl) return { error: "Please add a link to your CV." };

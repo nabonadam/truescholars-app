@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 const STATUS: Record<string, { t: string; c: string }> = {
   DRAFT: { t: "Your papers", c: "bg-white/15 text-white" },
+  REQUESTED: { t: "Assigning an expert", c: "bg-amber text-ink" },
   RETRIEVAL: { t: "Expert finding literature", c: "bg-amber text-ink" },
   REVIEWING: { t: "Literature delivered: review it", c: "bg-amber text-ink" },
   ANALYSIS: { t: "Analysis", c: "bg-white/15 text-white" },

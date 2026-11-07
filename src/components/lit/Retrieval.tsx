@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { acceptLiteratureAction, askReplacementsAction, requestRetrievalAction, saveSearchLogAction, submitRetrievalAction } from "@/app/actions/lit";
+import { acceptLiteratureAction, askReplacementsAction, cancelRequestAction, requestRetrievalAction, saveSearchLogAction, submitRetrievalAction } from "@/app/actions/lit";
+import { formatMoney } from "@/lib/money";
 import type { Brief } from "@/server/lit";
-import type { SearchLog } from "@/server/litRetrieval";
+import type { AssignmentInfo, SearchLog } from "@/server/litRetrieval";
 import { Icon } from "../Icons";
 import { DownloadButtons } from "../qual/Visuals";
 
 type ReviewInfo = { id: string; status: string; jobId: string | null; orderId: string | null; expertUserId: string | null; brief: unknown; searchLog: unknown; researchQuestion: string; title: string };
 
-const STEPS = ["Brief sent", "Expert hired", "Literature retrieval", "Your review", "Analysis"];
+const STEPS = ["Request sent", "Expert assigned", "Literature retrieval", "Your review", "Analysis"];
 
 function Tracker({ at }: { at: number }) {
   return (
@@ -27,22 +28,62 @@ function Tracker({ at }: { at: number }) {
   );
 }
 
-/** The client's side: ask an expert for literature, follow progress, then review and accept. */
-export function RetrievalCard({ review }: { review: ReviewInfo }) {
+const due = (d: Date | null) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : null);
+
+function Withdraw({ id, label = "Withdraw the request" }: { id: string; label?: string }) {
+  const router = useRouter();
+  const [busy, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <>
+      <button type="button" disabled={busy} onClick={() => confirm("Withdraw this request? Nothing has been paid, so nothing is charged.") && start(async () => { const x = await cancelRequestAction(id); if (x?.error) setErr(x.error); router.refresh(); })} className="text-sm font-bold text-ink-muted hover:text-ink">
+        {busy ? "Withdrawing…" : label}
+      </button>
+      {err && <p className="text-sm text-red-700">{err}</p>}
+    </>
+  );
+}
+
+/** The client's side: ask for an expert, follow progress, then review and accept. */
+export function RetrievalCard({ review, assignment: a }: { review: ReviewInfo; assignment: AssignmentInfo }) {
   const r = review;
   const log = r.searchLog as SearchLog | null;
-  if (r.status === "RETRIEVAL") {
+  if (r.status === "REQUESTED") {
     return (
       <div className="card flex flex-col gap-3 p-5">
-        <Tracker at={r.expertUserId ? 2 : 1} />
-        {r.expertUserId ? (
-          <p className="text-[15px]"><b>Research question sent to an expert for literature retrieval.</b> You&apos;ll be notified when they submit the papers. Pay the milestone into escrow on the order if you haven&apos;t, so they can start.</p>
+        <Tracker at={1} />
+        <p className="text-[15px]"><b>Research question sent to The True Scholars for literature retrieval.</b> We&apos;re assigning a dedicated, vetted expert. You&apos;ll be notified with the expert and the price, usually within a day.</p>
+        <p className="flex items-center gap-2 text-[13px] text-ink-muted"><Icon name="shield" size={14} /> Private: your question isn&apos;t posted on the marketplace. Only the expert we assign will see it.</p>
+        <div><Withdraw id={r.id} /></div>
+      </div>
+    );
+  }
+  if (r.status === "RETRIEVAL") {
+    const legacy = !a && r.jobId; // reviews from before private assignment
+    return (
+      <div className="card flex flex-col gap-3 p-5">
+        <Tracker at={a?.paid || (!a && r.expertUserId) ? 2 : 1} />
+        {a && !a.paid ? (
+          <>
+            <p className="text-[15px]"><b>{a.expert} has been assigned to find your literature.</b> The price is <b>{formatMoney(a.total)}</b>. Pay it into escrow to start: the expert is paid only after you accept the papers.</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <Link href={`/orders/${a.orderId}`} className="btn-amber min-h-10 px-4 text-sm">Pay into escrow</Link>
+              <Withdraw id={r.id} label="Withdraw instead" />
+            </div>
+          </>
+        ) : a ? (
+          <>
+            <p className="text-[15px]"><b>{a.expert} is retrieving your literature.</b> {a.dueAt ? `Due by ${due(a.dueAt)}. ` : ""}You&apos;ll be notified when the papers are submitted.</p>
+            <div><Link href={`/orders/${a.orderId}`} className="btn-outline min-h-10 px-4 text-sm">Message the expert</Link></div>
+          </>
+        ) : legacy ? (
+          <>
+            <p className="text-[15px]"><b>Your brief is with our experts.</b> Hire one from the proposals; the papers they find come straight into this review.</p>
+            <div><Link href={`/jobs/${r.jobId}`} className="btn-primary min-h-10 px-4 text-sm">See proposals</Link></div>
+          </>
         ) : (
-          <p className="text-[15px]"><b>Your brief is with our experts.</b> Compare the proposals you receive and hire one; the papers they find come straight into this review.</p>
+          <p className="text-[15px]"><b>An expert is retrieving your literature.</b></p>
         )}
-        <div className="flex flex-wrap gap-3">
-          {r.orderId ? <Link href={`/orders/${r.orderId}`} className="btn-primary min-h-10 px-4 text-sm">Open the order</Link> : r.jobId && <Link href={`/jobs/${r.jobId}`} className="btn-primary min-h-10 px-4 text-sm">See proposals</Link>}
-        </div>
       </div>
     );
   }
@@ -50,7 +91,7 @@ export function RetrievalCard({ review }: { review: ReviewInfo }) {
   return (
     <div className="flex flex-col gap-4">
       {log && <SearchReport log={log} title={r.title} />}
-      {!r.jobId && <AskExpert review={r} />}
+      {!r.orderId && !r.jobId && <AskExpert review={r} />}
     </div>
   );
 }
@@ -92,9 +133,6 @@ function AskExpert({ review: r }: { review: ReviewInfo }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ papersWanted: String(b.papersWanted ?? 20), years: b.years ?? "", regions: b.regions ?? "", languages: b.languages ?? "English", include: b.include ?? "", exclude: b.exclude ?? "", notes: b.notes ?? "", days: "7" });
   const papers = Math.max(5, Math.min(200, Number(f.papersWanted) || 20));
-  const [budget, setBudget] = useState({ min: "", max: "" });
-  const min = Number(budget.min) || papers * 15;
-  const max = Number(budget.max) || papers * 25;
   const [busy, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
@@ -103,10 +141,10 @@ function AskExpert({ review: r }: { review: ReviewInfo }) {
       <div className="flex flex-col gap-4 rounded-md bg-green-deep p-5 text-white sm:flex-row sm:items-center">
         <span className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-amber text-ink"><Icon name="search" size={22} /></span>
         <div className="flex-1">
-          <h2 className="text-lg font-extrabold">Don&apos;t have the papers yet? Ask a vetted expert</h2>
-          <p className="text-[14px] text-on-green-muted">An expert searches the academic databases for your question and delivers the papers with a spreadsheet, DOI links, relevance notes and a documented search (PRISMA). You review every paper before anything is analysed.</p>
+          <h2 className="text-lg font-extrabold">Don&apos;t have the papers yet? Send it to an expert</h2>
+          <p className="text-[14px] text-on-green-muted">We assign a dedicated, vetted expert who searches the academic databases for your question and delivers the papers with a spreadsheet, DOI links, relevance notes and a documented search (PRISMA). Your question stays private: it&apos;s never posted publicly. You review every paper before anything is analysed.</p>
         </div>
-        <button type="button" onClick={() => setOpen(true)} className="btn-amber flex-none">Ask an expert</button>
+        <button type="button" onClick={() => setOpen(true)} className="btn-amber flex-none">Send to an expert</button>
       </div>
     );
   }
@@ -114,7 +152,7 @@ function AskExpert({ review: r }: { review: ReviewInfo }) {
     <div className="card flex flex-col gap-4 p-6">
       <div>
         <h2 className="text-xl font-extrabold">Brief for literature retrieval</h2>
-        <p className="text-sm text-ink-muted">This becomes a job on the marketplace. Vetted experts send proposals; you hire one and pay into escrow; they deliver the papers here.</p>
+        <p className="text-sm text-ink-muted">Sent privately to The True Scholars, not posted on the marketplace. We assign one dedicated expert and tell you the price (about GH₵15 to GH₵25 a paper). You pay into escrow only once you&apos;ve seen it, and the expert is paid only after you accept the papers.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm font-bold">Papers wanted<input className="field mt-1" type="number" min={5} max={200} value={f.papersWanted} onChange={set("papersWanted")} /></label>
@@ -124,18 +162,16 @@ function AskExpert({ review: r }: { review: ReviewInfo }) {
         <label className="text-sm font-bold sm:col-span-3">Include<textarea className="field mt-1" rows={2} value={f.include} onChange={set("include")} placeholder="Peer-reviewed empirical studies; qualitative and mixed methods; grey literature from UN agencies…" /></label>
         <label className="text-sm font-bold sm:col-span-3">Exclude<textarea className="field mt-1" rows={2} value={f.exclude} onChange={set("exclude")} placeholder="Opinion pieces; studies outside the date range…" /></label>
         <label className="text-sm font-bold sm:col-span-3">Anything else the expert should know<textarea className="field mt-1" rows={2} value={f.notes} onChange={set("notes")} /></label>
-        <label className="text-sm font-bold">Budget from (GH₵)<input className="field mt-1" type="number" min={10} value={budget.min} placeholder={String(papers * 15)} onChange={(e) => setBudget({ ...budget, min: e.target.value })} /></label>
-        <label className="text-sm font-bold">to (GH₵)<input className="field mt-1" type="number" min={10} value={budget.max} placeholder={String(papers * 25)} onChange={(e) => setBudget({ ...budget, max: e.target.value })} /></label>
         <label className="text-sm font-bold">Needed within (days)<input className="field mt-1" type="number" min={1} max={60} value={f.days} onChange={set("days")} /></label>
       </div>
       {err && <p className="text-sm text-red-700">{err}</p>}
       <div className="flex flex-wrap gap-3">
         <button type="button" disabled={busy} className="btn-amber" onClick={() => start(async () => {
-          const x = await requestRetrievalAction(r.id, { brief: { papersWanted: papers, years: f.years, regions: f.regions, languages: f.languages, include: f.include, exclude: f.exclude, notes: f.notes }, budgetMin: min * 100, budgetMax: max * 100, days: Number(f.days) || 7 });
+          const x = await requestRetrievalAction(r.id, { brief: { papersWanted: papers, years: f.years, regions: f.regions, languages: f.languages, include: f.include, exclude: f.exclude, notes: f.notes }, days: Number(f.days) || 7 });
           if (x?.error) setErr(x.error);
-          else if (x?.jobId) router.push(`/jobs/${x.jobId}`);
+          else router.refresh();
         })}>
-          {busy ? "Sending…" : "Send to experts"}
+          {busy ? "Sending…" : "Send privately to an expert"}
         </button>
         <button type="button" onClick={() => setOpen(false)} className="text-sm font-bold text-ink-muted">Cancel</button>
       </div>
@@ -205,7 +241,7 @@ export function Prisma({ log }: { log: SearchLog }) {
 }
 
 /** The expert's side: the brief, the search log, and delivering. */
-export function ExpertPanel({ review: r, papers }: { review: ReviewInfo; papers: number }) {
+export function ExpertPanel({ review: r, papers, assignment: a }: { review: ReviewInfo; papers: number; assignment: AssignmentInfo }) {
   const router = useRouter();
   const b = (r.brief ?? {}) as Brief;
   const log = (r.searchLog as SearchLog | null) ?? null;
@@ -218,7 +254,8 @@ export function ExpertPanel({ review: r, papers }: { review: ReviewInfo; papers:
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   const asLog = (): Partial<SearchLog> => ({ ...f, databases: f.databases.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean), identified: Number(f.identified), duplicates: Number(f.duplicates), screened: Number(f.screened), excludedScreening: Number(f.excludedScreening), fullText: Number(f.fullText), excludedFullText: Number(f.excludedFullText), included: Number(f.included) });
-  const open = r.status === "RETRIEVAL";
+  const waiting = r.status === "RETRIEVAL" && a !== null && !a.paid;
+  const open = r.status === "RETRIEVAL" && !waiting;
   const brief: [string, string | number | undefined][] = [["Papers wanted", b.papersWanted], ["Purpose", b.purpose], ["Discipline", b.discipline], ["Years", b.years], ["Regions", b.regions], ["Languages", b.languages], ["Include", b.include], ["Exclude", b.exclude], ["Notes", b.notes]];
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -229,7 +266,9 @@ export function ExpertPanel({ review: r, papers }: { review: ReviewInfo; papers:
         <div className="mt-4 rounded-sm bg-amber-tint p-3 text-[13px] text-amber-deep">
           <b>Copyright:</b> upload PDFs only for open-access papers. For paywalled papers add the DOI only; the client attaches their own copy through their library.
         </div>
-        {!open && <p className="mt-4 rounded-sm bg-green-tint p-3 text-sm text-green"><b>Delivered.</b> The client is reviewing your papers. You&apos;ll be notified if they ask for replacements.</p>}
+        {a && <p className="mt-3 text-[13.5px]"><b>Your fee:</b> {formatMoney(a.total)}{a.dueAt && a.paid ? ` · due ${due(a.dueAt)}` : ""} · <Link href={`/orders/${a.orderId}`} className="font-bold text-green">Order and messages ↗</Link></p>}
+        {waiting && <p className="mt-4 rounded-sm bg-amber-tint p-3 text-sm text-amber-deep"><b>Waiting for the client&apos;s payment.</b> You&apos;ll be notified when it&apos;s in escrow; then you can add papers and the search log here.</p>}
+        {!open && !waiting && <p className="mt-4 rounded-sm bg-green-tint p-3 text-sm text-green"><b>Delivered.</b> The client is reviewing your papers. You&apos;ll be notified if they ask for replacements.</p>}
       </div>
       <div className="card flex flex-col gap-3 p-5">
         <h3 className="text-lg font-extrabold">Search log</h3>

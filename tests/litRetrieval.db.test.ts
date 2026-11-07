@@ -6,13 +6,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "@/db";
 import * as schema from "@/db/schema";
 import { fundMilestone } from "@/server/escrow";
-import { hireProposal, submitProposal } from "@/server/jobs";
 import { addDoi, createReview, decidePaper, getReview, listPapers } from "@/server/lit";
-import { acceptLiterature, askReplacements, methodsParagraph, requestRetrieval, reviewForOrder, saveSearchLog, submitRetrieval } from "@/server/litRetrieval";
+import { acceptLiterature, askReplacements, assignRetriever, cancelRequest, declineRequest, listRetrievalRequests, listRetrievers, methodsParagraph, requestRetrieval, reviewForOrder, saveSearchLog, submitRetrieval, unassignRetriever } from "@/server/litRetrieval";
 import { approveApplication, submitApplication } from "@/server/vetting";
 
 let db: DB;
-let client: string, expert: string;
+let client: string, expert: string, other: string, admin: string;
 const crossref = async (g: { doi?: string }) => ({ meta: { title: `Paper ${g.doi}`, authors: [{ family: "Mensah" }], year: 2020, doi: g.doi }, verify: { checked: true, found: true } });
 
 beforeEach(async () => {
@@ -23,36 +22,74 @@ beforeEach(async () => {
   const [e] = await d.insert(schema.users).values({ email: "ama@example.com", name: "Ama" }).returning();
   client = c.id;
   expert = e.id;
-  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
+  const [o] = await d.insert(schema.users).values({ email: "kofi@example.com", name: "Kofi" }).returning();
+  const [a] = await d.insert(schema.users).values({ email: "admin@example.com", name: "Admin", roles: ["CLIENT", "ADMIN"] }).returning();
+  other = o.id;
+  admin = a.id;
+  // Ama signs up as a literature retriever; Kofi is an expert who didn't
+  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", litRetriever: true });
   await approveApplication(db, { applicationId: app.id });
+  const app2 = await submitApplication(db, other, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
+  await approveApplication(db, { applicationId: app2.id });
 });
 
-describe("literature retrieval by an expert", () => {
-  it("runs from brief to job, hire, delivery, client review and payment release", async () => {
-    const id = await createReview(db, client, { title: "Rainfall and adaptation", researchQuestion: "How do farmers adapt to rainfall variability?" });
-    const jobId = await requestRetrieval(db, client, id, { brief: { papersWanted: 10, years: "2010 to 2025", include: "Empirical studies" }, budgetMin: 20_000, budgetMax: 30_000, days: 7 });
-    const [job] = await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId));
-    expect(job.description).toContain("How do farmers adapt to rainfall variability?");
-    expect(job.description).toContain("Papers wanted: 10");
-    expect((await getReview(db, client, id))!.status).toBe("RETRIEVAL");
-    expect(await getReview(db, expert, id)).toBeNull(); // not hired yet
+const notes = (userId: string) => db.select().from(schema.notifications).where(eq(schema.notifications.userId, userId));
 
-    const { proposal } = await submitProposal(db, { jobId, expertUserId: expert, pitch: "I search Scopus, Web of Science and AJOL for climate adaptation literature every week.", milestonePlan: [{ title: "Literature", amountMinor: 25_000, dueInDays: 5 }] }) as unknown as { proposal: { id: string } };
-    const pid = proposal?.id ?? (await db.select().from(schema.proposals))[0].id;
-    const order = await hireProposal(db, { proposalId: pid, clientId: client });
-    expect(await reviewForOrder(db, order.id)).toBeNull(); // linked on first visit
-    const asExpert = await getReview(db, expert, id);
-    expect(asExpert).toMatchObject({ role: "expert", orderId: order.id });
+describe("literature retrieval by an expert", () => {
+  it("is private: goes to the admins, who assign a retriever; never a public job", async () => {
+    const id = await createReview(db, client, { title: "Rainfall and adaptation", researchQuestion: "How do farmers adapt to rainfall variability?" });
+    await requestRetrieval(db, client, id, { brief: { papersWanted: 10 }, days: 5 });
+    expect(await db.select().from(schema.jobs)).toHaveLength(0);
+    expect((await getReview(db, client, id))!.status).toBe("REQUESTED");
+    expect((await notes(admin)).map((n) => n.kind)).toEqual(["LIT_REQUEST"]);
+    expect((await notes(admin))[0].body).not.toContain("rainfall"); // the question isn't in the email
+    expect(await getReview(db, expert, id)).toBeNull();
+
+    expect((await listRetrievers(db)).map((r) => r.userId)).toEqual([expert]);
+    await expect(assignRetriever(db, id, { expertUserId: other, priceMinor: 20_000, days: 5 })).rejects.toThrow(/literature retrievers/);
+    await assignRetriever(db, id, { expertUserId: expert, priceMinor: 20_000, days: 5 });
+    expect((await getReview(db, expert, id))!.role).toBe("expert");
+    expect(await getReview(db, other, id)).toBeNull();
+
+    // reassign before payment: the first expert loses access, the unpaid order is cancelled
+    await unassignRetriever(db, id);
+    expect(await getReview(db, expert, id)).toBeNull();
+    expect((await db.select().from(schema.orders))[0].status).toBe("CANCELLED");
+    expect((await listRetrievalRequests(db))[0].status).toBe("REQUESTED");
+
+    // the client can withdraw; the admin can decline with a reason
+    await cancelRequest(db, client, id);
+    expect((await getReview(db, client, id))!.status).toBe("DRAFT");
+    await requestRetrieval(db, client, id, { brief: {}, days: 5 });
+    await declineRequest(db, id, "We can't source papers in that language yet.");
+    expect((await getReview(db, client, id))!.status).toBe("DRAFT");
+    expect((await notes(client)).some((n) => n.body?.includes("that language"))).toBe(true);
+  });
+
+  it("runs from request to assignment, delivery, client review and payment release", async () => {
+    const id = await createReview(db, client, { title: "Rainfall and adaptation", researchQuestion: "How do farmers adapt to rainfall variability?" });
+    await requestRetrieval(db, client, id, { brief: { papersWanted: 10, years: "2010 to 2025", include: "Empirical studies" }, days: 7 });
+    const order = await assignRetriever(db, id, { expertUserId: expert, priceMinor: 25_000, days: 7, note: "Include FAO reports" });
+    expect(order.totalMinor).toBe(25_000);
+    expect(JSON.stringify(order.requirements)).toContain("How do farmers adapt to rainfall variability?");
+    expect(JSON.stringify(order.requirements)).toContain("Papers wanted: 10");
     expect(await reviewForOrder(db, order.id)).toBe(id);
+    expect((await notes(client)).some((n) => n.link === `/orders/${order.id}`)).toBe(true);
+    await expect(cancelRequest(db, client, id)).resolves.toBeUndefined(); // can withdraw before paying…
+    await requestRetrieval(db, client, id, { brief: {}, days: 7 });
+    const order2 = await assignRetriever(db, id, { expertUserId: expert, priceMinor: 25_000, days: 7 });
+    const asExpert = await getReview(db, expert, id);
+    expect(asExpert).toMatchObject({ role: "expert", orderId: order2.id });
 
     await addDoi(db, expert, id, "10.1000/aaa", { note: "Core study", crossref });
     await addDoi(db, expert, id, "10.1000/bbb", { note: "Contrasting case", crossref });
     await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/search log/);
     await saveSearchLog(db, expert, id, { databases: ["Scopus", "AJOL"], searchStrings: "rainfall AND adaptation", identified: 120, duplicates: 20, screened: 100, excludedScreening: 80, fullText: 20, excludedFullText: 18, included: 2 });
     await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/escrow/);
-    const [m] = await db.select().from(schema.milestones).where(eq(schema.milestones.orderId, order.id));
+    const [m] = await db.select().from(schema.milestones).where(eq(schema.milestones.orderId, order2.id));
     await fundMilestone(db, { milestoneId: m.id, amountMinor: 25_000, currency: "GHS", reference: "ps_1" });
     await submitRetrieval(db, expert, id, "Two strong papers.");
+    await expect(cancelRequest(db, client, id)).rejects.toThrow(/can't be withdrawn/); // …not after
     expect((await getReview(db, client, id))!.status).toBe("REVIEWING");
     const [del] = await db.select().from(schema.milestones).where(eq(schema.milestones.id, m.id));
     expect(del.status).toBe("DELIVERED");

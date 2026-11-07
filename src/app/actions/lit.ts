@@ -8,8 +8,7 @@ import { requireUser } from "@/server/guards";
 import { type Brief, LitError, addDoi, createReview, decidePaper, deletePaper, deleteReview, editPaperMeta, getReview, recheckPaper, setNote, updateReview } from "@/server/lit";
 import { type Section, editParagraph, editSynthesis, makeOutline, readPapers, resetCard, runSynthesis, saveOutline, writeSection } from "@/server/litAnalysis";
 import { EscrowError } from "@/server/escrow";
-import { JobError } from "@/server/jobs";
-import { type SearchLog, acceptLiterature, askReplacements, requestRetrieval, saveSearchLog, submitRetrieval } from "@/server/litRetrieval";
+import { type SearchLog, acceptLiterature, askReplacements, cancelRequest, requestRetrieval, saveSearchLog, submitRetrieval } from "@/server/litRetrieval";
 import { OrderRoomError } from "@/server/orderRoom";
 import { QualError } from "@/server/qual";
 import { canUse, requestToolUpgrade, toolAccessFor } from "@/server/toolAccess";
@@ -229,14 +228,24 @@ export async function litUpgradeAction(): Promise<LitState> {
 
 // ───────── literature retrieval by an expert ─────────
 
-export async function requestRetrievalAction(reviewId: string, input: { brief: Brief; budgetMin: number; budgetMax: number; days: number }): Promise<LitState & { jobId?: string }> {
+export async function requestRetrievalAction(reviewId: string, input: { brief: Brief; days: number }): Promise<LitState> {
   try {
     const user = await requireUser();
-    const jobId = await requestRetrieval(getDb(), user.id, reviewId, input);
+    await requestRetrieval(getDb(), user.id, reviewId, input);
     pages(reviewId);
-    return { ok: "Sent to experts", jobId };
+    return { ok: "Sent privately to The True Scholars. We'll assign a dedicated expert.", at: Date.now() };
   } catch (err) {
-    if (err instanceof JobError) return { error: err.message };
+    return known(err);
+  }
+}
+
+export async function cancelRequestAction(reviewId: string): Promise<LitState> {
+  try {
+    const user = await requireUser();
+    await cancelRequest(getDb(), user.id, reviewId);
+    pages(reviewId);
+    return { ok: "Request withdrawn.", at: Date.now() };
+  } catch (err) {
     return known(err);
   }
 }

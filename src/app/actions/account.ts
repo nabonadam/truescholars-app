@@ -70,6 +70,7 @@ export async function expertProfileAction(_p: AccountState, form: FormData): Pro
       headline: String(form.get("headline") ?? ""),
       bio: String(form.get("bio") ?? ""),
       skills: String(form.get("skills") ?? "").split(","),
+      litRetriever: form.get("litRetriever") === "1",
     });
   } catch (err) {
     return known(err);

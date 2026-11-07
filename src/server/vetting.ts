@@ -26,6 +26,7 @@ export interface ApplicationInput {
   pitch: string;
   cvUrl?: string | null;
   sampleUrl?: string | null;
+  litRetriever?: boolean;
 }
 
 /** Emails in ADMIN_EMAILS (comma-separated) get the ADMIN role when they sign in. */
@@ -60,6 +61,7 @@ export async function submitApplication(db: DB, userId: string, input: Applicati
     pitch: input.pitch,
     cvUrl: input.cvUrl || null,
     sampleUrl: input.sampleUrl || null,
+    litRetriever: !!input.litRetriever,
     status: "SUBMITTED" as const,
     reviewerNote: null,
     reviewedAt: null,
@@ -117,8 +119,8 @@ export async function approveApplication(db: DB, p: { applicationId: string; not
     const headline = `${app.qualification} · ${app.fields.slice(0, 2).join(", ")}`;
     await tx
       .insert(expertProfiles)
-      .values({ userId: app.userId, headline, skills: app.fields, credentials: [app.qualification], verifiedAt: new Date() })
-      .onConflictDoUpdate({ target: expertProfiles.userId, set: { verifiedAt: new Date() } });
+      .values({ userId: app.userId, headline, skills: app.fields, credentials: [app.qualification], verifiedAt: new Date(), litRetriever: app.litRetriever })
+      .onConflictDoUpdate({ target: expertProfiles.userId, set: { verifiedAt: new Date(), ...(app.litRetriever ? { litRetriever: true } : {}) } });
 
     await grantRole(tx as unknown as DB, app.userId, "EXPERT");
     return { userId: app.userId };

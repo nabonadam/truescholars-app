@@ -20,7 +20,7 @@ export async function getAccount(db: DB, userId: string) {
     .from(users)
     .where(eq(users.id, userId));
   if (!u) return null;
-  const [profile] = await db.select({ headline: expertProfiles.headline, bio: expertProfiles.bio, skills: expertProfiles.skills, level: expertProfiles.level }).from(expertProfiles).where(eq(expertProfiles.userId, userId));
+  const [profile] = await db.select({ headline: expertProfiles.headline, bio: expertProfiles.bio, skills: expertProfiles.skills, level: expertProfiles.level, litRetriever: expertProfiles.litRetriever }).from(expertProfiles).where(eq(expertProfiles.userId, userId));
   return { ...u, expert: profile ?? null };
 }
 
@@ -88,7 +88,7 @@ export async function setEmailNotifications(db: DB, userId: string, on: boolean)
   await db.update(users).set({ emailNotifications: on }).where(eq(users.id, userId));
 }
 
-export async function updateExpertProfile(db: DB, userId: string, p: { headline: string; bio: string; skills: string[] }) {
+export async function updateExpertProfile(db: DB, userId: string, p: { headline: string; bio: string; skills: string[]; litRetriever?: boolean }) {
   const headline = p.headline.trim().replace(/\s+/g, " ");
   const bio = p.bio.trim();
   if (headline.length < 10 || headline.length > 120) throw new AccountError("Write a headline of 10–120 characters, e.g. “Biostatistician · PhD, University of Ghana”.");
@@ -96,6 +96,6 @@ export async function updateExpertProfile(db: DB, userId: string, p: { headline:
   const seen = new Set<string>();
   const skills = p.skills.map((s) => s.trim()).filter((s) => s && s.length <= 30 && !seen.has(s.toLowerCase()) && seen.add(s.toLowerCase()));
   if (skills.length > 15) throw new AccountError("List up to 15 skills.");
-  const res = await db.update(expertProfiles).set({ headline, bio: bio || null, skills }).where(eq(expertProfiles.userId, userId)).returning({ id: expertProfiles.id });
+  const res = await db.update(expertProfiles).set({ headline, bio: bio || null, skills, ...(p.litRetriever === undefined ? {} : { litRetriever: p.litRetriever }) }).where(eq(expertProfiles.userId, userId)).returning({ id: expertProfiles.id });
   if (res.length === 0) throw new AccountError("You don't have an expert profile yet.");
 }

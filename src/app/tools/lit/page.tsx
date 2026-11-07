@@ -17,7 +17,7 @@ const STEPS = [
   { icon: "layers", title: "Synthesis", text: "Themes across papers, where they agree, where they contradict and why, the gaps, and how authors define key terms." },
   { icon: "pen", title: "Critical writing", text: "An outline you approve, then concise, idea-led paragraphs. Every sentence shows its sources; anything unsupported is flagged." },
 ] as const;
-const STATUS: Record<string, string> = { DRAFT: "Your papers", RETRIEVAL: "Expert finding literature", REVIEWING: "Literature to review", ANALYSIS: "Analysis" };
+const STATUS: Record<string, string> = { DRAFT: "Your papers", REQUESTED: "Assigning an expert", RETRIEVAL: "Expert finding literature", REVIEWING: "Literature to review", ANALYSIS: "Analysis" };
 
 export default async function LitHome() {
   const user = (await auth())?.user;

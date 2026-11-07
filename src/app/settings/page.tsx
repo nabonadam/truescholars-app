@@ -74,7 +74,7 @@ export default async function Settings() {
 
           {a.expert && (
             <Card id="expert" title="Expert profile" hint="Clients read this before they hire you.">
-              <ExpertProfileForm headline={a.expert.headline} bio={a.expert.bio ?? ""} skills={a.expert.skills} />
+              <ExpertProfileForm headline={a.expert.headline} bio={a.expert.bio ?? ""} skills={a.expert.skills} litRetriever={a.expert.litRetriever} />
             </Card>
           )}
 

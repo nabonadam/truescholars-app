@@ -1,21 +1,24 @@
 /**
- * Literature retrieval by an expert, through the marketplace:
- *   the client sends the brief → it becomes a job in "Literature review support" → the client hires an
- *   expert (proposal + escrow, as for any job) → the expert works in the review's retrieval workspace
- *   (adds PDFs / DOIs with relevance notes, records the search log) → submits, which delivers the order
- *   milestone with the papers spreadsheet → the client accepts or rejects each paper → they either ask for
- *   replacements (a revision) or submit for analysis, which approves the delivery and releases payment.
+ * Literature retrieval by a dedicated expert, assigned privately:
+ *   the client sends the brief → it goes to the admins only (never the public job board, so the research
+ *   question stays private) → an admin assigns one of the experts who signed up as literature retrievers,
+ *   at a set price → that creates an order with one escrow milestone, which the client pays → the expert
+ *   works in the review's retrieval workspace (adds PDFs / DOIs with relevance notes, records the search
+ *   log) → submits, which delivers the milestone with the papers spreadsheet → the client accepts or
+ *   rejects each paper → they either ask for replacements (a revision) or submit for analysis, which
+ *   approves the delivery and releases payment.
+ * Reviews from before this change may still have a public job (jobId); linkHire keeps those working.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
-import { categories, litPapers, litReviews, milestones, orders, proposals } from "@/db/schema";
+import { expertProfiles, litPapers, litReviews, milestones, orders, proposals, threadMembers, threads, users } from "@/db/schema";
 import { approveDelivery, requestRevision, submitDelivery } from "./orderRoom";
+import { platformFeeBps } from "./orders";
 import { saveUploads } from "./files";
 import { type Brief, LitError, type ReviewRow, cleanBrief, listPapers, mustOwn, touch } from "./lit";
 import { litExport } from "./litExport";
 import { notify } from "./notifications";
-import { postJob } from "./jobs";
 
 export type SearchLog = {
   databases: string[];
@@ -32,8 +35,9 @@ export type SearchLog = {
   included: number;
 };
 
-export const RETRIEVAL_CATEGORY = "literature-review-support";
 const n = (v: unknown) => Math.max(0, Math.min(1_000_000, Math.round(Number(v) || 0)));
+const DAY = 86_400_000;
+const cedis = (minor: number) => `GH₵${(minor / 100).toLocaleString("en-GB", { maximumFractionDigits: 2 })}`;
 
 export function cleanLog(l: Partial<SearchLog>): SearchLog {
   const s = (v: unknown, k = 2000) => (typeof v === "string" ? v.trim().slice(0, k) : "");
@@ -73,38 +77,218 @@ export function suggestedBudget(papersWanted = 20) {
   return { min: k * 1500, max: k * 2500 }; // GH₵15–25 per paper
 }
 
-export async function requestRetrieval(db: DB, ownerId: string, reviewId: string, input: { brief: Brief; budgetMin: number; budgetMax: number; days: number }) {
+function briefLines(r: { researchQuestion: string }, b: Brief, days?: number | null) {
+  const line = (label: string, v?: string | number | null) => (v ? `${label}: ${v}\n` : "");
+  return (
+    line("Papers wanted", b.papersWanted) +
+    line("Purpose", b.purpose) +
+    line("Discipline", b.discipline) +
+    line("Years", b.years) +
+    line("Regions / settings", b.regions) +
+    line("Languages", b.languages) +
+    line("Include", b.include) +
+    line("Exclude", b.exclude) +
+    line("Needed within", days ? `${days} days` : null) +
+    line("Notes", b.notes)
+  ).trim();
+}
+
+/** Everyone who should hear about a new request: ADMIN accounts, plus anyone listed in ADMIN_EMAILS. */
+async function adminIds(db: DB) {
+  const emails = (process.env.ADMIN_EMAILS ?? "").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean);
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(emails.length ? or(sql`'ADMIN'::role = any(${users.roles})`, inArray(sql`lower(${users.email})`, emails)) : sql`'ADMIN'::role = any(${users.roles})`);
+  return rows.map((u) => u.id);
+}
+
+/** The client asks for an expert. The brief goes to the admins only; nothing is posted on the marketplace. */
+export async function requestRetrieval(db: DB, ownerId: string, reviewId: string, input: { brief: Brief; days: number }) {
   const r = await mustOwn(db, ownerId, reviewId);
-  if (r.jobId && r.status !== "DRAFT" && r.status !== "ANALYSIS") throw new LitError("You've already asked an expert for this review.");
+  if (!["DRAFT", "ANALYSIS"].includes(r.status)) throw new LitError("You've already asked for an expert for this review.");
+  if (r.researchQuestion.trim().length < 10) throw new LitError("Write your research question first: it's what the expert searches for.");
   const brief = cleanBrief({ ...(r.brief as Brief), ...input.brief });
-  const [cat] = await db.select({ id: categories.id }).from(categories).where(eq(categories.slug, RETRIEVAL_CATEGORY));
-  if (!cat) throw new LitError("The literature retrieval category isn't set up yet.");
-  const line = (label: string, v?: string | number) => (v ? `${label}: ${v}\n` : "");
-  const description =
-    `Find relevant, high-quality academic literature for this research question, and deliver it in The True Scholars literature workspace (a link appears in your order once you're hired).\n\n` +
-    `Research question: ${r.researchQuestion}\n\n` +
-    line("Papers wanted", brief.papersWanted) +
-    line("Purpose", brief.purpose) +
-    line("Discipline", brief.discipline) +
-    line("Years", brief.years) +
-    line("Regions / settings", brief.regions) +
-    line("Languages", brief.languages) +
-    line("Include", brief.include) +
-    line("Exclude", brief.exclude) +
-    line("Notes", brief.notes) +
-    `\nWhat to deliver: for each paper, the PDF where it is open access (or the DOI only for paywalled papers, which the client will attach from their library), a one or two sentence note on why it is relevant, and the search log (databases, search strings, criteria and the counts for a PRISMA diagram).`;
-  const job = await postJob(db, ownerId, {
-    title: `Literature retrieval: ${r.title}`.slice(0, 100).padEnd(10, "."),
-    categoryId: cat.id,
-    description: description.slice(0, 6000),
-    skills: ["Literature search", "Systematic review", brief.discipline ?? ""].filter(Boolean),
-    budgetMinMinor: Math.round(input.budgetMin),
-    budgetMaxMinor: Math.round(Math.max(input.budgetMin, input.budgetMax)),
-    timelineDays: Math.max(1, Math.min(60, Math.round(input.days))) || 7,
-    level: "masters",
+  const days = Math.max(1, Math.min(60, Math.round(input.days) || 7));
+  await db
+    .update(litReviews)
+    .set({ brief, status: "REQUESTED", requestedAt: new Date(), requestDays: days, assignedAt: null, jobId: null, expertUserId: null, orderId: null, deliveredAt: null, searchLog: null })
+    .where(eq(litReviews.id, reviewId));
+  for (const id of await adminIds(db)) {
+    await notify(db, {
+      userId: id,
+      kind: "LIT_REQUEST",
+      title: "New request for literature retrieval",
+      body: `${brief.papersWanted ?? 20} papers, needed within ${days} days. Assign a literature retriever.`,
+      link: "/admin/retrieval",
+    });
+  }
+}
+
+/** The client withdraws the request, while no expert has started (nothing paid). */
+export async function cancelRequest(db: DB, ownerId: string, reviewId: string) {
+  const r = await mustOwn(db, ownerId, reviewId);
+  if (r.status === "REQUESTED") {
+    await db.update(litReviews).set({ status: "DRAFT", requestedAt: null, requestDays: null }).where(eq(litReviews.id, reviewId));
+    return;
+  }
+  if (r.status === "RETRIEVAL" && r.orderId && (await unpaid(db, r.orderId))) {
+    await dropAssignment(db, r, "DRAFT");
+    if (r.expertUserId) await notify(db, { userId: r.expertUserId, kind: "LIT_REVIEW", title: "A literature retrieval assignment was withdrawn", body: "The client withdrew the request before paying, so there's nothing to do.", link: "/orders" });
+    return;
+  }
+  throw new LitError("This request can't be withdrawn now. If there's a problem with the work, use the order page.");
+}
+
+async function unpaid(db: DB, orderId: string) {
+  const ms = await db.select({ status: milestones.status }).from(milestones).where(eq(milestones.orderId, orderId));
+  return ms.every((m) => m.status === "PENDING_FUNDING");
+}
+
+async function dropAssignment(db: DB, r: ReviewRow, back: "DRAFT" | "REQUESTED") {
+  if (r.orderId) await db.update(orders).set({ status: "CANCELLED" }).where(eq(orders.id, r.orderId));
+  await db
+    .update(litReviews)
+    .set({ status: back, expertUserId: null, orderId: null, assignedAt: null, ...(back === "DRAFT" ? { requestedAt: null, requestDays: null } : {}) })
+    .where(eq(litReviews.id, r.id));
+}
+
+// ───────── admin: the queue, the retrievers, assigning ─────────
+
+export async function listRetrievalRequests(db: DB) {
+  const owner = sql<string>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${litReviews.ownerId})`;
+  const ownerEmail = sql<string>`(select u.email from ${users} u where u.id = ${litReviews.ownerId})`;
+  const expert = sql<string | null>`(select coalesce(u.name, u.email) from ${users} u where u.id = ${litReviews.expertUserId})`;
+  const total = sql<number | null>`(select o.total_minor from ${orders} o where o.id = ${litReviews.orderId})`;
+  const paid = sql<boolean>`exists (select 1 from ${milestones} m where m.order_id = ${litReviews.orderId} and m.status <> 'PENDING_FUNDING')`;
+  const papers = sql<number>`(select count(*)::int from ${litPapers} p where p.review_id = ${litReviews.id} and p.source = 'EXPERT')`;
+  return db
+    .select({
+      id: litReviews.id,
+      title: litReviews.title,
+      researchQuestion: litReviews.researchQuestion,
+      brief: litReviews.brief,
+      status: litReviews.status,
+      requestedAt: litReviews.requestedAt,
+      requestDays: litReviews.requestDays,
+      assignedAt: litReviews.assignedAt,
+      deliveredAt: litReviews.deliveredAt,
+      orderId: litReviews.orderId,
+      expertUserId: litReviews.expertUserId,
+      owner,
+      ownerEmail,
+      expert,
+      total,
+      paid,
+      papers,
+    })
+    .from(litReviews)
+    .where(isNotNull(litReviews.requestedAt))
+    .orderBy(desc(litReviews.requestedAt));
+}
+
+export const openRequestCount = async (db: DB) => (await db.select({ id: litReviews.id }).from(litReviews).where(eq(litReviews.status, "REQUESTED"))).length;
+
+/** Experts who signed up for literature retrieval, with how much they're working on now. */
+export async function listRetrievers(db: DB) {
+  const active = sql<number>`(select count(*)::int from ${litReviews} r where r.expert_user_id = ${expertProfiles.userId} and r.status in ('RETRIEVAL', 'REVIEWING'))`;
+  const done = sql<number>`(select count(*)::int from ${litReviews} r where r.expert_user_id = ${expertProfiles.userId} and r.status = 'ANALYSIS')`;
+  return db
+    .select({ userId: expertProfiles.userId, name: users.name, email: users.email, headline: expertProfiles.headline, verifiedAt: expertProfiles.verifiedAt, active, done })
+    .from(expertProfiles)
+    .innerJoin(users, eq(users.id, expertProfiles.userId))
+    .where(and(eq(expertProfiles.litRetriever, true), sql`'EXPERT'::role = any(${users.roles})`))
+    .orderBy(asc(users.name));
+}
+
+export async function addRetrieverByEmail(db: DB, email: string) {
+  const [u] = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email.trim().toLowerCase()}`);
+  if (!u) throw new LitError("No account with that email.");
+  await setRetriever(db, u.id, true);
+}
+
+export async function setRetriever(db: DB, userId: string, on: boolean) {
+  const [p] = await db.update(expertProfiles).set({ litRetriever: on }).where(eq(expertProfiles.userId, userId)).returning({ id: expertProfiles.id });
+  if (!p) throw new LitError("That person doesn't have an expert profile.");
+}
+
+/** Admin: give the request to one retriever at a price. Creates the private order the client pays into escrow. */
+export async function assignRetriever(db: DB, reviewId: string, input: { expertUserId: string; priceMinor: number; days: number; note?: string }) {
+  const [r] = await db.select().from(litReviews).where(eq(litReviews.id, reviewId));
+  if (!r) throw new LitError("Request not found.");
+  if (r.status !== "REQUESTED") throw new LitError("This request has already been assigned.");
+  const [ex] = await db
+    .select({ userId: expertProfiles.userId, name: users.name, roles: users.roles, retriever: expertProfiles.litRetriever })
+    .from(expertProfiles)
+    .innerJoin(users, eq(users.id, expertProfiles.userId))
+    .where(eq(expertProfiles.userId, input.expertUserId));
+  if (!ex || !ex.roles.includes("EXPERT") || !ex.retriever) throw new LitError("Choose one of the literature retrievers.");
+  if (ex.userId === r.ownerId) throw new LitError("The expert can't be the client.");
+  const price = Math.round(input.priceMinor);
+  if (!(price >= 1000)) throw new LitError("Set a price of at least GH₵10.");
+  const days = Math.max(1, Math.min(60, Math.round(input.days) || r.requestDays || 7));
+  const brief = (r.brief ?? {}) as Brief;
+  const note = (input.note ?? "").trim().slice(0, 2000);
+
+  const order = await db.transaction(async (tx) => {
+    const [o] = await tx
+      .insert(orders)
+      .values({
+        clientId: r.ownerId,
+        expertId: ex.userId,
+        title: `Literature retrieval: ${r.title}`.slice(0, 140),
+        totalMinor: price,
+        feeBps: platformFeeBps(),
+        requirements: [
+          { question: "Research question", answer: r.researchQuestion },
+          { question: "Brief", answer: briefLines(r, brief, days) || "See the literature workspace." },
+          ...(note ? [{ question: "Note from The True Scholars", answer: note }] : []),
+          { question: "Where to work", answer: "Add the papers and the search log in the literature workspace (linked at the top of this order), then submit them from there." },
+        ],
+      })
+      .returning();
+    await tx.insert(milestones).values({ orderId: o.id, position: 1, title: `${brief.papersWanted ?? 20} papers with search log`, amountMinor: price, revisionsAllowed: 2, dueAt: new Date(Date.now() + days * DAY) });
+    const [t] = await tx.insert(threads).values({ orderId: o.id }).returning();
+    await tx.insert(threadMembers).values([{ threadId: t.id, userId: r.ownerId }, { threadId: t.id, userId: ex.userId }]);
+    await tx.update(litReviews).set({ status: "RETRIEVAL", expertUserId: ex.userId, orderId: o.id, assignedAt: new Date(), requestDays: days }).where(eq(litReviews.id, r.id));
+    return o;
   });
-  await db.update(litReviews).set({ brief, jobId: job.id, status: "RETRIEVAL", expertUserId: null, orderId: null, deliveredAt: null }).where(eq(litReviews.id, reviewId));
-  return job.id;
+
+  await notify(db, {
+    userId: ex.userId,
+    kind: "LIT_REVIEW",
+    title: `New literature retrieval assignment: “${r.title}”`,
+    body: `${brief.papersWanted ?? 20} papers within ${days} days, for ${cedis(price)}. Start once the client has paid into escrow; you'll be notified.`,
+    link: `/tools/lit/${r.id}`,
+    orderId: order.id,
+  });
+  await notify(db, {
+    userId: r.ownerId,
+    kind: "LIT_REVIEW",
+    title: `A literature expert has been assigned to “${r.title}”`,
+    body: `The price is ${cedis(price)} for ${brief.papersWanted ?? 20} papers within ${days} days. Pay into escrow to start; the expert is paid only when you accept the literature.`,
+    link: `/orders/${order.id}`,
+    orderId: order.id,
+  });
+  return order;
+}
+
+/** Admin: take the request back from an expert (before the client has paid), to reassign it or close it. */
+export async function unassignRetriever(db: DB, reviewId: string) {
+  const [r] = await db.select().from(litReviews).where(eq(litReviews.id, reviewId));
+  if (!r || r.status !== "RETRIEVAL" || !r.orderId) throw new LitError("This request isn't assigned.");
+  if (!(await unpaid(db, r.orderId))) throw new LitError("The client has already paid. Handle changes through the order (a refund or a dispute).");
+  await dropAssignment(db, r, "REQUESTED");
+  if (r.expertUserId) await notify(db, { userId: r.expertUserId, kind: "LIT_REVIEW", title: `Assignment moved: “${r.title}”`, body: "This literature retrieval has been given to another expert. You don't need to do anything.", link: "/orders" });
+}
+
+/** Admin: decline a request (for example, outside what we can source), telling the client why. */
+export async function declineRequest(db: DB, reviewId: string, reason: string) {
+  const [r] = await db.select().from(litReviews).where(eq(litReviews.id, reviewId));
+  if (!r || r.status !== "REQUESTED") throw new LitError("Only unassigned requests can be declined.");
+  if (!reason.trim()) throw new LitError("Tell the client why.");
+  await dropAssignment(db, r, "DRAFT");
+  await notify(db, { userId: r.ownerId, kind: "LIT_REVIEW", title: `We couldn't take on the literature request for “${r.title}”`, body: reason.trim().slice(0, 500), link: `/tools/lit/${r.id}` });
 }
 
 /** Links the review to the order once the client hires an expert on its job. */
@@ -195,6 +379,16 @@ export async function syncWithOrder(db: DB, r: ReviewRow): Promise<ReviewRow> {
   }
   return r;
 }
+
+/** What the client and expert see about the assignment: who, how much, whether it's paid. */
+export async function assignmentInfo(db: DB, r: ReviewRow) {
+  if (!r.orderId) return null;
+  const [o] = await db.select({ total: orders.totalMinor, status: orders.status, expert: users.name }).from(orders).innerJoin(users, eq(users.id, orders.expertId)).where(eq(orders.id, r.orderId));
+  if (!o) return null;
+  const ms = await db.select({ status: milestones.status, dueAt: milestones.dueAt }).from(milestones).where(eq(milestones.orderId, r.orderId));
+  return { orderId: r.orderId, total: o.total, expert: o.expert?.split(" ")[0] ?? "Your expert", paid: ms.some((m) => m.status !== "PENDING_FUNDING"), dueAt: ms[0]?.dueAt ?? null };
+}
+export type AssignmentInfo = Awaited<ReturnType<typeof assignmentInfo>>;
 
 export async function orderStatus(db: DB, orderId: string | null) {
   if (!orderId) return null;

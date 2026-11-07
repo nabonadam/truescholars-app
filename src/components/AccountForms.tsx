@@ -198,7 +198,7 @@ export function ProfileForm({ name, country }: { name: string; country: string }
   );
 }
 
-export function ExpertProfileForm({ headline, bio, skills }: { headline: string; bio: string; skills: string[] }) {
+export function ExpertProfileForm({ headline, bio, skills, litRetriever = false }: { headline: string; bio: string; skills: string[]; litRetriever?: boolean }) {
   const [state, action, pending] = useActionState<AccountState, FormData>(expertProfileAction, undefined);
   const [list, setList] = useState(skills);
   const [draft, setDraft] = useState("");
@@ -244,6 +244,13 @@ export function ExpertProfileForm({ headline, bio, skills }: { headline: string;
           />
         </div>
       </div>
+      <label className="flex cursor-pointer items-start gap-3 rounded-sm border border-line bg-white px-4 py-3 text-sm has-checked:border-green has-checked:bg-green-tint">
+        <input type="checkbox" name="litRetriever" value="1" defaultChecked={litRetriever} className="mt-0.5 size-4 flex-none accent-green" />
+        <span>
+          <b>Literature retriever</b>
+          <span className="block text-ink-muted">Take private literature retrieval assignments: The True Scholars assigns you a client&apos;s research question to find papers for, at a set price. These are never posted on the job board.</span>
+        </span>
+      </label>
       <Note state={state} ok="Expert profile saved." />
       <button className="btn-primary self-start" disabled={pending}>{pending ? "Saving…" : "Save expert profile"}</button>
     </form>

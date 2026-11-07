@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { ago } from "@/lib/time";
 import { adminOverview, recentActivity, salesByCategory, type Activity } from "@/server/adminStats";
 import { requireUser } from "@/server/guards";
+import { openRequestCount } from "@/server/litRetrieval";
 
 export const metadata: Metadata = { title: "Admin overview" };
 export const dynamic = "force-dynamic";
@@ -32,18 +33,19 @@ const ACT: Record<Activity["kind"], { icon: IconName; tone: string }> = {
 export default async function AdminOverview() {
   const user = await requireUser("ADMIN");
   const db = getDb();
-  const [o, cats, activity] = await Promise.all([adminOverview(db), salesByCategory(db), recentActivity(db, 12)]);
+  const [o, cats, activity, litRequests] = await Promise.all([adminOverview(db), salesByCategory(db), recentActivity(db, 12), openRequestCount(db)]);
   const { money: m, people, work, queues: q, days } = o;
   const peak = niceMax(Math.max(...days.map((d) => d.paidIn)));
   const delta = m.paidInPrev30 ? Math.round(((m.paidIn30 - m.paidInPrev30) / m.paidInPrev30) * 100) : null;
   const catPeak = Math.max(1, ...cats.map((c) => c.minor));
   const hour = new Date().getUTCHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const waiting = q.applications + q.disputes + q.payouts + q.flagged;
+  const waiting = q.applications + q.disputes + q.payouts + q.flagged + litRequests;
 
   const queues: { href: string; label: string; n: number; note: string; icon: IconName; hot: boolean }[] = [
     { href: "/admin/applications", label: "Expert applications", n: q.applications, note: q.applications ? "Waiting for review" : "All reviewed", icon: "shield", hot: q.applications > 0 },
     { href: "/admin/disputes", label: "Open disputes", n: q.disputes, note: q.disputes ? "Payments frozen" : "None open", icon: "scale", hot: q.disputes > 0 },
+    { href: "/admin/retrieval", label: "Literature requests", n: litRequests, note: litRequests ? "Assign an expert" : "All assigned", icon: "search", hot: litRequests > 0 },
     { href: "/admin/payouts", label: "Payouts to send", n: q.payouts, note: q.payouts ? `${cedi(q.payoutsMinor)} in total` : "Nothing to send", icon: "wallet", hot: q.payouts > 0 },
     { href: "/admin/messages", label: "Flagged messages", n: q.flagged, note: "Possible off-platform contact", icon: "message", hot: false },
   ];
@@ -62,7 +64,7 @@ export default async function AdminOverview() {
             </div>
             <span className="rounded-full bg-white/10 px-4 py-2 text-sm">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}</span>
           </div>
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {queues.map((x) => (
               <li key={x.href}>
                 <Link href={x.href} className={`flex h-full items-center gap-4 rounded-md p-4 no-underline transition-transform hover:-translate-y-0.5 ${x.hot ? "bg-amber text-ink" : "bg-white/8 text-white hover:bg-white/12"}`}>
@@ -80,7 +82,7 @@ export default async function AdminOverview() {
       </section>
 
       <section className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6">
-        <AdminTabs active="/admin" counts={{ "/admin/applications": q.applications, "/admin/disputes": q.disputes, "/admin/payouts": q.payouts }} />
+        <AdminTabs active="/admin" counts={{ "/admin/applications": q.applications, "/admin/disputes": q.disputes, "/admin/payouts": q.payouts, "/admin/retrieval": litRequests }} />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi label="Paid in · 30 days" value={cedi(m.paidIn30)} note={delta === null ? `${cedi(m.paidInAll)} since launch` : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta)}% on the 30 days before`} accent />

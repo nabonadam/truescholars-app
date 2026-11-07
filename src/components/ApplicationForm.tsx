@@ -32,6 +32,14 @@ export function ApplicationForm({ qualifications, fields }: { qualifications: re
         </div>
       </fieldset>
 
+      <label className="flex cursor-pointer items-start gap-3 rounded-sm border border-line bg-white px-4 py-3 text-sm has-checked:border-green has-checked:bg-green-tint">
+        <input type="checkbox" name="litRetriever" value="1" className="mt-0.5 size-4 flex-none accent-green" />
+        <span>
+          <b>Also take literature retrieval assignments</b>
+          <span className="block text-ink-muted">Find papers for students&apos; literature reviews. These are assigned to you privately by The True Scholars (never posted publicly), at a set price.</span>
+        </span>
+      </label>
+
       <div>
         <label htmlFor="experienceYears" className="label">Years of relevant experience</label>
         <input id="experienceYears" name="experienceYears" type="number" min={0} max={60} required className="field max-w-40" />

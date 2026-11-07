@@ -47,6 +47,7 @@ export default async function ReviewApplication({
         <div><div className="text-sm font-bold text-ink-muted">Qualification</div><div>{app.qualification}</div></div>
         <div><div className="text-sm font-bold text-ink-muted">Experience</div><div>{app.experienceYears} years</div></div>
         <div className="sm:col-span-2"><div className="text-sm font-bold text-ink-muted">Fields</div><div>{app.fields.join(", ")}</div></div>
+        <div className="sm:col-span-2"><div className="text-sm font-bold text-ink-muted">Literature retrieval assignments</div><div>{app.litRetriever ? "Yes, wants to be a literature retriever" : "No"}</div></div>
         <div className="sm:col-span-2">
           <div className="text-sm font-bold text-ink-muted">Pitch</div>
           <p className="whitespace-pre-line">{app.pitch}</p>
