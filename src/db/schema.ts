@@ -833,3 +833,11 @@ export const litAnalyses = pgTable("lit_analyses", {
   state: jsonb("state").notNull().default(sql`'{}'::jsonb`), // synthesis, outline, sections
   updatedAt: updatedAt(),
 });
+
+// ───────────────────────── Scheduled jobs ─────────────────────────
+
+/** One row per reminder already sent by the hourly job, so each is sent once. */
+export const cronMarks = pgTable("cron_marks", {
+  key: text("key").primaryKey(),
+  sentAt: timestamp("sent_at", { mode: "date" }).notNull().defaultNow(),
+});
