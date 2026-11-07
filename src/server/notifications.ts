@@ -23,10 +23,11 @@ const CTA: Record<NotificationKind, string> = {
   PAYOUT: "View your earnings",
   LEVEL_UP: "See your level",
   TOOL_ACCESS: "Open",
+  STUDY_RESPONSE: "See the responses",
 };
 
 /** Kinds that can arrive in bursts: only the first unread one per link is emailed. */
-const THROTTLED = new Set<NotificationKind>(["MESSAGE", "NEW_PROPOSAL"]);
+const THROTTLED = new Set<NotificationKind>(["MESSAGE", "NEW_PROPOSAL", "STUDY_RESPONSE"]);
 
 /**
  * Creates a notification and emails the user. For messages, only the first unread one per order

@@ -425,6 +425,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "PAYOUT",
   "LEVEL_UP",
   "TOOL_ACCESS",
+  "STUDY_RESPONSE",
 ]);
 
 export const notifications = pgTable(
@@ -665,3 +666,86 @@ export const statRuns = pgTable(
   },
   (t) => [index("stat_runs_session_idx").on(t.sessionId, t.createdAt)],
 );
+
+// ───────────────────────── AI tool access (Qualitative Studio, and tools after it) ─────────────────────────
+// Each tool has its own free trial, started the first time someone opens it.
+
+export const toolAccess = pgTable(
+  "tool_access",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tool: text("tool").notNull(), // "qual"
+    trialStartedAt: timestamp("trial_started_at", { mode: "date" }).notNull().defaultNow(),
+    accessUntil: timestamp("access_until", { mode: "date" }),
+    upgradeRequestedAt: timestamp("upgrade_requested_at", { mode: "date" }),
+    note: text("note"),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.tool] })],
+);
+
+// ───────────────────────── Qualitative Studio ─────────────────────────
+// A study is a voice/text survey shared by one public link; responses arrive without accounts.
+// Audio lives in object storage (R2), or in qual_audio when R2 isn't configured.
+
+export const qualStudies = pgTable(
+  "qual_studies",
+  {
+    id: id(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(), // the public link: /s/<token>
+    title: text("title").notNull(),
+    intro: text("intro").notNull().default(""), // information sheet and consent text shown before the questions
+    questions: jsonb("questions").notNull().default(sql`'[]'::jsonb`), // the draft being edited
+    published: jsonb("published"), // what respondents see (a copy taken at publish)
+    settings: jsonb("settings").notNull().default(sql`'{}'::jsonb`),
+    status: text("status").notNull().default("DRAFT"), // DRAFT | LIVE | CLOSED
+    publishedAt: timestamp("published_at", { mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("qual_studies_owner_idx").on(t.ownerId)],
+);
+
+export const qualResponses = pgTable(
+  "qual_responses",
+  {
+    id: id(),
+    studyId: text("study_id")
+      .notNull()
+      .references(() => qualStudies.id, { onDelete: "cascade" }),
+    secret: text("secret").notNull(), // the respondent's browser holds this to keep answering
+    name: text("name"),
+    email: text("email"),
+    status: text("status").notNull().default("IN_PROGRESS"), // IN_PROGRESS | SUBMITTED
+    answers: jsonb("answers").notNull().default(sql`'{}'::jsonb`),
+    flagged: boolean("flagged").notNull().default(false), // a test response: left out of exports and analysis
+    tags: textArray("tags"),
+    userAgent: text("user_agent"),
+    startedAt: createdAt(),
+    submittedAt: timestamp("submitted_at", { mode: "date" }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("qual_responses_study_idx").on(t.studyId, t.startedAt)],
+);
+
+export const qualAudio = pgTable("qual_audio", {
+  key: text("key").primaryKey(),
+  mimeType: text("mime_type").notNull(),
+  data: bytea("data").notNull(),
+  createdAt: createdAt(),
+});
+
+export const qualAnalyses = pgTable("qual_analyses", {
+  studyId: text("study_id")
+    .primaryKey()
+    .references(() => qualStudies.id, { onDelete: "cascade" }),
+  researchQuestion: text("research_question").notNull().default(""),
+  background: text("background").notNull().default(""),
+  state: jsonb("state").notNull().default(sql`'{}'::jsonb`), // familiarisation, codes, codebook, themes, matrix, report
+  updatedAt: updatedAt(),
+});

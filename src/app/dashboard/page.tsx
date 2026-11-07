@@ -7,7 +7,7 @@ import { OrderProgress } from "@/components/OrderProgress";
 import { ToolsShelf } from "@/components/ToolsShelf";
 import { Avatar } from "@/components/UserAvatar";
 import { getDb } from "@/db";
-import { milestones, statSessions } from "@/db/schema";
+import { milestones, qualStudies, statSessions } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
 import { isTestMode, paystackConfigured } from "@/lib/paystack";
 import { ORDER_STATUS } from "@/lib/status";
@@ -15,6 +15,7 @@ import { attentionItems, progressStep } from "@/server/dashboard";
 import { expertAvailable } from "@/server/escrow";
 import { requireUser } from "@/server/guards";
 import { peekAccess } from "@/server/statsAccess";
+import { peekToolAccess } from "@/server/toolAccess";
 import { unreadNotificationCount } from "@/server/notifications";
 import { listFlaggedMessages, unreadByOrder } from "@/server/orderRoom";
 import { clientEscrowTotal, listOrdersForUser } from "@/server/orders";
@@ -84,9 +85,11 @@ export default async function Dashboard() {
     unreadNotificationCount(db, user.id),
     unreadByOrder(db, user.id),
   ]);
-  const [statsAccess, statsSessions] = await Promise.all([
+  const [statsAccess, statsSessions, qualAccess, qualStudyCount] = await Promise.all([
     peekAccess(db, user),
     db.select({ n: count() }).from(statSessions).where(eq(statSessions.ownerId, user.id)).then((r) => Number(r[0]?.n ?? 0)),
+    peekToolAccess(db, "qual", user),
+    db.select({ n: count() }).from(qualStudies).where(eq(qualStudies.ownerId, user.id)).then((r) => Number(r[0]?.n ?? 0)),
   ]);
   const unreadMsgs = [...unreadMap.values()].reduce((a, b) => a + b, 0);
   const profile = isExpert ? await expertProfileOf(db, user.id) : null;
@@ -155,7 +158,7 @@ export default async function Dashboard() {
 
       <section className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6">
         {/* ───── AI tools ───── */}
-        <ToolsShelf stats={{ ...statsAccess, sessions: statsSessions }} />
+        <ToolsShelf stats={{ ...statsAccess, sessions: statsSessions }} qual={{ ...qualAccess, studies: qualStudyCount }} />
 
         {/* ───── Onboarding ───── */}
         {isNewClient && (

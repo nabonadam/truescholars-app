@@ -36,6 +36,7 @@ export async function Header() {
             {user.roles.includes("EXPERT") && <Link href="/jobs" className={`${link} hidden lg:inline`}>Find work</Link>}
             <Link href="/orders" className={`${link} hidden md:inline`}>Orders</Link>
             <Link href="/tools/stats" className={`${link} hidden md:inline`}>Statistics</Link>
+            <Link href="/tools/qual" className={`${link} hidden lg:inline`}>Qualitative</Link>
             <Link href="/jobs/new" className="mr-1 hidden min-h-10 items-center rounded-full bg-amber px-4 text-sm font-bold text-ink no-underline md:inline-flex">Post a job</Link>
             <HeaderBadges messages={unreadMsgs} notifications={unread} />
             <AccountMenu name={user.name ?? ""} email={user.email ?? ""} roles={user.roles} image={user.image} />
@@ -44,7 +45,8 @@ export async function Header() {
           <>
             <Link href="/services" className={`${link} hidden md:inline`}>Find experts</Link>
             <Link href="/tools/stats" className={`${link} hidden lg:inline`}>Statistics <span className="ml-0.5 rounded-full bg-amber px-1.5 py-px text-[10.5px] font-bold text-ink">Free trial</span></Link>
-            <a href={site("/#how")} className={`${link} hidden lg:inline`}>How it works</a>
+            <Link href="/tools/qual" className={`${link} hidden xl:inline`}>Qualitative Studio</Link>
+            <a href={site("/how-it-works/")} className={`${link} hidden lg:inline`}>How it works</a>
             <Link href="/jobs" className={`${link} hidden lg:inline`}>For experts</Link>
             <Link href="/sign-in" className="px-2 text-sm font-medium text-white no-underline">Log in</Link>
             <Link href="/sign-up" className="btn-amber">Join free</Link>

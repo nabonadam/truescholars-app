@@ -29,7 +29,7 @@ export function AccountMenu({ name, email, roles, image }: { name: string; email
 
   const isExpert = roles.includes("EXPERT");
   const groups: { title: string; items: Item[] }[] = [
-    { title: "", items: [{ href: "/dashboard", label: "Dashboard" }, { href: "/messages", label: "Messages" }, { href: "/orders", label: "Orders" }, { href: "/tools/stats", label: "Statistics Assistant" }, { href: "/settings", label: "Account settings" }] },
+    { title: "", items: [{ href: "/dashboard", label: "Dashboard" }, { href: "/messages", label: "Messages" }, { href: "/orders", label: "Orders" }, { href: "/tools/stats", label: "Statistics Assistant" }, { href: "/tools/qual", label: "Qualitative Studio" }, { href: "/settings", label: "Account settings" }] },
     { title: "Hiring", items: [{ href: "/jobs/new", label: "Post a job" }, { href: "/jobs/mine", label: "My jobs" }, { href: "/services", label: "Find experts" }] },
     isExpert
       ? {
