@@ -9,6 +9,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; external?:
       { label: "Find experts", href: "/services" },
       { label: "Post a job", href: "/jobs/new" },
       { label: "AI tools", href: site("/#tools"), external: true },
+      { label: "Pricing", href: site("/pricing/"), external: true },
       { label: "How it works", href: site("/how-it-works/"), external: true },
     ],
   },
