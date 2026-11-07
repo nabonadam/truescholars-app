@@ -29,6 +29,7 @@ function fakeR2() {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init);
     const key = decodeURIComponent(new URL(req.url).pathname.replace(/^\/files\//, ""));
+    if (req.method === "PUT" && !req.headers.get("content-length")) return new Response("MissingContentLength", { status: 411 }); // like R2
     if (req.method === "PUT") {
       bucket.set(key, { body: new Uint8Array(await req.arrayBuffer()), type: req.headers.get("content-type") ?? "" });
       return new Response(null, { status: 200 });

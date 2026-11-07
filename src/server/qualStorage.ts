@@ -25,12 +25,21 @@ function r2(): R2 | null {
 }
 
 export const storageKind = () => (r2() ? "r2" : "database");
+/**
+ * Uploads with a known length. aws4fetch would send the body as a stream (no Content-Length), which
+ * R2 refuses with 411 for anything but tiny files, so we sign the request and send the bytes ourselves.
+ */
+async function put(s: R2, key: string, bytes: Uint8Array, type: string) {
+  const signed = await s.client.sign(url(s, key), { method: "PUT", headers: { "content-type": type, "content-length": String(bytes.byteLength) }, body: bytes as BodyInit });
+  return fetch(signed.url, { method: "PUT", headers: signed.headers, body: bytes as BodyInit });
+}
+
 const url = (s: R2, key: string) => `${s.base}/${key.split("/").map(encodeURIComponent).join("/")}`;
 
 export async function putAudio(db: DB, key: string, bytes: Uint8Array, mimeType: string) {
   const s = r2();
   if (s) {
-    const res = await s.client.fetch(url(s, key), { method: "PUT", body: bytes as BodyInit, headers: { "content-type": mimeType } });
+    const res = await put(s, key, bytes, mimeType);
     if (!res.ok) throw new Error(`Audio storage refused the upload (${res.status})`);
     return;
   }
@@ -56,7 +65,7 @@ export async function getAudio(db: DB, key: string): Promise<{ bytes: Uint8Array
 }
 
 async function moveOne(db: DB, s: R2, row: { key: string; mimeType: string; data: Buffer }) {
-  const res = await s.client.fetch(url(s, row.key), { method: "PUT", body: new Uint8Array(row.data) as BodyInit, headers: { "content-type": row.mimeType } });
+  const res = await put(s, row.key, new Uint8Array(row.data), row.mimeType);
   if (!res.ok) throw new Error(`R2 refused ${row.key} (${res.status}): ${(await res.text()).slice(0, 200)}`);
   await db.delete(qualAudio).where(eq(qualAudio.key, row.key));
 }
@@ -87,11 +96,12 @@ export async function checkStorage() {
   if (!s) return { storage: "database", ok: true, note: "R2 isn't configured; files are kept in the database." };
   const key = `_health/${Date.now()}.txt`;
   try {
-    const put = await s.client.fetch(url(s, key), { method: "PUT", body: "ok", headers: { "content-type": "text/plain" } });
-    if (!put.ok) return { storage: "r2", ok: false, step: "write", status: put.status, detail: (await put.text()).slice(0, 300) };
+    const big = new Uint8Array(3 * 1024 * 1024).fill(7); // large enough to catch upload problems
+    const w = await put(s, key, big, "application/octet-stream");
+    if (!w.ok) return { storage: "r2", ok: false, step: "write", status: w.status, detail: (await w.text()).slice(0, 300) };
     const get = await s.client.fetch(url(s, key));
-    const body = await get.text();
-    if (!get.ok || body !== "ok") return { storage: "r2", ok: false, step: "read", status: get.status };
+    const body = new Uint8Array(await get.arrayBuffer());
+    if (!get.ok || body.byteLength !== big.byteLength) return { storage: "r2", ok: false, step: "read", status: get.status };
     const del = await s.client.fetch(url(s, key), { method: "DELETE" });
     return { storage: "r2", ok: del.ok || del.status === 204, step: "done" };
   } catch (err) {
