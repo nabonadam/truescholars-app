@@ -184,7 +184,7 @@ function WordCloud({ words, title }: { words: WordCount[]; title: string }) {
 
 // ───────── bar charts ─────────
 
-function BarChart({ rows, total, unit, colour, label }: { rows: { label: string; value: number }[]; total: number; unit: string; colour: string; label: string }) {
+export function BarChart({ rows, total, unit, colour, label }: { rows: { label: string; value: number }[]; total: number; unit: string; colour: string; label: string }) {
   const W = 1000;
   const left = 330, right = 90, row = 34, top = 14;
   const H = top * 2 + rows.length * row + 30;

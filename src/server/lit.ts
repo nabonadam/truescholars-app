@@ -83,8 +83,11 @@ export async function listReviews(db: DB, ownerId: string) {
 
 /** The review if this user may see it: its owner, or the expert hired to find its literature. */
 export async function getReview(db: DB, userId: string, id: string): Promise<(ReviewRow & { role: "owner" | "expert" }) | null> {
-  const [r] = await db.select().from(litReviews).where(eq(litReviews.id, id));
-  if (!r) return null;
+  const [row] = await db.select().from(litReviews).where(eq(litReviews.id, id));
+  if (!row) return null;
+  // once the client hires an expert on the retrieval job, the expert gets the workspace; approvals in the order room carry over
+  const { linkHire, syncWithOrder } = await import("./litRetrieval");
+  const r = await syncWithOrder(db, await linkHire(db, row));
   if (r.ownerId === userId) return { ...r, role: "owner" };
   if (r.expertUserId && r.expertUserId === userId) return { ...r, role: "expert" };
   return null;
