@@ -57,7 +57,7 @@ export async function getAudio(db: DB, key: string): Promise<{ bytes: Uint8Array
 
 async function moveOne(db: DB, s: R2, row: { key: string; mimeType: string; data: Buffer }) {
   const res = await s.client.fetch(url(s, row.key), { method: "PUT", body: new Uint8Array(row.data) as BodyInit, headers: { "content-type": row.mimeType } });
-  if (!res.ok) throw new Error(`R2 refused ${row.key} (${res.status})`);
+  if (!res.ok) throw new Error(`R2 refused ${row.key} (${res.status}): ${(await res.text()).slice(0, 200)}`);
   await db.delete(qualAudio).where(eq(qualAudio.key, row.key));
 }
 
@@ -67,16 +67,18 @@ export async function moveToR2(db: DB, batch = 20) {
   if (!s) return { moved: 0, left: 0, storage: "database" };
   const rows = await db.select().from(qualAudio).limit(batch);
   let moved = 0;
+  const errors: string[] = [];
   for (const row of rows) {
     try {
       await moveOne(db, s, row);
       moved++;
     } catch (err) {
       console.error("move to R2 failed", row.key, err);
+      errors.push(`${row.key} (${row.data.length} bytes): ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
     }
   }
   const [{ n }] = await db.select({ n: count() }).from(qualAudio);
-  return { moved, left: Number(n), storage: "r2" };
+  return { moved, left: Number(n), storage: "r2", ...(errors.length ? { errors: errors.slice(0, 5) } : {}) };
 }
 
 /** Writes, reads back and deletes a small test file: proves the R2 settings work. */
