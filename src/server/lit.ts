@@ -44,8 +44,15 @@ export type PaperRow = typeof litPapers.$inferSelect;
 
 // ───────── reviews ─────────
 
+/** A title from the research question: whole words, at most about 90 characters. */
+export function titleFrom(q: string) {
+  const t = q.trim().replace(/\s+/g, " ");
+  if (t.length <= 90) return t;
+  return t.slice(0, 90).replace(/\s+\S*$/, "").replace(/[\s,;:–-]+$/, "") + "…";
+}
+
 export async function createReview(db: DB, ownerId: string, p: { title: string; researchQuestion: string; brief?: Brief; style?: string }) {
-  const title = p.title.trim().slice(0, 200) || p.researchQuestion.trim().slice(0, 120) || "Untitled review";
+  const title = p.title.trim().slice(0, 200) || titleFrom(p.researchQuestion) || "Untitled review";
   const rq = p.researchQuestion.trim().slice(0, 1500);
   if (rq.length < 10) throw new LitError("Write your research question: the whole review is organised around it.");
   const [r] = await db

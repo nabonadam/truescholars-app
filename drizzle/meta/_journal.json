@@ -113,6 +113,13 @@
       "when": 1794058545026,
       "tag": "0015_lit_private_retrieval",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794059656049,
+      "tag": "0016_lit_move_public_jobs",
+      "breakpoints": true
     }
   ]
 }

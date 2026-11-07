@@ -61,13 +61,13 @@ export default async function LitHome() {
                 <Link href="/tools/lit/upgrade" className="btn-amber mt-5">Upgrade</Link>
               </div>
             ) : (
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-2xl font-extrabold">Start a review</h2>
                 <p className="mt-1 mb-4 text-ink-muted">Everything is organised around your research question.</p>
                 <NewReview />
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <h2 className="text-2xl font-extrabold">Your reviews</h2>
               {reviews.length ? (
                 <ul className="mt-4 space-y-2">
