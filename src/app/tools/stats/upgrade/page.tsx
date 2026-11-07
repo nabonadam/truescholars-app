@@ -31,7 +31,7 @@ export default async function Upgrade() {
         <div className="relative overflow-hidden rounded-lg bg-green-deep p-7 text-white sm:p-9">
           <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-amber/15" aria-hidden="true" />
           <span className="relative inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[12.5px] font-bold text-amber"><Icon name="chart" size={14} /> Statistics Assistant Pro</span>
-          <h1 className="relative mt-4 text-[34px] leading-tight font-extrabold sm:text-[40px]">Keep analysing.<br /><span className="text-amber">Finish your thesis faster.</span></h1>
+          <h1 className="relative mt-4 text-[34px] leading-tight font-extrabold sm:text-[40px]">Keep analysing.<br /><span className="text-amber">Finish your research faster.</span></h1>
           <ul className="relative mt-6 space-y-2.5">
             {FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-2.5 text-[15px] text-on-green-muted"><Icon name="check" size={18} className="mt-0.5 flex-none text-amber" /> {f}</li>

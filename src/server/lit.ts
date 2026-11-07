@@ -37,6 +37,8 @@ export type Verify = {
   retracted?: boolean;
   source?: "doi" | "title" | "none";
   message?: string;
+  byHand?: boolean; // details typed by the expert; Crossref only cross-checked them
+  mismatches?: string[]; // where the expert's details differ from Crossref's
 };
 
 export type ReviewRow = typeof litReviews.$inferSelect;
@@ -176,9 +178,10 @@ export async function addPdf(db: DB, userId: string, reviewId: string, bytes: Ui
   if (c >= MAX_PAPERS) throw new LitError(`A review can hold up to ${MAX_PAPERS} papers.`);
 
   const { pages, info } = await readPdf(bytes);
-  const guess = guessMeta(pages, info);
-  const check = await (opts.crossref ?? crossrefLookup)(guess);
-  const meta: PaperMeta = { ...guess, ...(check.meta ?? {}), abstract: check.meta?.abstract || guess.abstract };
+  // An expert enters every paper's details by hand after reading it, so nothing is filled in for them.
+  const guess = source === "EXPERT" ? {} : guessMeta(pages, info);
+  const check = source === "EXPERT" ? { meta: undefined, verify: null } : await (opts.crossref ?? crossrefLookup)(guess);
+  const meta: PaperMeta = { ...guess, ...(check.meta ?? {}), abstract: check.meta?.abstract || (guess as PaperMeta).abstract };
   const n = await nextNumber(db, reviewId);
   const [p] = await db
     .insert(litPapers)
@@ -209,7 +212,7 @@ export async function addDoi(db: DB, userId: string, reviewId: string, doi: stri
   const { source } = await canAddPapers(db, userId, reviewId);
   const d = cleanDoi(doi);
   if (!d) throw new LitError("That doesn't look like a DOI (it should start with 10.).");
-  const check = await (opts.crossref ?? crossrefLookup)({ doi: d });
+  const check = source === "EXPERT" ? { meta: undefined, verify: null } : await (opts.crossref ?? crossrefLookup)({ doi: d });
   const n = await nextNumber(db, reviewId);
   const [p] = await db
     .insert(litPapers)
@@ -242,15 +245,12 @@ async function ownPaper(db: DB, userId: string, paperId: string) {
   return { p, r };
 }
 
-/** Corrects a paper's details (title, authors, year…). */
-export async function editPaperMeta(db: DB, userId: string, paperId: string, meta: PaperMeta) {
-  const { p, r } = await ownPaper(db, userId, paperId);
-  if (r.role === "expert" && p.status !== "PENDING") throw new LitError("This paper has already been reviewed by the client.");
+function cleanMeta(old: PaperMeta, meta: PaperMeta): PaperMeta {
   const s = (v: unknown, n = 400) => (typeof v === "string" ? v.trim().slice(0, n) : undefined) || undefined;
   const authors = (meta.authors ?? []).map((a) => ({ family: s(a.family, 80) ?? "", given: s(a.given, 80) })).filter((a) => a.family).slice(0, 60);
   const year = Number(meta.year);
-  const next: PaperMeta = {
-    ...(p.meta as PaperMeta),
+  return {
+    ...old,
     title: s(meta.title, 500),
     authors,
     year: Number.isInteger(year) && year > 1500 && year < 2100 ? year : null,
@@ -260,7 +260,58 @@ export async function editPaperMeta(db: DB, userId: string, paperId: string, met
     pages: s(meta.pages, 30),
     doi: cleanDoi(meta.doi ?? "") ?? undefined,
   };
-  await db.update(litPapers).set({ meta: next }).where(eq(litPapers.id, paperId));
+}
+
+/** Corrects a paper's details (title, authors, year…). */
+export async function editPaperMeta(db: DB, userId: string, paperId: string, meta: PaperMeta) {
+  const { p, r } = await ownPaper(db, userId, paperId);
+  if (r.role === "expert") throw new LitError("Use the paper's record form to change its details.");
+  await db.update(litPapers).set({ meta: cleanMeta(p.meta as PaperMeta, meta) }).where(eq(litPapers.id, paperId));
+}
+
+const words = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * The expert's record of a paper, typed by hand after reading it: its details, a summary in their own
+ * words, why it fits the research question, and their confirmation. Crossref is then used only to
+ * cross-check what they typed; differences are flagged for them to look at, never overwritten.
+ */
+export async function recordPaper(
+  db: DB,
+  expertId: string,
+  paperId: string,
+  input: { meta: PaperMeta; summary: string; note: string; confirmed: boolean },
+  lookup = crossrefLookup,
+) {
+  const { p, r } = await ownPaper(db, expertId, paperId);
+  if (r.role !== "expert") throw new LitError("Only the expert records papers this way.");
+  if (p.status !== "PENDING" || r.status !== "RETRIEVAL") throw new LitError("This paper has already been delivered.");
+  const meta = cleanMeta(p.meta as PaperMeta, input.meta);
+  const missing = [!meta.title && "the title", !meta.authors?.length && "at least one author", !meta.year && "the year"].filter(Boolean);
+  if (missing.length) throw new LitError(`Add ${missing.join(", ").replace(/, ([^,]*)$/, " and $1")}, exactly as they appear in the paper.`);
+  const summary = input.summary.trim().slice(0, 3000);
+  const note = input.note.trim().slice(0, 1000);
+  if (words(summary) < 25) throw new LitError("Write a summary of at least 25 words: what the study did and what it found.");
+  if (words(note) < 8) throw new LitError("Say in a sentence or two why this paper fits the research question.");
+  if (!input.confirmed) throw new LitError("Confirm that you have read the paper and that it fits the research question.");
+
+  const check = await lookup({ doi: meta.doi, title: meta.title });
+  const mismatches: string[] = [];
+  const c = check.meta;
+  if (c) {
+    if (c.title && similar(meta.title, c.title) < 0.6) mismatches.push(`Title: Crossref has “${c.title}”`);
+    if (c.year && meta.year && Math.abs(c.year - meta.year) > 1) mismatches.push(`Year: Crossref has ${c.year}`);
+    const fam = (x?: string) => (x ?? "").normalize("NFKD").replace(/[^\p{L}]/gu, "").toLowerCase();
+    if (c.authors?.length && meta.authors?.length && fam(c.authors[0].family) !== fam(meta.authors[0].family)) mismatches.push(`First author: Crossref has ${c.authors[0].family}`);
+  }
+  // fill only what the expert left empty (journal, volume…), never what they typed
+  const filled: PaperMeta = { ...meta };
+  if (c) for (const k of ["journal", "volume", "issue", "pages", "publisher", "type", "abstract"] as const) if (!filled[k] && c[k]) (filled as Record<string, unknown>)[k] = c[k];
+  await db
+    .update(litPapers)
+    .set({ meta: filled, summary, note, confirmedAt: new Date(), verify: { ...check.verify, byHand: true, titleMatch: c ? mismatches.every((m) => !m.startsWith("Title")) : check.verify.titleMatch, mismatches } })
+    .where(eq(litPapers.id, paperId));
+  return { mismatches, found: check.verify.found };
 }
 
 export async function setNote(db: DB, userId: string, paperId: string, note: string) {
@@ -416,6 +467,7 @@ export async function crossrefLookup(guess: PaperMeta): Promise<{ meta?: PaperMe
 export async function recheckPaper(db: DB, userId: string, paperId: string, lookup = crossrefLookup) {
   const { p } = await ownPaper(db, userId, paperId);
   const meta = p.meta as PaperMeta;
+  if (p.source === "EXPERT") throw new LitError("This paper's details were entered by hand by the expert, and are checked when they save the record.");
   const check = await lookup({ doi: meta.doi, title: meta.title });
   await db.update(litPapers).set({ meta: { ...meta, ...(check.meta ?? {}) }, verify: check.verify }).where(eq(litPapers.id, paperId));
   return check.verify;

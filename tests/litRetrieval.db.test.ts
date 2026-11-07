@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "@/db";
 import * as schema from "@/db/schema";
 import { fundMilestone } from "@/server/escrow";
-import { addDoi, createReview, decidePaper, getReview, listPapers } from "@/server/lit";
+import { addDoi, createReview, decidePaper, getReview, listPapers, recordPaper } from "@/server/lit";
 import { acceptLiterature, askReplacements, assignRetriever, cancelRequest, declineRequest, listRetrievalRequests, listRetrievers, methodsParagraph, requestRetrieval, reviewForOrder, saveSearchLog, submitRetrieval, unassignRetriever } from "@/server/litRetrieval";
 import { approveApplication, submitApplication } from "@/server/vetting";
 
@@ -32,6 +32,12 @@ beforeEach(async () => {
   const app2 = await submitApplication(db, other, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
   await approveApplication(db, { applicationId: app2.id });
 });
+
+const summary = "A household survey of 400 farmers in northern Ghana found that access to credit and labour shaped which adaptation strategies they adopted, with women facing the tightest constraints.";
+const record = async (reviewId: string, n: number, over: Partial<Parameters<typeof recordPaper>[3]> = {}) => {
+  const p = (await listPapers(db, reviewId)).find((x) => x.n === n)!;
+  return recordPaper(db, expert, p.id, { meta: { title: `Paper ${p.meta.doi}`, authors: [{ family: "Mensah", given: "K." }], year: 2020, doi: p.meta.doi }, summary, note: "Directly studies adaptation to rainfall variability among smallholders.", confirmed: true, ...over }, crossref);
+};
 
 const notes = (userId: string) => db.select().from(schema.notifications).where(eq(schema.notifications.userId, userId));
 
@@ -83,6 +89,18 @@ describe("literature retrieval by an expert", () => {
 
     await addDoi(db, expert, id, "10.1000/aaa", { note: "Core study", crossref });
     await addDoi(db, expert, id, "10.1000/bbb", { note: "Contrasting case", crossref });
+    // nothing is filled in for the expert: they type every paper's details after reading it
+    expect((await listPapers(db, id))[0].meta).toEqual({ doi: "10.1000/aaa" });
+    await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/Fill in the record for P01, P02/);
+    await expect(record(id, 1, { meta: { doi: "10.1000/aaa" } })).rejects.toThrow(/title, at least one author and the year/);
+    await expect(record(id, 1, { summary: "Good paper." })).rejects.toThrow(/at least 25 words/);
+    await expect(record(id, 1, { confirmed: false })).rejects.toThrow(/Confirm that you have read/);
+    expect((await record(id, 1)).mismatches).toEqual([]);
+    // Crossref is only a cross-check: a different year is flagged, not overwritten
+    expect((await record(id, 2, { meta: { title: "Paper 10.1000/bbb", authors: [{ family: "Mensah" }], year: 2015, doi: "10.1000/bbb" } })).mismatches).toEqual(["Year: Crossref has 2020"]);
+    const p2 = (await listPapers(db, id))[1];
+    expect(p2.meta.year).toBe(2015);
+    expect(p2.summary).toBe(summary);
     await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/search log/);
     await saveSearchLog(db, expert, id, { databases: ["Scopus", "AJOL"], searchStrings: "rainfall AND adaptation", identified: 120, duplicates: 20, screened: 100, excludedScreening: 80, fullText: 20, excludedFullText: 18, included: 2 });
     await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/escrow/);
@@ -102,6 +120,8 @@ describe("literature retrieval by an expert", () => {
     await askReplacements(db, client, id, "Please find one from coastal Ghana");
     expect((await getReview(db, client, id))!.status).toBe("RETRIEVAL");
     await addDoi(db, expert, id, "10.1000/ccc", { note: "Coastal Volta study", crossref });
+    await expect(submitRetrieval(db, expert, id, "Replacement added.")).rejects.toThrow(/P03/);
+    await record(id, 3);
     await submitRetrieval(db, expert, id, "Replacement added.");
 
     await expect(acceptLiterature(db, client, id)).rejects.toThrow(/every paper/);

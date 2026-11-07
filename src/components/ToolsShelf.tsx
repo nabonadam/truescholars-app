@@ -16,7 +16,7 @@ export function ToolsShelf({ stats, qual, lit }: { stats: StatsState; qual: Qual
           <span className="eyebrow">AI research tools</span>
           <h2 className="text-2xl font-bold">Your research toolkit</h2>
         </div>
-        <span className="text-sm text-ink-muted">Built for students and researchers. More tools are on the way.</span>
+        <span className="text-sm text-ink-muted">Built for researchers, academics and professionals. More tools are on the way.</span>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.65fr_1fr]">
         <StatsCard {...stats} />

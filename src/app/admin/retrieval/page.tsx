@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { ago } from "@/lib/time";
 import { requireUser } from "@/server/guards";
+import { markLinkNotificationsRead } from "@/server/notifications";
 import type { Brief } from "@/server/lit";
 import { listRetrievalRequests, listRetrievers } from "@/server/litRetrieval";
 
@@ -23,8 +24,9 @@ const STAGE: Record<string, { text: string; tone: string }> = {
 };
 
 export default async function AdminRetrieval() {
-  await requireUser("ADMIN");
+  const admin = await requireUser("ADMIN");
   const db = getDb();
+  await markLinkNotificationsRead(db, admin.id, "/admin/retrieval");
   const [rows, retrievers] = await Promise.all([listRetrievalRequests(db), listRetrievers(db)]);
   const open = rows.filter((r) => r.status === "REQUESTED");
   const rest = rows.filter((r) => r.status !== "REQUESTED" && r.status !== "DRAFT");

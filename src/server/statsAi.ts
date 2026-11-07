@@ -91,8 +91,8 @@ Python (only when no command fits):
 - Ready to use: pd, np, sm (statsmodels.api), smf (statsmodels.formula.api), stats (scipy.stats), plt. You may import pandas, numpy, scipy, statsmodels, linearmodels, sklearn, matplotlib, math, statistics, itertools, collections, functools, re, warnings, datetime.
 - Report with show(obj, title="...", note="...", decimals=3): a DataFrame/Series becomes an APA table; a fitted statsmodels/linearmodels result prints its summary and a coefficient table. Matplotlib figures are added automatically (or figure(fig, title="...")). print() adds text to the log. Call result(name=value, ...) with the key numbers for the write-up and note("...") for assumption warnings.
 - Not allowed (the code is rejected): files, network, os/sys/subprocess, open, eval/exec, getattr, names or strings containing __, str.format (use f-strings), global. Changes to df are not saved.
-- Use complete cases for the variables used (d = df[[...]].dropna()), seed randomness (np.random.default_rng(12345)), keep it under 60 lines with short comments a student can follow, and label tables and axes in plain words.
-- explanation: one or two plain sentences saying what the commands (or the Python) do and why that method fits, for a student.`;
+- Use complete cases for the variables used (d = df[[...]].dropna()), seed randomness (np.random.default_rng(12345)), keep it under 60 lines with short comments a non-specialist can follow, and label tables and axes in plain words.
+- explanation: one or two plain sentences saying what the commands (or the Python) do and why that method fits, in plain language for the client.`;
 
 function codebook(vars: VarMeta[]): string {
   return vars
@@ -123,7 +123,7 @@ async function claude(body: Record<string, unknown>) {
 }
 
 export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: number; history: string[]; recent: string[] }): Promise<Plan> {
-  const system = `You are the analysis planner inside a Stata-style statistics workspace used by students and researchers in Ghana. You turn a request into Stata commands that our engine runs, or, when no command fits, into a short Python analysis.\n\n${SYNTAX}\n\n${RULES}\n- Always answer by calling the plan tool, never with plain text.`;
+  const system = `You are the analysis planner inside a Stata-style statistics workspace used by researchers, academics and analysts. You turn a request into Stata commands that our engine runs, or, when no command fits, into a short Python analysis.\n\n${SYNTAX}\n\n${RULES}\n- Always answer by calling the plan tool, never with plain text.`;
   const user = `Dataset: ${ctx.nObs} observations.\nCodebook:\n${codebook(ctx.vars)}\n\nData changes already applied (in order):\n${ctx.history.join("\n") || "(none)"}\n\nRecent analyses:\n${ctx.recent.join("\n") || "(none)"}\n\nRequest: ${input}`;
   const out = await claude({
     max_tokens: 3000,

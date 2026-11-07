@@ -4,6 +4,7 @@ import { Icon } from "@/components/Icons";
 import { LitTabs } from "@/components/lit/LitTabs";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
+import { markLinkNotificationsRead } from "@/server/notifications";
 import { getReview, listPapers } from "@/server/lit";
 import { timeLeft, toolAccessFor } from "@/server/toolAccess";
 
@@ -23,6 +24,7 @@ export default async function ReviewLayout({ children, params }: { children: Rea
   const db = getDb();
   const r = await getReview(db, user.id, id);
   if (!r) notFound();
+  await markLinkNotificationsRead(db, user.id, `/tools/lit/${id}`);
   const papers = await listPapers(db, id);
   const accepted = papers.filter((p) => p.status === "ACCEPTED");
   const counts = { papers: accepted.length, pending: papers.filter((p) => p.status === "PENDING").length, read: accepted.filter((p) => p.cardStatus === "done").length };

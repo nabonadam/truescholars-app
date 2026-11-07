@@ -48,7 +48,7 @@ export default async function StatsHome() {
               <span className="text-amber">Get Stata‑grade answers.</span>
             </h1>
             <p className="mt-4 max-w-lg text-[17px] text-on-green-muted">
-              Type a question in plain English or write Stata yourself. You see the exact commands, the full output as Stata prints it, an APA table ready for your thesis, and a do-file that reproduces it all.
+              Type a question in plain English or write Stata yourself. You see the exact commands, the full output as Stata prints it, an APA table ready for your report or paper, and a do-file that reproduces it all.
             </p>
             {!user && (
               <div className="mt-7 flex flex-wrap items-center gap-3">

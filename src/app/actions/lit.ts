@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import type { PaperMeta } from "@/lib/cite";
 import { requireUser } from "@/server/guards";
-import { type Brief, LitError, addDoi, createReview, decidePaper, deletePaper, deleteReview, editPaperMeta, getReview, recheckPaper, setNote, updateReview } from "@/server/lit";
+import { type Brief, LitError, addDoi, createReview, decidePaper, deletePaper, deleteReview, editPaperMeta, getReview, recheckPaper, recordPaper, setNote, updateReview } from "@/server/lit";
 import { type Section, editParagraph, editSynthesis, makeOutline, readPapers, resetCard, runSynthesis, saveOutline, writeSection } from "@/server/litAnalysis";
 import { EscrowError } from "@/server/escrow";
 import { type SearchLog, acceptLiterature, askReplacements, cancelRequest, requestRetrieval, saveSearchLog, submitRetrieval } from "@/server/litRetrieval";
@@ -108,6 +108,17 @@ export async function paperNoteAction(reviewId: string, paperId: string, note: s
     await setNote(getDb(), user.id, paperId, note);
     pages(reviewId);
     return { ok: "Saved", at: Date.now() };
+  } catch (err) {
+    return known(err);
+  }
+}
+
+export async function recordPaperAction(reviewId: string, paperId: string, input: { meta: PaperMeta; summary: string; note: string; confirmed: boolean }): Promise<LitState & { mismatches?: string[] }> {
+  try {
+    const user = await requireUser();
+    const r = await recordPaper(getDb(), user.id, paperId, input);
+    pages(reviewId);
+    return { ok: r.mismatches.length ? "Saved. Crossref's record differs on a few points: please check them against the paper." : r.found ? "Saved. Crossref's record matches your details." : "Saved. No Crossref record found, which is normal for reports, theses and some journals.", mismatches: r.mismatches, at: Date.now() };
   } catch (err) {
     return known(err);
   }

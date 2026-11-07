@@ -9,7 +9,7 @@ export function GrantForm({ email = "" }: { email?: string }) {
     <form action={action} className="card grid gap-3 sm:grid-cols-[2fr_1fr_2fr_auto] sm:items-end">
       <div>
         <label className="label" htmlFor="g-email">Email</label>
-        <input id="g-email" name="email" type="email" required defaultValue={email} className="field" placeholder="student@example.com" />
+        <input id="g-email" name="email" type="email" required defaultValue={email} className="field" placeholder="client@example.com" />
       </div>
       <div>
         <label className="label" htmlFor="g-days">Days</label>

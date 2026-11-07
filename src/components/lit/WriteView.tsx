@@ -179,7 +179,7 @@ function CriticalCheck({ warnings, outline }: { warnings: Warning[]; outline: Se
   if (!warnings.length) return <div className="rounded-sm bg-green-tint p-3 text-[14px] text-green"><b>Critical check passed.</b> No author-by-author paragraphs, single-source paragraphs or unsupported claims were found.</div>;
   return (
     <details className="rounded-sm border border-amber/50 bg-amber-tint p-3 text-[14px]" open={warnings.length <= 6}>
-      <summary className="cursor-pointer font-bold text-amber-deep">Critical check: {warnings.length} thing{warnings.length === 1 ? "" : "s"} a supervisor would question</summary>
+      <summary className="cursor-pointer font-bold text-amber-deep">Critical check: {warnings.length} thing{warnings.length === 1 ? "" : "s"} a reviewer would question</summary>
       <ul className="mt-2 space-y-1">
         {warnings.map((w, i) => (
           <li key={i}><a href={`#p-${w.sectionId}-${w.paragraph}`} className="font-bold text-ink">{heading[w.sectionId]}, paragraph {w.paragraph + 1}:</a> <span className="text-ink-muted">{w.message}</span></li>

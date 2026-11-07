@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { markAllReadAction } from "@/app/actions/notifications";
 import { KindIcon } from "@/components/Icons";
 import { getDb } from "@/db";
@@ -42,7 +41,7 @@ export default async function Notifications() {
         <ul className="flex flex-col overflow-hidden rounded-md border border-line bg-white">
           {rows.map((n) => (
             <li key={n.id} className="border-b border-line last:border-0">
-              <Link href={n.link ?? "/dashboard"} className={`flex gap-4 px-5 py-4 text-ink no-underline hover:bg-parchment ${n.readAt ? "" : "bg-green-tint/50"}`}>
+              <a href={`/notifications/${n.id}`} className={`flex gap-4 px-5 py-4 text-ink no-underline hover:bg-parchment ${n.readAt ? "" : "bg-green-tint/50"}`}>
                 <KindIcon kind={n.kind} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
@@ -52,7 +51,7 @@ export default async function Notifications() {
                   {n.body && <p className="mt-0.5 line-clamp-2 text-sm text-ink-muted">{n.body}</p>}
                 </div>
                 {!n.readAt && <span className="mt-2 size-2.5 flex-none rounded-full bg-amber" aria-label="Unread" />}
-              </Link>
+              </a>
             </li>
           ))}
         </ul>

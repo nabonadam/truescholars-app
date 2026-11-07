@@ -40,10 +40,12 @@ export async function litExport(db: DB, r: ReviewRow, kind: string, styleParam?:
 
   if (kind === "spreadsheet") {
     const all = await listPapers(db, r.id);
-    const rows: unknown[][] = [["Paper", "Authors", "Year", "Title", "Journal / source", "DOI link", "Checked with Crossref", "Retracted", "Status", "Relevance note", "Added by", "File"]];
+    const rows: unknown[][] = [["Paper", "Authors", "Year", "Title", "Journal / source", "DOI link", "Summary", "Relevance to the research question", "Read and verified by", "Checked with Crossref", "Retracted", "Status", "File"]];
     for (const p of all) {
       const m = p.meta as PaperMeta;
-      rows.push([pno(p.n), (m.authors ?? []).map((a) => `${a.family}${a.given ? `, ${a.given}` : ""}`).join("; "), m.year ?? "", m.title ?? "", m.journal ?? "", m.doi ? `https://doi.org/${m.doi}` : "", p.verify?.found ? "Yes" : p.verify?.checked ? "No record found" : "Not checked", p.verify?.retracted ? "YES: retracted" : "", p.status === "ACCEPTED" ? "Accepted" : p.status === "REJECTED" ? `Rejected: ${p.rejectReason ?? ""}` : "Awaiting review", p.note ?? "", p.source === "EXPERT" ? "Expert" : "You", p.fileName ?? "(no PDF)"]);
+      const v = p.verify;
+      const crossref = v?.found ? (v.mismatches?.length ? `Found; differs: ${v.mismatches.join("; ")}` : "Yes, matches") : v?.checked ? "No record found" : "Not checked";
+      rows.push([pno(p.n), (m.authors ?? []).map((a) => `${a.family}${a.given ? `, ${a.given}` : ""}`).join("; "), m.year ?? "", m.title ?? "", m.journal ?? "", m.doi ? `https://doi.org/${m.doi}` : "", p.summary ?? "", p.note ?? "", p.source === "EXPERT" ? (p.confirmedAt ? "Expert (read in full, details entered by hand)" : "Expert (not yet recorded)") : "Client", crossref, v?.retracted ? "YES: retracted" : "", p.status === "ACCEPTED" ? "Accepted" : p.status === "REJECTED" ? `Rejected: ${p.rejectReason ?? ""}` : "Awaiting review", p.fileName ?? "(no PDF)"]);
     }
     return { body: csv(rows), type: "text/csv; charset=utf-8", name: "papers.csv" };
   }

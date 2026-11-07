@@ -329,6 +329,8 @@ export async function submitRetrieval(db: DB, expertUserId: string, reviewId: st
   if (r.status !== "RETRIEVAL") throw new LitError("This literature has already been delivered.");
   const pending = (await listPapers(db, reviewId)).filter((p) => p.status === "PENDING");
   if (!pending.length) throw new LitError("Add the papers you found before submitting.");
+  const open = pending.filter((p) => !p.confirmedAt);
+  if (open.length) throw new LitError(`Fill in the record for ${open.map((p) => `P${String(p.n).padStart(2, "0")}`).join(", ")}: details, summary, relevance and your confirmation that you read it.`);
   if (!r.searchLog || !(r.searchLog as SearchLog).databases?.length) throw new LitError("Fill in the search log (at least the databases you searched) before submitting.");
   const m = await currentMilestone(db, r.orderId, ["FUNDED", "REVISION_REQUESTED"]);
   if (!m) throw new LitError("The client hasn't paid this job into escrow yet. Wait for the payment before delivering.");

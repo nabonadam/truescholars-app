@@ -18,7 +18,7 @@ export default async function PapersPage({ params }: { params: Promise<{ id: str
   const r = await getReview(db, user.id, id);
   if (!r) notFound();
   const papers = await listPapers(db, id);
-  const view: PaperView[] = papers.map((p) => ({ id: p.id, n: p.n, source: p.source, status: p.status, rejectReason: p.rejectReason, fileName: p.fileName, hasFile: !!p.fileKey, pages: p.pages, meta: p.meta, verify: p.verify, note: p.note, cardStatus: p.cardStatus }));
+  const view: PaperView[] = papers.map((p) => ({ id: p.id, n: p.n, source: p.source, status: p.status, rejectReason: p.rejectReason, fileName: p.fileName, hasFile: !!p.fileKey, pages: p.pages, meta: p.meta, verify: p.verify, note: p.note, summary: p.summary, confirmed: !!p.confirmedAt, cardStatus: p.cardStatus }));
   const assignment = await assignmentInfo(db, r);
   const canWork = r.role === "expert" ? r.status === "RETRIEVAL" && (assignment?.paid ?? true) : canUse(await toolAccessFor(db, "lit", user));
   return (

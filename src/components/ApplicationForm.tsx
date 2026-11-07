@@ -36,7 +36,7 @@ export function ApplicationForm({ qualifications, fields }: { qualifications: re
         <input type="checkbox" name="litRetriever" value="1" className="mt-0.5 size-4 flex-none accent-green" />
         <span>
           <b>Also take literature retrieval assignments</b>
-          <span className="block text-ink-muted">Find papers for students&apos; literature reviews. These are assigned to you privately by The True Scholars (never posted publicly), at a set price.</span>
+          <span className="block text-ink-muted">Find papers for clients&apos; literature reviews. These are assigned to you privately by The True Scholars (never posted publicly), at a set price.</span>
         </span>
       </label>
 

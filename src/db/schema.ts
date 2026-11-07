@@ -805,6 +805,8 @@ export const litPapers = pgTable(
     meta: jsonb("meta").notNull().default(sql`'{}'::jsonb`), // title, authors, year, journal, doi, abstract
     verify: jsonb("verify"), // Crossref check: found, title match, retraction
     note: text("note"), // the expert's relevance note
+    summary: text("summary"), // the expert's own summary of the paper
+    confirmedAt: timestamp("confirmed_at", { mode: "date" }), // the expert read it and entered its details by hand
     card: jsonb("card"), // the AI reading card
     cardStatus: text("card_status").notNull().default("none"), // none | done | failed
     cardError: text("card_error"),
