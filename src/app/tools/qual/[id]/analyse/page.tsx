@@ -4,6 +4,7 @@ import { requireUser } from "@/server/guards";
 import { aiOn, cases, getAnalysis } from "@/server/qualAnalysis";
 import { canUse, toolAccessFor } from "@/server/toolAccess";
 
+export const metadata = { title: "Analyse · Qualitative Studio" };
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 

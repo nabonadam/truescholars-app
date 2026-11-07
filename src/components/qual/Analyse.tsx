@@ -30,7 +30,8 @@ export function Analyse(p: { studyId: string; participants: Participant[]; resea
   const [running, setRunning] = useState<{ phase: Phase; done: number; total: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const s = p.state;
-  const done = s.done ?? {};
+  const [justDone, setJustDone] = useState<Partial<Record<Phase, boolean>>>({});
+  const done: Partial<Record<Phase, unknown>> = { ...(s.done ?? {}), ...justDone };
   const pids = useMemo(() => Object.fromEntries(p.participants.map((x) => [x.rid, x.pid])), [p.participants]);
   const ready = p.researchQuestion.trim().length >= 10;
   const available: View[] = [
@@ -52,6 +53,11 @@ export function Analyse(p: { studyId: string; participants: Participant[]; resea
 
   async function run(phase: Phase, restart: boolean): Promise<boolean> {
     setErr(null);
+    if (restart) {
+      // redoing a step clears it and everything after it
+      const later = STEPS.slice(STEPS.findIndex((x) => x.phase === phase)).map((x) => x.phase);
+      setJustDone((d) => Object.fromEntries(Object.entries(d).filter(([k]) => !later.includes(k as Phase))));
+    }
     let ok = true;
     setRunning({ phase, done: 0, total: 0 });
     let first = true;
@@ -64,7 +70,10 @@ export function Analyse(p: { studyId: string; participants: Participant[]; resea
         break;
       }
       setRunning({ phase, done: r.done ?? 0, total: r.total ?? 0 });
-      if (r.finished) break;
+      if (r.finished) {
+        setJustDone((d) => ({ ...d, [phase]: true }));
+        break;
+      }
     }
     setRunning(null);
     router.refresh();
@@ -72,8 +81,9 @@ export function Analyse(p: { studyId: string; participants: Participant[]; resea
   }
 
   async function runAll() {
+    const already = { ...done };
     for (const st of STEPS) {
-      if (done[st.phase]) continue;
+      if (already[st.phase]) continue;
       if (!(await run(st.phase, false))) break; // stop at the first failure; run() shows it
     }
   }
@@ -355,13 +365,14 @@ function ThemeCard({ studyId, t, byId, pids, total }: { studyId: string; t: Them
   );
 }
 
-/** Research question at the centre, themes around it, their codes around each theme. */
+/** Research question at the centre, themes around it, their codes fanning out beyond each theme. */
 function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: CodebookEntry[] }) {
   const byId = Object.fromEntries(book.map((k) => [k.id, k]));
-  const W = 900, H = 680, cx = W / 2, cy = H / 2;
-  const R = Math.min(W, H) * 0.3;
+  const W = 1200, H = 980, cx = W / 2, cy = H / 2;
+  const R = 255;
+  const MAX = 6;
   const colours = ["#0f3d2a", "#b5651d", "#1a6b52", "#7a4b1c", "#2f5d8a", "#6b3a5d", "#4a6b1a"];
-  const wrap = (text: string, n: number) => {
+  const wrap = (text: string, n: number, max: number) => {
     const out: string[] = [];
     let line = "";
     for (const w of text.split(" ")) {
@@ -371,47 +382,64 @@ function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: 
       } else line = (line + " " + w).trim();
     }
     if (line) out.push(line);
-    return out.slice(0, 4);
+    if (out.length > max) return [...out.slice(0, max - 1), out.slice(max - 1).join(" ").slice(0, n - 1) + "…"];
+    return out;
   };
+  const short = (t: string, n = 24) => (t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t);
   return (
     <div className="card overflow-x-auto p-3">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[640px]" role="img" aria-label="Thematic map">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[720px]" role="img" aria-label="Thematic map">
         {themes.map((t, i) => {
           const a = (i / themes.length) * Math.PI * 2 - Math.PI / 2;
           const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
-          const codes = t.codes.map((c) => byId[c]).filter(Boolean).slice(0, 7);
+          const all = t.codes.map((c) => byId[c]).filter(Boolean).sort((p, q) => q.rids.length - p.rids.length);
+          const codes = all.slice(0, MAX);
+          const colour = colours[i % colours.length];
+          const spread = Math.min(Math.PI * 0.8, (Math.PI * 2) / themes.length * 0.95);
           return (
             <g key={t.id}>
-              <line x1={cx} y1={cy} x2={x} y2={y} stroke={colours[i % colours.length]} strokeWidth={2.5} opacity={0.5} />
+              <line x1={cx} y1={cy} x2={x} y2={y} stroke={colour} strokeWidth={3} opacity={0.45} />
               {codes.map((k, j) => {
-                const spread = Math.PI * 0.55;
                 const b = a + (codes.length > 1 ? -spread / 2 + (spread * j) / (codes.length - 1) : 0);
-                const r2 = 118;
-                const kx = x + Math.cos(b) * r2, ky = y + Math.sin(b) * r2;
-                const lines = wrap(k.label, 16);
+                const kx = x + Math.cos(b) * 135, ky = y + Math.sin(b) * 135;
+                const right = Math.cos(b) > 0.25, left = Math.cos(b) < -0.25;
+                const anchor = right ? "start" : left ? "end" : "middle";
+                const tx = kx + (right ? 9 : left ? -9 : 0);
+                const ty = ky + (right || left ? 4 : Math.sin(b) > 0 ? 18 : -10);
                 return (
                   <g key={k.id}>
-                    <line x1={x} y1={y} x2={kx} y2={ky} stroke={colours[i % colours.length]} strokeWidth={1} opacity={0.35} />
-                    <circle cx={kx} cy={ky} r={4} fill={colours[i % colours.length]} />
-                    <text x={kx} y={ky + 15} textAnchor="middle" fontSize={10.5} fill="#2b3d33">
-                      {lines.map((l, n) => <tspan key={n} x={kx} dy={n ? 12 : 0}>{l}</tspan>)}
-                    </text>
+                    <line x1={x} y1={y} x2={kx} y2={ky} stroke={colour} strokeWidth={1.2} opacity={0.35} />
+                    <circle cx={kx} cy={ky} r={5} fill={colour} />
+                    <text x={tx} y={ty} textAnchor={anchor} fontSize={13} fill="#2b3d33">{short(k.label)}</text>
                   </g>
                 );
               })}
-              <rect x={x - 82} y={y - 30} width={164} height={60} rx={14} fill={colours[i % colours.length]} />
-              <text x={x} y={y - 8 - (wrap(t.name, 22).length - 1) * 6} textAnchor="middle" fontSize={12.5} fontWeight={700} fill="#ffffff">
-                {wrap(t.name, 22).map((l, n) => <tspan key={n} x={x} dy={n ? 14 : 8}>{l}</tspan>)}
-              </text>
+              {all.length > MAX && (
+                <text x={x} y={y + 52} textAnchor="middle" fontSize={11.5} fill="#6b7d72">+{all.length - MAX} more</text>
+              )}
+              <rect x={x - 100} y={y - 36} width={200} height={72} rx={16} fill={colour} />
+              {(() => {
+                const lines = wrap(t.name, 24, 3);
+                return (
+                  <text x={x} y={y - (lines.length - 1) * 8 + 5} textAnchor="middle" fontSize={14} fontWeight={700} fill="#ffffff">
+                    {lines.map((l, n) => <tspan key={n} x={x} dy={n ? 16 : 0}>{l}</tspan>)}
+                  </text>
+                );
+              })()}
             </g>
           );
         })}
-        <circle cx={cx} cy={cy} r={70} fill="#f4a261" />
-        <text x={cx} y={cy - 22} textAnchor="middle" fontSize={11} fontWeight={700} fill="#13261c">
-          {wrap(rq || "Research question", 20).map((l, n) => <tspan key={n} x={cx} dy={n ? 13 : 0}>{l}</tspan>)}
-        </text>
+        <circle cx={cx} cy={cy} r={98} fill="#f4a261" />
+        {(() => {
+          const lines = wrap(rq || "Research question", 22, 6);
+          return (
+            <text x={cx} y={cy - (lines.length - 1) * 8 + 4} textAnchor="middle" fontSize={13.5} fontWeight={700} fill="#13261c">
+              {lines.map((l, n) => <tspan key={n} x={cx} dy={n ? 16 : 0}>{l}</tspan>)}
+            </text>
+          );
+        })()}
       </svg>
-      <p className="px-2 pb-1 text-[12px] text-ink-muted">Up to seven codes are shown per theme. The full list is on the Themes tab and in the Word report.</p>
+      <p className="px-2 pb-1 text-[12px] text-ink-muted">The six most widespread codes are shown for each theme. The full list is on the Themes tab and in the Word report.</p>
     </div>
   );
 }
