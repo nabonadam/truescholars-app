@@ -1,7 +1,7 @@
 import { Analyse } from "@/components/qual/Analyse";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
-import { aiOn, cases, getAnalysis } from "@/server/qualAnalysis";
+import { aiOn, cases, getAnalysis, wordFrequencies } from "@/server/qualAnalysis";
 import { canUse, toolAccessFor } from "@/server/toolAccess";
 
 export const metadata = { title: "Analyse · Qualitative Studio" };
@@ -12,7 +12,7 @@ export default async function AnalysePage({ params }: { params: Promise<{ id: st
   const user = await requireUser();
   const { id } = await params;
   const db = getDb();
-  const { list } = await cases(db, user.id, id);
+  const { study, list } = await cases(db, user.id, id);
   const a = await getAnalysis(db, id);
   const access = await toolAccessFor(db, "qual", user);
   return (
@@ -24,6 +24,8 @@ export default async function AnalysePage({ params }: { params: Promise<{ id: st
       state={a.state}
       canRun={canUse(access)}
       aiOn={aiOn()}
+      words={wordFrequencies(list)}
+      title={study.title}
     />
   );
 }

@@ -160,3 +160,19 @@ describe("thematic analysis", () => {
     await expect(editAnalysis(db, other.id, id, { kind: "report", text: "hijack" })).rejects.toThrow(/not found/);
   });
 });
+
+describe("word cloud", () => {
+  it("counts meaningful words across participants, leaving out question text and stop words", async () => {
+    const { wordFrequencies } = await import("@/server/qualAnalysis");
+    const list = [
+      { rid: "a", pid: "P01", words: 0, attributes: [], text: "Q1. How has the rainfall changed?\nThe rainfall comes late and the rainfall stops early. We plant maize." },
+      { rid: "b", pid: "P02", words: 0, attributes: [], text: "Q1. How has the rainfall changed?\nLate rainfall, so the maize dies. Rainfall is the problem." },
+    ];
+    const w = wordFrequencies(list);
+    expect(w[0]).toEqual({ word: "rainfall", count: 4, people: 2 });
+    expect(w.find((x) => x.word === "maize")).toMatchObject({ count: 2, people: 2 });
+    expect(w.find((x) => x.word === "late")).toMatchObject({ count: 2 });
+    expect(w.map((x) => x.word)).not.toContain("the");
+    expect(w.map((x) => x.word)).not.toContain("changed"); // only in the question text
+  });
+});

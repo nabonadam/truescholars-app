@@ -372,3 +372,31 @@ export async function editAnalysis(
   if (edit.kind === "report") s = { ...s, report: edit.text.slice(0, 80_000) };
   await saveState(db, studyId, s);
 }
+
+// ───────── word frequencies (for the word cloud) ─────────
+
+const STOP = new Set(
+  ("a about above after again against all also am an and any are aren't as at be because been before being below between both but by can can't cannot could couldn't did didn't do does doesn't doing don't down during each few for from further get gets got had hadn't has hasn't have haven't having he he'd he'll he's her here here's hers herself him himself his how how's i i'd i'll i'm i've if in into is isn't it it's its itself just let's like me more most mustn't my myself no nor not now of off on once only or other ought our ours ourselves out over own really same say said says she she'd she'll she's should shouldn't so some such than that that's the their theirs them themselves then there there's these they they'd they'll they're they've thing things this those through to too under until up us very was wasn't we we'd we'll we're we've were weren't what what's when when's where where's which while who who's whom why why's will with won't would wouldn't yeah yes you you'd you'll you're you've your yours yourself yourselves um uh oh okay ok know think also even one two much many well still go going gone come came make made take took way lot lots maybe kind sort actually basically something someone anything everything every back time times year years day days use used want wanted need needed tell told see saw look"
+  ).split(" "),
+);
+
+/** The most frequent meaningful words across participants' answers (question text and stop words left out). */
+export function wordFrequencies(list: Case[], limit = 90): { word: string; count: number; people: number }[] {
+  const count = new Map<string, number>();
+  const people = new Map<string, Set<string>>();
+  for (const c of list) {
+    const answers = c.text.split("\n").filter((l) => !/^Q\d+\.\s/.test(l)).join(" ");
+    for (const raw of answers.toLowerCase().replace(/[’‘]/g, "'").match(/[\p{L}][\p{L}'-]*/gu) ?? []) {
+      const w = raw.replace(/^'+|'+$/g, "").replace(/'s$/, "");
+      if (w.length < 3 || STOP.has(w)) continue;
+      count.set(w, (count.get(w) ?? 0) + 1);
+      if (!people.has(w)) people.set(w, new Set());
+      people.get(w)!.add(c.rid);
+    }
+  }
+  return [...count.entries()]
+    .map(([word, n]) => ({ word, count: n, people: people.get(word)!.size }))
+    .filter((x) => x.count > 1 || list.length < 3)
+    .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word))
+    .slice(0, limit);
+}

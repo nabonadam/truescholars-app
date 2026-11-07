@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { analysisSetupAction, editAnalysisAction, runPhaseAction } from "@/app/actions/qual";
 import type { AnalysisState, CodebookEntry, Phase, Theme } from "@/server/qualAnalysis";
 import { Icon } from "../Icons";
+import { DownloadButtons, Visuals, type WordCount } from "./Visuals";
 
 type Participant = { rid: string; pid: string; words: number };
 
@@ -19,9 +20,9 @@ const STEPS: { phase: Phase; title: string; text: string }[] = [
 ];
 const NEEDS: Partial<Record<Phase, Phase>> = { codebook: "codes", themes: "codebook", matrix: "themes", report: "themes" };
 
-type View = "familiar" | "codebook" | "themes" | "map" | "matrix" | "report";
+type View = "familiar" | "codebook" | "themes" | "map" | "visuals" | "matrix" | "report";
 
-export function Analyse(p: { studyId: string; participants: Participant[]; researchQuestion: string; background: string; state: AnalysisState; canRun: boolean; aiOn: boolean }) {
+export function Analyse(p: { studyId: string; participants: Participant[]; researchQuestion: string; background: string; state: AnalysisState; canRun: boolean; aiOn: boolean; words: WordCount[]; title: string }) {
   const router = useRouter();
   const [rq, setRq] = useState(p.researchQuestion);
   const [bg, setBg] = useState(p.background);
@@ -38,11 +39,12 @@ export function Analyse(p: { studyId: string; participants: Participant[]; resea
     ...(s.familiar && Object.keys(s.familiar).length ? (["familiar"] as View[]) : []),
     ...(s.codebook?.length ? (["codebook"] as View[]) : []),
     ...(s.themes?.length ? (["themes", "map"] as View[]) : []),
+    "visuals",
     ...(s.matrix && Object.keys(s.matrix).length ? (["matrix"] as View[]) : []),
     ...(s.report ? (["report"] as View[]) : []),
   ];
   const [view, setView] = useState<View | null>(null);
-  const shown = view && available.includes(view) ? view : available.at(-1) ?? null;
+  const shown = view && available.includes(view) ? view : available.filter((v) => v !== "visuals").at(-1) ?? "visuals";
 
   const saveSetup = () =>
     startSave(async () => {
@@ -190,14 +192,15 @@ export function Analyse(p: { studyId: string; participants: Participant[]; resea
             <div className="mb-4 flex flex-wrap gap-1.5">
               {available.map((v) => (
                 <button key={v} type="button" onClick={() => setView(v)} className={`rounded-full px-3.5 py-1.5 text-sm font-bold ${shown === v ? "bg-green text-white" : "bg-white text-ink-muted ring-1 ring-line hover:text-ink"}`}>
-                  {{ familiar: "Familiarisation", codebook: `Codebook (${s.codebook?.length ?? 0})`, themes: `Themes (${s.themes?.length ?? 0})`, map: "Thematic map", matrix: "Framework matrix", report: "Report" }[v]}
+                  {{ familiar: "Familiarisation", codebook: `Codebook (${s.codebook?.length ?? 0})`, themes: `Themes (${s.themes?.length ?? 0})`, map: "Thematic map", visuals: "Word cloud & charts", matrix: "Framework matrix", report: "Report" }[v]}
                 </button>
               ))}
             </div>
             {shown === "familiar" && <Familiar state={s} participants={p.participants} />}
             {shown === "codebook" && <Codebook studyId={p.studyId} book={s.codebook ?? []} themes={s.themes ?? []} pids={pids} />}
             {shown === "themes" && <Themes studyId={p.studyId} themes={s.themes ?? []} book={s.codebook ?? []} pids={pids} total={p.participants.length} />}
-            {shown === "map" && <ThematicMap rq={p.researchQuestion} themes={s.themes ?? []} book={s.codebook ?? []} />}
+            {shown === "map" && <ThematicMap rq={p.researchQuestion} themes={s.themes ?? []} book={s.codebook ?? []} title={p.title} />}
+            {shown === "visuals" && <Visuals words={p.words} book={s.codebook ?? []} themes={s.themes ?? []} total={p.participants.length} title={p.title} />}
             {shown === "matrix" && <Matrix state={s} participants={p.participants} />}
             {shown === "report" && <Report studyId={p.studyId} text={s.report ?? ""} />}
           </>
@@ -366,7 +369,8 @@ function ThemeCard({ studyId, t, byId, pids, total }: { studyId: string; t: Them
 }
 
 /** Research question at the centre, themes around it, their codes fanning out beyond each theme. */
-function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: CodebookEntry[] }) {
+function ThematicMap({ rq, themes, book, title }: { rq: string; themes: Theme[]; book: CodebookEntry[]; title: string }) {
+  const box = useRef<HTMLDivElement>(null);
   const byId = Object.fromEntries(book.map((k) => [k.id, k]));
   const W = 1320, H = 900, cx = W / 2, cy = H / 2;
   const R = 290;
@@ -387,8 +391,13 @@ function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: 
   };
   const short = (t: string, n = 24) => (t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t);
   return (
-    <div className="card overflow-x-auto p-3">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[720px]" role="img" aria-label="Thematic map">
+    <div className="card p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-2 pt-1 pb-2">
+        <h3 className="text-lg font-extrabold">Thematic map</h3>
+        <DownloadButtons box={box} name={`${title} thematic map`} />
+      </div>
+      <div ref={box} className="overflow-x-auto">
+      <svg data-figure viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[720px]" role="img" aria-label="Thematic map" fontFamily="'DM Sans', Arial, Helvetica, sans-serif">
         {themes.map((t, i) => {
           const a = (i / themes.length) * Math.PI * 2 - Math.PI / 2;
           const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
@@ -447,6 +456,7 @@ function ThematicMap({ rq, themes, book }: { rq: string; themes: Theme[]; book: 
           );
         })()}
       </svg>
+      </div>
       <p className="px-2 pb-1 text-[12px] text-ink-muted">The six most widespread codes are shown for each theme. The full list is on the Themes tab and in the Word report.</p>
     </div>
   );
