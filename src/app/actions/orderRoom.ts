@@ -5,11 +5,12 @@ import { getDb } from "@/db";
 import { EscrowError } from "@/server/escrow";
 import { FileError, saveUploads } from "@/server/files";
 import { requireUser } from "@/server/guards";
-import { approveDelivery, leaveReview, OrderRoomError, requestRevision, sendMessage, setStarred, submitDelivery } from "@/server/orderRoom";
+import { approveDelivery, OrderRoomError, requestRevision, sendMessage, setStarred, submitDelivery } from "@/server/orderRoom";
+import { leaveReview, replyToReview, ReviewError } from "@/server/reviews";
 
 export type FormState = { error?: string; ok?: number } | undefined;
 
-const KNOWN = [OrderRoomError, FileError, EscrowError];
+const KNOWN = [OrderRoomError, FileError, EscrowError, ReviewError];
 function asState(err: unknown): FormState {
   if (KNOWN.some((E) => err instanceof E)) return { error: (err as Error).message };
   throw err;
@@ -83,7 +84,30 @@ export async function reviewAction(_prev: FormState, form: FormData): Promise<Fo
   const user = await requireUser();
   const orderId = String(form.get("orderId"));
   try {
-    await leaveReview(getDb(), { orderId, authorId: user.id, rating: Number(form.get("rating")), body: String(form.get("body") ?? "") });
+    const opt = (k: string) => (form.get(k) ? Number(form.get(k)) : null);
+    const rec = form.get("recommend");
+    await leaveReview(getDb(), {
+      orderId,
+      authorId: user.id,
+      rating: Number(form.get("rating")),
+      body: String(form.get("body") ?? ""),
+      communication: opt("communication"),
+      quality: opt("quality"),
+      timeliness: opt("timeliness"),
+      recommend: rec === "yes" ? true : rec === "no" ? false : null,
+    });
+  } catch (err) {
+    return asState(err);
+  }
+  revalidatePath(`/orders/${orderId}`);
+  return { ok: Date.now() };
+}
+
+export async function replyAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const orderId = String(form.get("orderId"));
+  try {
+    await replyToReview(getDb(), { reviewId: String(form.get("reviewId")), userId: user.id, reply: String(form.get("reply") ?? "") });
   } catch (err) {
     return asState(err);
   }

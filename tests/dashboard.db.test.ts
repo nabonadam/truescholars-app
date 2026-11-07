@@ -91,8 +91,8 @@ describe("unread messages and notifications", () => {
 
     const expertKinds = (await listNotifications(db, expert)).map((n) => n.kind).sort();
     const clientKinds = (await listNotifications(db, client)).map((n) => n.kind).sort();
-    expect(expertKinds).toEqual(["APPLICATION_DECIDED", "ORDER_PAID", "PAYMENT_RELEASED"]);
-    expect(clientKinds).toEqual(["DELIVERED"]);
+    expect(expertKinds).toEqual(["APPLICATION_DECIDED", "ORDER_PAID", "PAYMENT_RELEASED", "REVIEW_REQUEST"]);
+    expect(clientKinds).toEqual(["DELIVERED", "REVIEW_REQUEST"]);
     const paid = (await listNotifications(db, expert)).find((n) => n.kind === "PAYMENT_RELEASED");
     expect(paid?.body).toContain("GH₵425.00"); // 500 − 15%
   });

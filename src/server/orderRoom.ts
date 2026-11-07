@@ -290,50 +290,9 @@ export async function listDeliveries(db: DB, milestoneIds: string[]) {
   return db.select().from(deliveries).where(inArray(deliveries.milestoneId, milestoneIds)).orderBy(desc(deliveries.createdAt));
 }
 
-// ───────────── Reviews ─────────────
+// ───────────── Reviews (see reviews.ts) ─────────────
 
-export async function leaveReview(db: DB, p: { orderId: string; authorId: string; rating: number; body: string }) {
-  const order = await loadOrder(db, p.orderId);
-  assertParticipant(order, p.authorId);
-  if (order.status !== "COMPLETED") throw new OrderRoomError("You can review once the order is completed.");
-  if (!Number.isInteger(p.rating) || p.rating < 1 || p.rating > 5) throw new OrderRoomError("Choose a rating from 1 to 5 stars.");
-  const subjectId = p.authorId === order.clientId ? order.expertId : order.clientId;
-  const [existing] = await db.select({ id: reviews.id }).from(reviews).where(and(eq(reviews.orderId, order.id), eq(reviews.authorId, p.authorId)));
-  if (existing) throw new OrderRoomError("You've already reviewed this order.");
-  await db.insert(reviews).values({ orderId: order.id, authorId: p.authorId, subjectId, rating: p.rating, body: p.body.trim() || null });
-  await notify(db, {
-    userId: subjectId,
-    kind: "REVIEW_RECEIVED",
-    title: `You received a ${p.rating}-star review`,
-    body: p.body.trim() ? p.body.trim().slice(0, 200) : `For "${order.title}".`,
-    link: `/orders/${order.id}`,
-    orderId: order.id,
-  });
-  if (subjectId === order.expertId) await evaluateLevel(db, subjectId);
-}
-
-export async function reviewsForOrder(db: DB, orderId: string) {
-  return db.select().from(reviews).where(eq(reviews.orderId, orderId));
-}
-
-/** Average rating and recent written reviews an expert received from clients. */
-export async function expertReviewSummary(db: DB, expertUserId: string, limit = 5) {
-  const clientReviews = and(eq(reviews.subjectId, expertUserId), eq(orders.expertId, expertUserId));
-  const [agg] = await db
-    .select({ average: avg(reviews.rating), total: count(reviews.id) })
-    .from(reviews)
-    .innerJoin(orders, eq(orders.id, reviews.orderId))
-    .where(clientReviews);
-  const recent = await db
-    .select({ rating: reviews.rating, body: reviews.body, createdAt: reviews.createdAt, author: users.name })
-    .from(reviews)
-    .innerJoin(orders, eq(orders.id, reviews.orderId))
-    .innerJoin(users, eq(users.id, reviews.authorId))
-    .where(and(clientReviews, isNotNull(reviews.body)))
-    .orderBy(desc(reviews.createdAt))
-    .limit(limit);
-  return { average: agg?.average ? Number(agg.average) : null, total: Number(agg?.total ?? 0), recent };
-}
+export { expertReviewSummary, leaveReview, reviewsForOrder } from "./reviews";
 
 /** The newest message someone else sent this user (drives the chime and the "new message" pop-up). */
 export async function latestIncoming(db: DB, userId: string) {

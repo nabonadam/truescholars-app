@@ -6,6 +6,7 @@ import { playSent } from "@/lib/sounds";
 import {
   approveAction,
   deliverAction,
+  replyAction,
   reviewAction,
   revisionAction,
   sendMessageAction,
@@ -169,34 +170,95 @@ export function ClientDecision({ orderId, milestoneId, revisionsLeft, expertFirs
   );
 }
 
-export function ReviewForm({ orderId, subjectName }: { orderId: string; subjectName: string }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(reviewAction, undefined);
-  const [rating, setRating] = useState(0);
+function StarPicker({ label, name, value, onChange, big = false }: { label: string; name: string; value: number; onChange: (n: number) => void; big?: boolean }) {
+  const [hover, setHover] = useState(0);
+  const shown = hover || value;
+  const words = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
   return (
-    <form action={action} className="flex flex-col gap-3">
-      <input type="hidden" name="orderId" value={orderId} />
-      <input type="hidden" name="rating" value={rating} />
-      <fieldset>
-        <legend className="label">How was working with {subjectName}?</legend>
-        <div className="flex gap-1">
+    <fieldset className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <legend className="sr-only">{label}</legend>
+      <span className={big ? "font-bold" : "text-sm"} aria-hidden="true">{label}</span>
+      <span className="flex items-center gap-2">
+        <input type="hidden" name={name} value={value || ""} />
+        <span className="flex" onMouseLeave={() => setHover(0)}>
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
               type="button"
-              aria-label={`${n} star${n > 1 ? "s" : ""}`}
-              aria-pressed={rating >= n}
-              onClick={() => setRating(n)}
-              className={`grid size-11 place-items-center rounded-sm text-2xl ${rating >= n ? "text-amber-deep" : "text-line"}`}
+              aria-label={`${label}: ${n} star${n > 1 ? "s" : ""}`}
+              aria-pressed={value >= n}
+              onMouseEnter={() => setHover(n)}
+              onClick={() => onChange(n)}
+              className={`grid place-items-center rounded-sm leading-none transition ${big ? "size-11 text-[32px]" : "size-9 text-2xl"} ${shown >= n ? "text-amber" : "text-line"} hover:scale-110`}
             >
               ★
             </button>
           ))}
+        </span>
+        <span className="w-20 text-xs text-ink-muted">{words[shown]}</span>
+      </span>
+    </fieldset>
+  );
+}
+
+/** Rate the other side once the order is completed. Clients also rate three aspects and say whether they'd recommend. */
+export function ReviewForm({ orderId, subjectName, asClient }: { orderId: string; subjectName: string; asClient: boolean }) {
+  const [state, action, pending] = useActionState<FormState, FormData>(reviewAction, undefined);
+  const [rating, setRating] = useState(0);
+  const [aspects, setAspects] = useState({ communication: 0, quality: 0, timeliness: 0 });
+  const [recommend, setRecommend] = useState<"" | "yes" | "no">("");
+  const [body, setBody] = useState("");
+  const needsWords = rating > 0 && rating <= 2 && body.trim().length < 20;
+  const ready = rating > 0 && (!asClient || (aspects.communication && aspects.quality && aspects.timeliness && recommend)) && !needsWords;
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <input type="hidden" name="orderId" value={orderId} />
+      <StarPicker big label={`Overall, working with ${subjectName}`} name="rating" value={rating} onChange={setRating} />
+      {asClient && (
+        <div className="flex flex-col gap-1 rounded-sm bg-parchment px-4 py-3">
+          <StarPicker label="Communication" name="communication" value={aspects.communication} onChange={(n) => setAspects((a) => ({ ...a, communication: n }))} />
+          <StarPicker label="Quality of work" name="quality" value={aspects.quality} onChange={(n) => setAspects((a) => ({ ...a, quality: n }))} />
+          <StarPicker label="Delivered on time" name="timeliness" value={aspects.timeliness} onChange={(n) => setAspects((a) => ({ ...a, timeliness: n }))} />
         </div>
-      </fieldset>
-      <label htmlFor="review-body" className="label">Comments (optional, shown publicly)</label>
-      <textarea id="review-body" name="body" rows={3} maxLength={1500} className="field" />
+      )}
+      {asClient && (
+        <fieldset className="flex flex-wrap items-center gap-3">
+          <legend className="sr-only">Would you recommend {subjectName}?</legend>
+          <span className="text-sm font-bold" aria-hidden="true">Would you recommend {subjectName}?</span>
+          <input type="hidden" name="recommend" value={recommend} />
+          {(["yes", "no"] as const).map((v) => (
+            <button key={v} type="button" aria-pressed={recommend === v} onClick={() => setRecommend(v)} className={`rounded-full border-2 px-4 py-1.5 text-sm font-bold transition ${recommend === v ? "border-green bg-green text-white" : "border-line bg-white hover:border-green/50"}`}>
+              {v === "yes" ? "👍 Yes" : "👎 No"}
+            </button>
+          ))}
+        </fieldset>
+      )}
+      <div className="flex flex-col gap-1">
+        <label htmlFor="review-body" className="label">
+          Your feedback {rating > 0 && rating <= 2 ? "(please say what went wrong)" : "(optional, shown publicly)"}
+        </label>
+        <textarea id="review-body" name="body" rows={3} maxLength={1500} value={body} onChange={(e) => setBody(e.target.value)} className="field" placeholder={asClient ? `What was it like working with ${subjectName}? What did they do well?` : `How was ${subjectName} to work with?`} />
+        <span className="text-xs text-ink-muted">Be fair and specific. Don&apos;t share contact details or private information about the project.</span>
+      </div>
       <Note state={state} />
-      <button className="btn-primary self-start" disabled={pending || rating === 0}>{pending ? "Posting…" : "Post review"}</button>
+      <button className="btn-primary self-start" disabled={pending || !ready}>{pending ? "Posting…" : "Post review"}</button>
+    </form>
+  );
+}
+
+/** The reviewed person's one public reply. */
+export function ReplyForm({ orderId, reviewId }: { orderId: string; reviewId: string }) {
+  const [state, action, pending] = useActionState<FormState, FormData>(replyAction, undefined);
+  const [open, setOpen] = useState(false);
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className="self-start text-sm font-bold text-green">Reply publicly</button>;
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="orderId" value={orderId} />
+      <input type="hidden" name="reviewId" value={reviewId} />
+      <label htmlFor={`reply-${reviewId}`} className="label">Your reply (shown under the review; you can reply once)</label>
+      <textarea id={`reply-${reviewId}`} name="reply" rows={2} maxLength={1000} className="field" required />
+      <Note state={state} />
+      <button className="btn-primary self-start" disabled={pending}>{pending ? "Posting…" : "Post reply"}</button>
     </form>
   );
 }

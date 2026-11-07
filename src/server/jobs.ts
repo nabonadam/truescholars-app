@@ -4,6 +4,7 @@
  * an order that the client funds milestone by milestone through escrow.
  */
 
+import { publishedReview } from "./reviews";
 import { and, avg, count, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import type { DB } from "@/db";
 import {
@@ -268,7 +269,7 @@ export async function clientStats(db: DB, clientId: string) {
       .select({ average: avg(reviews.rating), total: count(reviews.id) })
       .from(reviews)
       .innerJoin(orders, eq(orders.id, reviews.orderId))
-      .where(and(eq(reviews.subjectId, clientId), eq(orders.clientId, clientId))),
+      .where(and(eq(reviews.subjectId, clientId), eq(orders.clientId, clientId), publishedReview)),
   ]);
   return {
     name: u?.name ?? "Client",
@@ -407,7 +408,7 @@ export async function listProposalsForJob(db: DB, jobId: string, clientId: strin
       .select({ userId: reviews.subjectId, average: avg(reviews.rating), total: count(reviews.id) })
       .from(reviews)
       .innerJoin(orders, eq(orders.id, reviews.orderId))
-      .where(and(inArray(reviews.subjectId, userIds), sql`${orders.expertId} = ${reviews.subjectId}`))
+      .where(and(inArray(reviews.subjectId, userIds), sql`${orders.expertId} = ${reviews.subjectId}`, publishedReview))
       .groupBy(reviews.subjectId),
     db.select({ userId: orders.expertId, n: count() }).from(orders).where(and(inArray(orders.expertId, userIds), eq(orders.status, "COMPLETED"))).groupBy(orders.expertId),
     db.selectDistinct({ expertId: services.expertId }).from(services).where(and(inArray(services.expertId, profileIds), eq(services.categoryId, job.categoryId), eq(services.status, "ACTIVE"))),

@@ -76,6 +76,7 @@ const KIND: Record<string, { icon: IconName; tone: keyof typeof TONES }> = {
   REVISION_REQUESTED: { icon: "refresh", tone: "amber" },
   PAYMENT_RELEASED: { icon: "wallet", tone: "solid" },
   REVIEW_RECEIVED: { icon: "star", tone: "amber" },
+  REVIEW_REQUEST: { icon: "star", tone: "green" },
   APPLICATION_DECIDED: { icon: "shield", tone: "green" },
   NEW_PROPOSAL: { icon: "spark", tone: "amber" },
   HIRED: { icon: "check", tone: "solid" },

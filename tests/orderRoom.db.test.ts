@@ -20,6 +20,7 @@ import {
   submitDelivery,
 } from "@/server/orderRoom";
 import { createOrderFromService } from "@/server/orders";
+import { askForReviews, orderReviewState, replyToReview, reviewReminders, reviewsForOrder, setReviewHidden } from "@/server/reviews";
 import { saveService } from "@/server/services";
 import { approveApplication, submitApplication } from "@/server/vetting";
 
@@ -136,5 +137,67 @@ describe("reviews", () => {
     expect(summary.total).toBe(1);
     expect(summary.average).toBe(5);
     expect(summary.recent[0].author).toBe("Akosua Mensah");
+  });
+  it("asks both sides, is blind until both review, takes detailed ratings, replies and moderation", async () => {
+    const f = await saveUploads(db, { orderId, ownerId: expert, uploads: [file("final.pdf")] });
+    await submitDelivery(db, { milestoneId, expertId: expert, note: "Final", fileIds: f });
+    await approveDelivery(db, { milestoneId, clientId: client });
+    expect((await order()).completedAt).toBeInstanceOf(Date);
+    const asks = await db.select().from(schema.notifications).where(eq(schema.notifications.kind, "REVIEW_REQUEST"));
+    expect(asks.map((n) => n.userId).sort()).toEqual([client, expert].sort());
+    await askForReviews(db, orderId); // only once
+    expect(await db.select().from(schema.notifications).where(eq(schema.notifications.kind, "REVIEW_REQUEST"))).toHaveLength(2);
+
+    // a low rating needs words; aspects are validated
+    await expect(leaveReview(db, { orderId, authorId: client, rating: 2, body: "meh" })).rejects.toThrow(/what went wrong/);
+    await expect(leaveReview(db, { orderId, authorId: client, rating: 4, body: "", quality: 9 })).rejects.toThrow(/quality/);
+    await leaveReview(db, { orderId, authorId: client, rating: 4, body: "Good analysis, a day late.", communication: 5, quality: 5, timeliness: 3, recommend: true });
+
+    // blind: not public, and the expert can't see it, until the expert reviews too
+    expect((await expertReviewSummary(db, expert)).total).toBe(0);
+    let revs = await reviewsForOrder(db, orderId);
+    expect(orderReviewState(await order(), revs, expert)).toMatchObject({ open: true, theirsVisible: null, theirsWaiting: true });
+    const [ping] = await db.select().from(schema.notifications).where(eq(schema.notifications.kind, "REVIEW_RECEIVED"));
+    expect(ping.title).toMatch(/left you a review/);
+    expect(ping.body).not.toContain("a day late");
+    const [r] = revs;
+    await expect(replyToReview(db, { reviewId: r.id, userId: expert, reply: "Thanks!" })).rejects.toThrow(/visible/);
+
+    await leaveReview(db, { orderId, authorId: expert, rating: 5, body: "" });
+    revs = await reviewsForOrder(db, orderId);
+    expect(orderReviewState(await order(), revs, expert).theirsVisible?.id).toBe(r.id);
+    const sum = await expertReviewSummary(db, expert);
+    expect(sum).toMatchObject({ total: 1, average: 4, recommendPct: 100, aspects: { communication: 5, quality: 5, timeliness: 3 } });
+
+    await expect(replyToReview(db, { reviewId: r.id, userId: client, reply: "x" })).rejects.toThrow(/about you/);
+    await replyToReview(db, { reviewId: r.id, userId: expert, reply: "Thank you, and sorry about the delay." });
+    await expect(replyToReview(db, { reviewId: r.id, userId: expert, reply: "Again" })).rejects.toThrow(/already/);
+    expect((await expertReviewSummary(db, expert)).recent[0].reply).toMatch(/sorry/);
+
+    await expect(setReviewHidden(db, { reviewId: r.id, hidden: true })).rejects.toThrow(/reason/);
+    await setReviewHidden(db, { reviewId: r.id, hidden: true, reason: "Shares contact details" });
+    expect((await expertReviewSummary(db, expert)).total).toBe(0);
+    await setReviewHidden(db, { reviewId: r.id, hidden: false });
+    expect((await expertReviewSummary(db, expert)).total).toBe(1);
+  });
+
+  it("publishes a one-sided review after the blind period, reminds once, and closes after 30 days", async () => {
+    const f = await saveUploads(db, { orderId, ownerId: expert, uploads: [file("final.pdf")] });
+    await submitDelivery(db, { milestoneId, expertId: expert, note: "Final", fileIds: f });
+    await approveDelivery(db, { milestoneId, clientId: client });
+    await leaveReview(db, { orderId, authorId: client, rating: 5, body: "Excellent work, very clear." });
+    expect((await expertReviewSummary(db, expert)).total).toBe(0);
+
+    const day = 86_400_000, now = Date.now();
+    await db.update(schema.orders).set({ completedAt: new Date(now - 4 * day) }).where(eq(schema.orders.id, orderId));
+    expect(await reviewReminders(db)).toBe(1); // only the expert hasn't reviewed
+    expect(await reviewReminders(db)).toBe(0);
+
+    await db.update(schema.orders).set({ completedAt: new Date(now - 15 * day) }).where(eq(schema.orders.id, orderId));
+    expect((await expertReviewSummary(db, expert)).total).toBe(1);
+    expect(orderReviewState(await order(), await reviewsForOrder(db, orderId), client).mineVisible).toBe(true);
+
+    await db.update(schema.orders).set({ completedAt: new Date(now - 31 * day) }).where(eq(schema.orders.id, orderId));
+    await expect(leaveReview(db, { orderId, authorId: expert, rating: 5, body: "" })).rejects.toThrow(/close/);
   });
 });

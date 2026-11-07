@@ -6,6 +6,7 @@ const TABS = [
   { href: "/admin/disputes", label: "Disputes" },
   { href: "/admin/payouts", label: "Payouts" },
   { href: "/admin/messages", label: "Flagged messages" },
+  { href: "/admin/reviews", label: "Reviews" },
   { href: "/admin/stats", label: "Statistics access" },
   { href: "/admin/qual", label: "Qualitative access" },
   { href: "/admin/lit", label: "Literature access" },

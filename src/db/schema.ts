@@ -335,6 +335,7 @@ export const orders = pgTable("orders", {
   feeBps: integer("fee_bps").notNull(), // platform fee locked at order creation
   requirements: jsonb("requirements"),
   status: orderStatusEnum("status").notNull().default("AWAITING_PAYMENT"),
+  completedAt: timestamp("completed_at", { mode: "date" }), // when the last milestone settled; opens reviews
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -435,6 +436,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "STUDY_RESPONSE",
   "LIT_REVIEW",
   "LIT_REQUEST",
+  "REVIEW_REQUEST",
 ]);
 
 export const notifications = pgTable(
@@ -538,11 +540,20 @@ export const reviews = pgTable(
     subjectId: text("subject_id")
       .notNull()
       .references(() => users.id),
-    rating: integer("rating").notNull(), // 1–5
+    rating: integer("rating").notNull(), // 1–5, overall
+    // the client's detailed ratings of the expert (1–5); null on reviews of clients
+    communication: integer("communication"),
+    quality: integer("quality"),
+    timeliness: integer("timeliness"),
+    recommend: boolean("recommend"),
     body: text("body"),
+    reply: text("reply"), // the reviewed person's one public reply
+    repliedAt: timestamp("replied_at", { mode: "date" }),
+    hidden: boolean("hidden").notNull().default(false), // removed by an admin for breaking the review rules
+    hiddenReason: text("hidden_reason"),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("one_review_per_author_per_order").on(t.orderId, t.authorId)],
+  (t) => [uniqueIndex("one_review_per_author_per_order").on(t.orderId, t.authorId), index("reviews_subject_idx").on(t.subjectId)],
 );
 
 export const disputes = pgTable(

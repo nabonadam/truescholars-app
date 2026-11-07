@@ -10,6 +10,7 @@ import { formatMoney } from "@/lib/money";
 import { planFund, planPartial, planRefund, planRelease, type PlannedEntry } from "@/lib/ledger";
 import { evaluateLevel } from "./levels";
 import { notify } from "./notifications";
+import { askForReviews } from "./reviews";
 
 export class EscrowError extends Error {}
 
@@ -120,7 +121,7 @@ async function completeOrderIfSettled(tx: Tx, orderId: string) {
   const ms = await tx.select({ status: milestones.status }).from(milestones).where(eq(milestones.orderId, orderId));
   const settled = ms.length > 0 && ms.every((m) => m.status === "APPROVED" || m.status === "REFUNDED");
   const anyApproved = ms.some((m) => m.status === "APPROVED");
-  if (settled) await tx.update(orders).set({ status: anyApproved ? "COMPLETED" : "CANCELLED" }).where(eq(orders.id, orderId));
+  if (settled) await tx.update(orders).set({ status: anyApproved ? "COMPLETED" : "CANCELLED", completedAt: anyApproved ? new Date() : null }).where(eq(orders.id, orderId));
   else await tx.update(orders).set({ status: "ACTIVE" }).where(and(eq(orders.id, orderId), eq(orders.status, "DELIVERED")));
 }
 
@@ -169,6 +170,7 @@ export async function releaseMilestone(db: DB, p: { milestoneId: string; approve
       orderId: o.id,
     });
     await evaluateLevel(db, o.expertId);
+    await askForReviews(db, o.id);
   }
   return result;
 }
@@ -192,7 +194,7 @@ export async function refundMilestone(db: DB, p: { milestoneId: string }) {
 
 /** Admin dispute decision: release part of the escrow to the expert and refund the rest. */
 export async function settleMilestone(db: DB, p: { milestoneId: string; releaseMinor: number }) {
-  return db.transaction(async (tx) => {
+  const out = await db.transaction(async (tx) => {
     const { milestone, order } = await lockMilestone(tx, p.milestoneId);
     if (milestone.status === "APPROVED" || milestone.status === "REFUNDED") {
       throw new EscrowError(`Milestone is already ${milestone.status}`);
@@ -212,6 +214,9 @@ export async function settleMilestone(db: DB, p: { milestoneId: string; releaseM
     const status = p.releaseMinor > 0 ? "APPROVED" : "REFUNDED";
     await tx.update(milestones).set({ status, autoApproveAt: null }).where(eq(milestones.id, milestone.id));
     await completeOrderIfSettled(tx, order.id);
-    return { releasedMinor: p.releaseMinor, refundedMinor: held - p.releaseMinor };
+    return { releasedMinor: p.releaseMinor, refundedMinor: held - p.releaseMinor, orderId: order.id };
   });
+  const { orderId, ...result } = out;
+  await askForReviews(db, orderId);
+  return result;
 }

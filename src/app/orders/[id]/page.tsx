@@ -6,7 +6,8 @@ import { reviewForOrder } from "@/server/litRetrieval";
 import { payOrderAction } from "@/app/actions/orders";
 import { OrderProgress } from "@/components/OrderProgress";
 import { progressStep } from "@/server/dashboard";
-import { ClientDecision, LivePulse, DeliveryForm, MessageComposer, ReviewForm } from "@/components/OrderRoomForms";
+import { ClientDecision, LivePulse, DeliveryForm, MessageComposer } from "@/components/OrderRoomForms";
+import { OrderReviews } from "@/components/OrderReviews";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { ORDER_STATUS } from "@/lib/status";
@@ -59,8 +60,6 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const other = role === "client" ? expert : client;
   const isAdminView = role === "admin";
   if (!isAdminView) await Promise.all([markThreadRead(db, order.id, user.id), markOrderNotificationsRead(db, user.id, order.id)]);
-  const myReview = revs.find((r) => r.authorId === user.id);
-  const theirReview = revs.find((r) => r.authorId !== user.id);
   const expertFirst = expert.name?.split(" ")[0] ?? "the expert";
   const next = nextFundable(milestones);
   const multi = milestones.length > 1;
@@ -113,6 +112,8 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           <OrderProgress step={progressStep(order.status, milestones.map((m) => m.status))} />
         </div>
       )}
+
+      {!isAdminView && <OrderReviews order={order} revs={revs} userId={user.id} role={role as "client" | "expert"} otherName={other.name ?? ""} />}
 
       {hired && role === "client" && order.status === "AWAITING_PAYMENT" && (
         <div className="flex items-center gap-4 rounded-md bg-green p-5 text-white">
@@ -212,22 +213,6 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
               </div>
             );
           })}
-
-          {order.status === "COMPLETED" && !isAdminView && (
-            <div className="card flex flex-col gap-4">
-              <h2 className="text-xl font-bold">Reviews</h2>
-              {myReview ? (
-                <p className="text-sm text-ink-muted">You rated this order {"★".repeat(myReview.rating)}{myReview.body ? `: “${myReview.body}”` : "."}</p>
-              ) : (
-                <ReviewForm orderId={order.id} subjectName={other.name?.split(" ")[0] ?? "them"} />
-              )}
-              {theirReview && (
-                <p className="text-sm text-ink-muted">
-                  {other.name?.split(" ")[0]} rated you {"★".repeat(theirReview.rating)}{theirReview.body ? `: “${theirReview.body}”` : "."}
-                </p>
-              )}
-            </div>
-          )}
 
           {answers.length > 0 && (
             <details className="card">

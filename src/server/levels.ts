@@ -37,7 +37,7 @@ export async function expertStats(db: DB, userId: string, now = new Date()): Pro
       .select({ total: sql<string>`coalesce(sum(${ledgerEntries.amountMinor}), 0)` })
       .from(ledgerEntries)
       .where(and(eq(ledgerEntries.account, "EXPERT_AVAILABLE"), eq(ledgerEntries.userId, userId), eq(ledgerEntries.type, "RELEASE"))),
-    db.select({ average: avg(reviews.rating), total: count(reviews.id) }).from(reviews).where(and(eq(reviews.subjectId, userId), inArray(reviews.orderId, mine))),
+    db.select({ average: avg(reviews.rating), total: count(reviews.id) }).from(reviews).where(and(eq(reviews.subjectId, userId), inArray(reviews.orderId, mine), eq(reviews.hidden, false))),
     db
       .select({ dueAt: milestones.dueAt, firstDelivery: min(deliveries.createdAt) })
       .from(milestones)

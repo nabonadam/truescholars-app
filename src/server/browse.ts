@@ -1,5 +1,6 @@
 /** Find experts: live services with reputation, filters and sorting, plus category counts. */
 
+import { publishedReview } from "./reviews";
 import { and, avg, count, eq, inArray } from "drizzle-orm";
 import type { DB } from "@/db";
 import { categories, orders, reviews, services } from "@/db/schema";
@@ -21,7 +22,7 @@ export async function browseServices(db: DB, o: { q?: string; category?: string;
       .select({ userId: reviews.subjectId, average: avg(reviews.rating), total: count(reviews.id) })
       .from(reviews)
       .innerJoin(orders, eq(orders.id, reviews.orderId))
-      .where(and(inArray(reviews.subjectId, experts), inArray(orders.expertId, experts)))
+      .where(and(inArray(reviews.subjectId, experts), inArray(orders.expertId, experts), publishedReview))
       .groupBy(reviews.subjectId),
     db
       .select({ serviceId: orders.serviceId, n: count() })
