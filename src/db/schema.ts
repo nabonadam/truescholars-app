@@ -850,3 +850,23 @@ export const fxRates = pgTable("fx_rates", {
   source: text("source").notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
+
+/** One row per AI-using action: who, which tool, what it used, and what it cost us (in micro-dollars). */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: id(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    tool: text("tool").notNull(), // stats | qual | lit
+    action: text("action").notNull(), // e.g. lit.read, qual.transcribe
+    access: text("access").notNull().default("unknown"), // trial | granted | admin | unknown
+    units: jsonb("units").notNull().default(sql`'{}'::jsonb`), // e.g. {"lit.read": 2} or {"qual.minutes": 3.5}
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    audioSeconds: doublePrecision("audio_seconds").notNull().default(0),
+    costMicros: integer("cost_micros").notNull().default(0), // US$ × 1,000,000
+    failed: boolean("failed").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_usage_user_tool_idx").on(t.userId, t.tool, t.createdAt), index("ai_usage_created_idx").on(t.createdAt)],
+);

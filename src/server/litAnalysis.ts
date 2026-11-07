@@ -16,6 +16,7 @@ import { litPapers } from "@/db/schema";
 import { type PaperMeta, pno, shortAuthors } from "@/lib/cite";
 import { LitError, type Paper, getAnalysisState, listPapers, mustOwn, paperPages, saveAnalysisState } from "./lit";
 import { claudeJson, findQuote } from "./qualAnalysis";
+import { countUnit } from "./usage";
 
 // ───────── types ─────────
 
@@ -171,6 +172,7 @@ export async function readPapers(db: DB, ownerId: string, reviewId: string, opts
         const b = card.bibliographic;
         const meta = !m.authors?.length && b?.authors.length ? { ...m, authors: b.authors, year: m.year ?? b.year ?? null, journal: m.journal ?? b.journal, title: m.title || b.title } : m;
         await db.update(litPapers).set({ card, meta, cardStatus: "done", cardError: null }).where(eq(litPapers.id, p.id));
+        countUnit("lit.read");
       } catch (err) {
         const msg = err instanceof LitError || (err instanceof Error && /busy|unreadable/i.test(err.message)) ? err.message : "This paper couldn't be read.";
         await db.update(litPapers).set({ cardStatus: "failed", cardError: msg }).where(eq(litPapers.id, p.id));

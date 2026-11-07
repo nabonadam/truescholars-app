@@ -7,6 +7,7 @@ import { type Access, accessFor, timeLeft, trialDays } from "@/server/statsAcces
 import { ago } from "@/lib/time";
 import { Icon } from "@/components/Icons";
 import { SampleButton, UploadForm } from "@/components/stats/UploadForm";
+import { UsageMeter } from "@/components/UsageMeter";
 
 export const metadata = { title: "Statistics Assistant" };
 
@@ -58,6 +59,7 @@ export default async function StatsHome() {
               </div>
             )}
             {access && <AccessChip access={access} />}
+            {access && access.kind !== "admin" && access.kind !== "ended" && <div className="mt-4 max-w-xs"><UsageMeter tool="stats" dark /></div>}
             <div className="mt-6 flex flex-wrap gap-2 text-[13px] text-on-green-muted">
               {["Stata syntax", "APA 7 tables", "Word & Excel export", "Do-file included"].map((t) => (
                 <span key={t} className="flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1"><Icon name="check" size={13} className="text-amber" /> {t}</span>

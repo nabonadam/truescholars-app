@@ -14,6 +14,7 @@ import { qualAnalyses } from "@/db/schema";
 import { answerText, answerable, pid, questionNumbers, type Question } from "@/lib/qual";
 import { QualError, getStudy, listResponses, usable } from "./qual";
 import { fieldQuestions } from "./qualExport";
+import { guardAi, recordTokens } from "./usage";
 
 export type Quote = { rid: string; text: string };
 export type RawCode = { label: string; description: string; quotes: string[] };
@@ -119,6 +120,7 @@ export function findQuote(quote: string, source: string): string | null {
 export const aiOn = () => !!process.env.ANTHROPIC_API_KEY;
 
 export async function claude(system: string, user: string, maxTokens: number): Promise<string> {
+  guardAi();
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new QualError("AI analysis isn't switched on yet.");
   const messages: { role: "user" | "assistant"; content: string }[] = [{ role: "user", content: user }];
@@ -135,7 +137,8 @@ export async function claude(system: string, user: string, maxTokens: number): P
       console.error("anthropic", res.status, (await res.text().catch(() => "")).slice(0, 300));
       throw new QualError("The analysis assistant is busy right now. Try again in a moment.");
     }
-    const data = (await res.json()) as { content: { type: string; text?: string }[]; stop_reason?: string };
+    const data = (await res.json()) as { content: { type: string; text?: string }[]; stop_reason?: string; model?: string; usage?: { input_tokens?: number; output_tokens?: number } };
+    recordTokens(data.model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5", data.usage?.input_tokens ?? 0, data.usage?.output_tokens ?? 0);
     const part = data.content.filter((c) => c.type === "text").map((c) => c.text).join("");
     text += part;
     if (data.stop_reason !== "max_tokens" || !part) break;

@@ -27,6 +27,7 @@ import {
 } from "@/lib/qual";
 import { notify } from "./notifications";
 import { deleteAudio, deleteAudioPrefix, getAudio, putAudio } from "./qualStorage";
+import { guardAi, recordAudio } from "./usage";
 
 export class QualError extends Error {}
 
@@ -356,6 +357,7 @@ export async function responseCounts(db: DB, studyId: string) {
 export const transcriptionOn = () => !!process.env.DEEPGRAM_API_KEY;
 
 async function deepgram(bytes: Uint8Array, mime: string, language: string) {
+  guardAi();
   const key = process.env.DEEPGRAM_API_KEY;
   if (!key) throw new QualError("Automatic transcription isn't switched on yet.");
   const params = new URLSearchParams({ model: process.env.DEEPGRAM_MODEL || "nova-3", smart_format: "true", punctuate: "true", paragraphs: "true" });
@@ -370,7 +372,8 @@ async function deepgram(bytes: Uint8Array, mime: string, language: string) {
     console.error("deepgram", res.status, (await res.text().catch(() => "")).slice(0, 400));
     throw new QualError(res.status === 401 || res.status === 403 ? "The transcription key was refused." : `Transcription failed (${res.status}).`);
   }
-  const data = (await res.json()) as { results?: { channels?: { alternatives?: { transcript?: string; paragraphs?: { transcript?: string } }[] }[] } };
+  const data = (await res.json()) as { metadata?: { duration?: number }; results?: { channels?: { alternatives?: { transcript?: string; paragraphs?: { transcript?: string } }[] }[] } };
+  recordAudio(data.metadata?.duration ?? 0);
   const alt = data.results?.channels?.[0]?.alternatives?.[0];
   return (alt?.paragraphs?.transcript || alt?.transcript || "").trim();
 }

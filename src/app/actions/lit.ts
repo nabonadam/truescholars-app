@@ -12,6 +12,7 @@ import { type SearchLog, acceptLiterature, askReplacements, cancelRequest, reque
 import { OrderRoomError } from "@/server/orderRoom";
 import { QualError } from "@/server/qual";
 import { canUse, requestToolUpgrade, toolAccessFor } from "@/server/toolAccess";
+import { QuotaError, metered } from "@/server/usage";
 
 export type LitState = { error?: string; ok?: string; at?: number } | undefined;
 
@@ -25,7 +26,7 @@ async function worker() {
 }
 
 const known = (err: unknown): { error: string } => {
-  if (err instanceof LitError || err instanceof QualError) return { error: err.message };
+  if (err instanceof LitError || err instanceof QualError || err instanceof QuotaError) return { error: err.message };
   throw err;
 };
 const pages = (id: string) => revalidatePath(`/tools/lit/${id}`, "layout");
@@ -154,7 +155,7 @@ export async function readAction(reviewId: string, paperId?: string): Promise<{ 
   try {
     const user = await worker();
     if (paperId) await resetCard(getDb(), user.id, reviewId, paperId);
-    const r = await readPapers(getDb(), user.id, reviewId, { paperId });
+    const r = await metered(getDb(), user, "lit", "lit.read", ({ remaining }) => readPapers(getDb(), user.id, reviewId, { paperId, batch: Math.max(1, Math.min(2, remaining["lit.read"] ?? 2)) }));
     if (r.finished) pages(reviewId);
     return r;
   } catch (err) {
@@ -165,7 +166,7 @@ export async function readAction(reviewId: string, paperId?: string): Promise<{ 
 export async function synthesisAction(reviewId: string): Promise<LitState> {
   try {
     const user = await worker();
-    await runSynthesis(getDb(), user.id, reviewId);
+    await metered(getDb(), user, "lit", "lit.synthesis", () => runSynthesis(getDb(), user.id, reviewId));
     pages(reviewId);
     return { ok: "Done", at: Date.now() };
   } catch (err) {
@@ -187,7 +188,7 @@ export async function editSynthesisAction(reviewId: string, edit: Parameters<typ
 export async function outlineAction(reviewId: string, targetWords: number): Promise<LitState> {
   try {
     const user = await worker();
-    await makeOutline(getDb(), user.id, reviewId, targetWords);
+    await metered(getDb(), user, "lit", "lit.outline", () => makeOutline(getDb(), user.id, reviewId, targetWords));
     pages(reviewId);
     return { ok: "Done", at: Date.now() };
   } catch (err) {
@@ -209,7 +210,7 @@ export async function saveOutlineAction(reviewId: string, outline: Section[]): P
 export async function writeSectionAction(reviewId: string, sectionId: string): Promise<LitState> {
   try {
     const user = await worker();
-    await writeSection(getDb(), user.id, reviewId, sectionId);
+    await metered(getDb(), user, "lit", "lit.write", () => writeSection(getDb(), user.id, reviewId, sectionId));
     return { ok: "Written", at: Date.now() };
   } catch (err) {
     return known(err);

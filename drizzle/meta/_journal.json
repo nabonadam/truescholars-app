@@ -148,6 +148,13 @@
       "when": 1794073009098,
       "tag": "0020_fx_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794074398339,
+      "tag": "0021_ai_usage",
+      "breakpoints": true
     }
   ]
 }

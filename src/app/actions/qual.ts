@@ -19,6 +19,7 @@ import {
 import { PHASES, type Phase, editAnalysis, runPhase, saveSetup } from "@/server/qualAnalysis";
 import { createFromTemplate, createSampleStudy, TEMPLATES, type TemplateKey } from "@/server/qualTemplates";
 import { canUse, requestToolUpgrade, toolAccessFor } from "@/server/toolAccess";
+import { QuotaError, metered } from "@/server/usage";
 
 export type QualState = { error?: string; ok?: string; at?: number } | undefined;
 
@@ -32,7 +33,7 @@ async function worker() {
 }
 
 const known = (err: unknown): QualState => {
-  if (err instanceof QualError) return { error: err.message };
+  if (err instanceof QualError || err instanceof QuotaError) return { error: err.message };
   throw err;
 };
 
@@ -142,7 +143,7 @@ export async function transcriptAction(studyId: string, responseId: string, ques
 export async function transcribeAllAction(studyId: string): Promise<{ error?: string; ok?: string; at?: number; remaining?: number; done?: number; failed?: number }> {
   try {
     const user = await worker();
-    const r = await transcribeStudy(getDb(), user.id, studyId, 15);
+    const r = await metered(getDb(), user, "qual", "qual.transcribe", () => transcribeStudy(getDb(), user.id, studyId, 15));
     pages(studyId);
     return { ok: "Transcribed", at: Date.now(), ...r };
   } catch (err) {
@@ -174,7 +175,7 @@ export async function runPhaseAction(studyId: string, phase: Phase, restart = fa
   try {
     const user = await worker();
     if (!PHASES.includes(phase)) throw new QualError("Unknown step.");
-    const r = await runPhase(getDb(), user.id, studyId, phase, { restart });
+    const r = await metered(getDb(), user, "qual", `qual.${phase}`, () => runPhase(getDb(), user.id, studyId, phase, { restart }));
     if (r.finished) revalidatePath(`/tools/qual/${studyId}/analyse`);
     return r;
   } catch (err) {

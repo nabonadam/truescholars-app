@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { ago } from "@/lib/time";
 import { listReviews } from "@/server/lit";
 import { type Access, timeLeft, toolAccessFor, toolTrialDays } from "@/server/toolAccess";
+import { UsageMeter } from "@/components/UsageMeter";
 
 export const metadata = { title: "Literature Review" };
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export default async function LitHome() {
               </div>
             )}
             {access && <AccessChip access={access} />}
+            {access && access.kind !== "admin" && access.kind !== "ended" && <div className="mt-4 max-w-xs"><UsageMeter tool="lit" dark /></div>}
           </div>
           <Preview />
         </div>

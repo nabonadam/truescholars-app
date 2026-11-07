@@ -10,12 +10,13 @@ import { eq } from "drizzle-orm";
 import { usdToGhs } from "@/server/fx";
 import { requireUser } from "@/server/guards";
 import { peekToolAccess, timeLeft } from "@/server/toolAccess";
+import { UsageMeter } from "@/components/UsageMeter";
 
 export const metadata = { title: "Upgrade Literature Review" };
 export const dynamic = "force-dynamic";
 
 const FEATURES = [
-  "Unlimited reviews and papers",
+  "Unlimited reviews, with up to 150 papers read by the AI each month",
   "Systematic reading of every paper, with checked quotes and page numbers",
   "Synthesis: themes, agreements, contradictions, gaps and a concept glossary",
   "Critical, idea-led writing with every sentence linked to its source",
@@ -48,6 +49,7 @@ export default async function Upgrade() {
         <div className="card flex flex-col gap-4 p-7">
           <span className="eyebrow">Your access</span>
           <p className="text-lg font-bold">{status}</p>
+          {(access.kind === "trial" || access.kind === "granted") && <UsageMeter tool="lit" />}
           {access.kind === "admin" && <p className="rounded-sm bg-parchment p-2.5 text-[13px] text-ink-muted">Preview: this is what clients see. You don&apos;t need to pay.</p>}
           {(paystackConfigured() ? <PlanPicker tool="lit" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-ink-muted">Online payment is being switched on. For now, ask us and we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.</p>)}
           {access.kind !== "admin" && (

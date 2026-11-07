@@ -7,6 +7,7 @@ import { requireUser } from "@/server/guards";
 import { ENDED } from "@/lib/statsCopy";
 import { accessFor, canRun, requestUpgrade } from "@/server/statsAccess";
 import { StatsError, cancel, confirm, createSampleSession, deleteSession, interpretRun, renameSession, resetData, submit } from "@/server/stats";
+import { QuotaError, metered } from "@/server/usage";
 
 /** Running analyses needs an active trial or access; viewing and downloading never does. */
 async function runner() {
@@ -19,7 +20,7 @@ async function runner() {
 export type StatsState = { error?: string; ok?: number; runId?: string } | undefined;
 
 const known = (err: unknown): StatsState => {
-  if (err instanceof StatsError) return { error: err.message };
+  if (err instanceof StatsError || err instanceof QuotaError) return { error: err.message };
   throw err;
 };
 
@@ -49,7 +50,8 @@ export async function submitAction(sessionId: string, input: string, mode: "auto
     return known(err);
   }
   try {
-    const runId = await submit(getDb(), user.id, sessionId, input, mode);
+    // soft: typed Stata commands don't use the AI, so they're never limited
+    const runId = await metered(getDb(), user, "stats", "stats.ask", () => submit(getDb(), user.id, sessionId, input, mode), { soft: true });
     page(sessionId);
     return { ok: Date.now(), runId };
   } catch (err) {
@@ -66,7 +68,7 @@ export async function confirmAction(sessionId: string, runId: string, commands?:
     return known(err);
   }
   try {
-    await confirm(getDb(), user.id, runId, commands);
+    await metered(getDb(), user, "stats", "stats.run", () => confirm(getDb(), user.id, runId, commands), { soft: true });
     page(sessionId);
     return { ok: Date.now(), runId };
   } catch (err) {
@@ -90,7 +92,7 @@ export async function interpretAction(sessionId: string, runId: string): Promise
     return known(err);
   }
   try {
-    await interpretRun(getDb(), user.id, runId);
+    await metered(getDb(), user, "stats", "stats.interpret", () => interpretRun(getDb(), user.id, runId), { soft: true });
   } catch (err) {
     return known(err);
   }

@@ -10,6 +10,7 @@ const TABS = [
   { href: "/admin/qual", label: "Qualitative access" },
   { href: "/admin/lit", label: "Literature access" },
   { href: "/admin/retrieval", label: "Literature retrieval" },
+  { href: "/admin/usage", label: "AI usage" },
 ] as const;
 
 export function AdminTabs({ active, counts = {} }: { active: (typeof TABS)[number]["href"]; counts?: Partial<Record<(typeof TABS)[number]["href"], number>> }) {

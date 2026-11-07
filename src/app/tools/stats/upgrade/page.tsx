@@ -10,12 +10,13 @@ import { eq } from "drizzle-orm";
 import { usdToGhs } from "@/server/fx";
 import { requireUser } from "@/server/guards";
 import { peekAccess, timeLeft } from "@/server/statsAccess";
+import { UsageMeter } from "@/components/UsageMeter";
 
 export const metadata = { title: "Upgrade the Statistics Assistant" };
 export const dynamic = "force-dynamic";
 
 const FEATURES = [
-  "Unlimited analyses in plain English or Stata",
+  "Unlimited Stata commands, plus 250 plain-English AI requests a month",
   "Stata-style output and APA 7 tables for every result",
   "Word and Excel exports, do-files and working data",
   "Plain-English write-ups of your results",
@@ -48,6 +49,7 @@ export default async function Upgrade() {
         <div className="card flex flex-col gap-4 p-7">
           <span className="eyebrow">Your access</span>
           <p className="text-lg font-bold">{status}</p>
+          {(access.kind === "trial" || access.kind === "granted") && <UsageMeter tool="stats" />}
           {access.kind === "admin" && <p className="rounded-sm bg-parchment p-2.5 text-[13px] text-ink-muted">Preview: this is what clients see. You don&apos;t need to pay.</p>}
           {(paystackConfigured() ? <PlanPicker tool="stats" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-ink-muted">Online payment is being switched on. For now, ask us and we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.</p>)}
           {access.kind !== "admin" && (

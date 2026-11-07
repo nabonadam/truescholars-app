@@ -3,6 +3,8 @@
  * It sees the codebook (names, labels, value labels, summaries) and result summaries, never raw rows.
  */
 
+import { countUnit, guardAi, recordTokens } from "./usage";
+
 export type VarMeta = {
   name: string;
   label: string;
@@ -107,6 +109,7 @@ function codebook(vars: VarMeta[]): string {
 }
 
 async function claude(body: Record<string, unknown>) {
+  guardAi();
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new AiUnavailable("Plain-English requests are not switched on yet. Type Stata commands instead, for example: summarize age income");
   const res = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
@@ -119,7 +122,10 @@ async function claude(body: Record<string, unknown>) {
     console.error("anthropic", res.status, await res.text().catch(() => ""));
     throw new AiUnavailable("The assistant is busy right now. Try again in a moment, or type Stata commands directly.");
   }
-  return (await res.json()) as { content: { type: string; text?: string; input?: unknown }[] };
+  const data = (await res.json()) as { content: { type: string; text?: string; input?: unknown }[]; model?: string; usage?: { input_tokens?: number; output_tokens?: number } };
+  recordTokens(data.model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5", data.usage?.input_tokens ?? 0, data.usage?.output_tokens ?? 0);
+  countUnit("stats.ai");
+  return data;
 }
 
 export async function translate(input: string, ctx: { vars: VarMeta[]; nObs: number; history: string[]; recent: string[] }): Promise<Plan> {

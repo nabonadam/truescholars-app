@@ -7,6 +7,7 @@ import { ago } from "@/lib/time";
 import { listStudies } from "@/server/qual";
 import { TEMPLATES } from "@/server/qualTemplates";
 import { type Access, timeLeft, toolAccessFor, toolTrialDays } from "@/server/toolAccess";
+import { UsageMeter } from "@/components/UsageMeter";
 
 export const metadata = { title: "Qualitative Studio" };
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export default async function QualHome() {
               </div>
             )}
             {access && <AccessChip access={access} />}
+            {access && access.kind !== "admin" && access.kind !== "ended" && <div className="mt-4 max-w-xs"><UsageMeter tool="qual" dark /></div>}
           </div>
           <Preview />
         </div>
