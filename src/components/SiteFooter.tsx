@@ -58,7 +58,11 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="flex flex-wrap justify-between gap-2.5 border-t border-white/12 pt-5">
-          <span>© {new Date().getFullYear()} The True Scholars</span>
+          <span>
+            © {new Date().getFullYear()} The True Scholars ·{" "}
+            <a href={site("/about/")} className="text-[#bccdc1] no-underline hover:text-white">About us</a> ·{" "}
+            <a href={site("/contact/")} className="text-[#bccdc1] no-underline hover:text-white">Contact</a>
+          </span>
           <a href="mailto:hello@thetruescholars.com" className="text-[#bccdc1] no-underline hover:text-white">hello@thetruescholars.com</a>
         </div>
       </div>
