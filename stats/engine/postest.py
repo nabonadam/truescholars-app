@@ -172,8 +172,27 @@ def _vif(ds: Dataset) -> Result:
     X = e["X"][:, :-1]
     if X.shape[1] < 2:
         raise StataError("estat vif needs at least two predictors")
-    labs = [f"{g}#{l}" if False else (l if not g else f"{l}") for g, l in e["keep"]]
-    names = [(f"{l}" if not g else f"{l}.{g}") for g, l in e["keep"]]
+    def code(var: str, lab: str) -> str:
+        levels, _ = e["levels"].get(var, ([], None))
+        for lv in levels:
+            if level_label(ds, var, lv) == lab:
+                return str(int(lv)) if float(lv).is_integer() else str(lv)
+        return lab
+
+    names = []
+    for g, l in e["keep"]:  # Stata names factor columns 2.sex, 1.urban#2.sex, c.age#2.sex
+        if not g:
+            names.append(l)
+            continue
+        gv, lv = g.split("#"), l.split("#")
+        parts, k = [], 0
+        for v in gv:
+            if v.startswith("c."):
+                parts.append(v)
+            else:
+                parts.append(f"{code(v, lv[k])}.{v}")
+                k += 1
+        names.append("#".join(parts))
     out = []
     for j in range(X.shape[1]):
         others = np.column_stack([np.delete(X, j, axis=1), np.ones(len(X))])
@@ -191,7 +210,6 @@ def _vif(ds: Dataset) -> Result:
     lines += [fmt.rule(13, 22), f"{'Mean VIF':>12} |{mean_vif:>10.2f}"]
     notes = [f"{nm} has a VIF above 10, a sign of strong multicollinearity." for nm, v in out if v > 10]
     t = Table("Variance inflation factors", ["Predictor", "VIF", "1/VIF"], [[nm, fmt.apa_num(v), f"{1 / v:.3f}"] for nm, v in out] + [["Mean VIF", fmt.apa_num(mean_vif), ""]])
-    _ = labs
     return Result(log="\n".join(lines), tables=[t], notes=notes, summary={"vif": {nm: v for nm, v in out}, "mean_vif": mean_vif})
 
 

@@ -378,7 +378,7 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
             lines.append("Fisher's exact = ".rjust(29) + f"{'':>8}{ex:>9.3f}")
             notes.append("For tables larger than 2×2, Fisher's exact p-value is estimated by simulation (20,000 random tables); it can differ slightly from Stata's in the third decimal.")
         summ["fisher_p"] = ex
-    if cmd.opt("chi2") is None and cmd.opt("exact") is None and valid:
+    if cmd.opt("chi2") is None and cmd.opt("exact") is None and not cmd.opt("all") and valid:
         notes.append("Add the chi2 option (or ask for a chi-square test) to test whether the two variables are associated.")
 
     # APA: counts with row (or column) percentages
