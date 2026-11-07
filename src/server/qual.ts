@@ -87,6 +87,8 @@ export function validateDraft(input: { title: string; intro: string; questions: 
 export async function saveDraft(db: DB, ownerId: string, id: string, input: { title: string; intro: string; questions: unknown; settings: unknown }) {
   await mustStudy(db, ownerId, id);
   const d = validateDraft(input);
+  // an explanation recording must be one of this study's own files
+  for (const q of d.questions) if (q.explain && !q.explain.key.startsWith(explainPrefix(id))) q.explain = null;
   await db.update(qualStudies).set(d).where(eq(qualStudies.id, id));
 }
 
@@ -128,6 +130,39 @@ function stable(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
   if (v && typeof v === "object") return `{${Object.keys(v).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`).join(",")}}`;
   return JSON.stringify(v);
+}
+
+// ───────── spoken explanations (recorded by the researcher) ─────────
+
+export const MAX_EXPLAIN_SECONDS = 180;
+const explainPrefix = (studyId: string) => `qual/${studyId}/_explain/`;
+const audioExt = (type: string) => (/mp4|m4a|aac/.test(type) ? "m4a" : /ogg/.test(type) ? "ogg" : /mpeg|mp3/.test(type) ? "mp3" : /wav/.test(type) ? "wav" : "webm");
+
+/** Stores a researcher's spoken explanation for a question; the builder then saves it on the question. */
+export async function saveExplanation(db: DB, ownerId: string, studyId: string, bytes: Uint8Array, mime: string, seconds: number) {
+  await mustStudy(db, ownerId, studyId);
+  if (!bytes.length) throw new QualError("The recording is empty. Please record again.");
+  if (bytes.length > MAX_AUDIO_BYTES) throw new QualError("That recording is too large. Keep explanations under three minutes.");
+  const type = (mime || "audio/webm").toLowerCase();
+  if (!AUDIO_TYPES.test(type)) throw new QualError("That isn't an audio recording we can store.");
+  const key = `${explainPrefix(studyId)}${Date.now().toString(36)}-${token(6)}.${audioExt(type)}`;
+  await putAudio(db, key, bytes, type.split(";")[0]);
+  return { key, mime: type.split(";")[0], seconds: Math.max(0, Math.min(MAX_EXPLAIN_SECONDS, Math.round(seconds || 0))) };
+}
+
+/** The researcher's own explanation file, for playback in the builder. */
+export async function ownerExplanation(db: DB, ownerId: string, studyId: string, key: string) {
+  await mustStudy(db, ownerId, studyId);
+  if (!key.startsWith(explainPrefix(studyId)) || key.includes("..")) return null;
+  return getAudio(db, key);
+}
+
+/** The explanation respondents hear: only ever one attached to a question of the published study. */
+export async function publicExplanation(db: DB, tok: string, questionId: string) {
+  const s = await publicStudy(db, tok);
+  const q = s?.study.questions.find((x) => x.id === questionId);
+  if (!s || !q?.explain || !q.explain.key.startsWith(explainPrefix(s.id))) return null;
+  return getAudio(db, q.explain.key);
 }
 
 // ───────── respondents (public, no account) ─────────

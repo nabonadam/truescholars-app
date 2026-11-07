@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ExplainRecorder } from "./ExplainRecorder";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { deleteStudyAction, publishAction, saveDraftAction, setOpenAction } from "@/app/actions/qual";
 import { LANGUAGES, QUESTION_TYPES, newQuestion, questionNumbers, type QType, type Question, type StudySettings } from "@/lib/qual";
@@ -95,7 +96,7 @@ export function Builder({ id, initial, token, status, unpublished, canPublish }:
           <div className="rounded-md border-2 border-dashed border-line p-8 text-center text-ink-muted">No questions yet. Add your first one below.</div>
         )}
         {d.questions.map((q, i) => (
-          <QuestionCard key={q.id} q={q} n={nums[q.id]} first={i === 0} last={i === d.questions.length - 1} set={(p) => setQ(i, p)} onMove={(by) => move(i, by)} onRemove={() => remove(i)} onCopy={() => copy(i)} onInsert={(t) => insert(i + 1, t)} />
+          <QuestionCard key={q.id} studyId={id} q={q} n={nums[q.id]} first={i === 0} last={i === d.questions.length - 1} set={(p) => setQ(i, p)} onMove={(by) => move(i, by)} onRemove={() => remove(i)} onCopy={() => copy(i)} onInsert={(t) => insert(i + 1, t)} />
         ))}
         <AddMenu onAdd={(t) => insert(d.questions.length, t)} big />
       </div>
@@ -200,7 +201,7 @@ function AddMenu({ onAdd, big }: { onAdd: (t: QType) => void; big?: boolean }) {
   );
 }
 
-function QuestionCard({ q, n, first, last, set, onMove, onRemove, onCopy, onInsert }: { q: Question; n?: number; first: boolean; last: boolean; set: (p: Partial<Question>) => void; onMove: (by: number) => void; onRemove: () => void; onCopy: () => void; onInsert: (t: QType) => void }) {
+function QuestionCard({ studyId, q, n, first, last, set, onMove, onRemove, onCopy, onInsert }: { studyId: string; q: Question; n?: number; first: boolean; last: boolean; set: (p: Partial<Question>) => void; onMove: (by: number) => void; onRemove: () => void; onCopy: () => void; onInsert: (t: QType) => void }) {
   const hasOptions = q.type === "choice" || q.type === "multi" || q.type === "dropdown";
   const [optText, setOptText] = useState(q.options.join("\n"));
   const section = q.type === "section";
@@ -219,6 +220,7 @@ function QuestionCard({ q, n, first, last, set, onMove, onRemove, onCopy, onInse
       </div>
       <textarea className={`field min-h-[52px] ${section ? "text-lg font-bold" : "text-[15.5px] font-bold"}`} rows={2} value={q.text} onChange={(e) => set({ text: e.target.value })} placeholder={section ? "Section heading, e.g. About you" : "Type your question"} aria-label="Question text" />
       <input className="field py-2 text-sm" value={q.help} onChange={(e) => set({ help: e.target.value })} placeholder={section ? "Optional note shown under the heading" : "Optional hint or instruction"} aria-label="Hint" />
+      {!section && <ExplainRecorder studyId={studyId} q={q} set={set} />}
       {hasOptions && (
         <div>
           <label className="label text-[13px]">Options, one per line</label>

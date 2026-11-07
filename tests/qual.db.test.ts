@@ -6,7 +6,7 @@ import type { DB } from "@/db";
 import * as schema from "@/db/schema";
 import { newQuestion, type Question } from "@/lib/qual";
 import {
-  QualError, audioFor, createStudy, deleteResponse, deleteStudy, editTranscript, getStudy, hasUnpublishedChanges, listResponses, publicStudy,
+  QualError, audioFor, ownerExplanation, publicExplanation, saveExplanation, createStudy, deleteResponse, deleteStudy, editTranscript, getStudy, hasUnpublishedChanges, listResponses, publicStudy,
   publishStudy, resumeResponse, saveAnswer, saveAudio, saveDraft, setFlag, startResponse, submitResponse, transcribeResponse, transcribeStudy, usable,
 } from "@/server/qual";
 import { canUse, grantToolAccess, peekToolAccess, toolAccessFor } from "@/server/toolAccess";
@@ -150,3 +150,38 @@ describe("tool access", () => {
     expect((await toolAccessFor(db, "qual", owner, later)).kind).toBe("granted");
   });
 });
+
+describe("spoken explanations", () => {
+  it("lets the researcher attach a recording to a question that respondents can play once published", async () => {
+    const { id, token, qs } = await liveStudy();
+    const voice = qs.find((x) => x.type === "voice")!;
+    const ref = await saveExplanation(db, owner.id, id, new Uint8Array([1, 2, 3, 4]), "audio/webm;codecs=opus", 42);
+    expect(ref.key.startsWith(`qual/${id}/_explain/`)).toBe(true);
+    expect(ref).toMatchObject({ mime: "audio/webm", seconds: 42 });
+    expect((await ownerExplanation(db, owner.id, id, ref.key))!.bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
+
+    const s = (await getStudy(db, owner.id, id))!;
+    const withExplain = (s.questions as Question[]).map((x) => (x.id === voice.id ? { ...x, explain: ref } : x));
+    await saveDraft(db, owner.id, id, { title: s.title, intro: s.intro, questions: withExplain, settings: s.settings });
+    expect(await publicExplanation(db, token, voice.id)).toBeNull(); // not published yet
+    await publishStudy(db, owner.id, id);
+    expect((await publicExplanation(db, token, voice.id))!.mimeType).toBe("audio/webm");
+    expect(await publicExplanation(db, token, "nope")).toBeNull();
+  });
+
+  it("won't point a question at another study's file, and keeps explanations private to the owner", async () => {
+    const a = await liveStudy();
+    const b = await liveStudy();
+    const theirs = await saveExplanation(db, owner.id, b.id, new Uint8Array([9]), "audio/mp4", 5);
+    const s = (await getStudy(db, owner.id, a.id))!;
+    const qs = (s.questions as Question[]).map((x) => (x.type === "voice" ? { ...x, explain: theirs } : x));
+    await saveDraft(db, owner.id, a.id, { title: s.title, intro: s.intro, questions: qs, settings: s.settings });
+    expect(((await getStudy(db, owner.id, a.id))!.questions as Question[]).find((x) => x.type === "voice")!.explain).toBeNull();
+    expect(await ownerExplanation(db, owner.id, a.id, theirs.key)).toBeNull();
+
+    const [other] = await db.insert(schema.users).values({ email: "kwame@example.com" }).returning();
+    await expect(saveExplanation(db, other.id, a.id, new Uint8Array([1]), "audio/webm", 1)).rejects.toThrow();
+    await expect(saveExplanation(db, owner.id, a.id, new Uint8Array([1]), "text/html", 1)).rejects.toThrow(/audio/);
+  });
+});
+

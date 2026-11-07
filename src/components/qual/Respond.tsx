@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { answerable, fmtSeconds, isAnswered, type Answer, type PublishedStudy, type Question } from "@/lib/qual";
+import { Icon } from "../Icons";
 
 type Saved = Record<string, Answer & { audio?: Answer["audio"] | { seconds: number } }>;
 type Session = { rid: string; secret: string; idx: number };
@@ -265,6 +266,7 @@ function QuestionScreen(p: {
       <div className="text-[13px] font-bold text-ink-muted">Question {p.number} of {p.total}{!q.required && " · optional"}</div>
       <h1 className="mt-1.5 text-[22px] leading-snug font-extrabold">{q.text}</h1>
       {q.help && <p className="mt-2 text-[15px] whitespace-pre-line text-ink-muted">{q.help}</p>}
+      {q.explain && <Explanation key={q.id} token={p.token} questionId={q.id} seconds={q.explain.seconds} />}
       <div className="mt-5">
         {q.type === "voice" && !typing && <Recorder q={q} token={p.token} session={p.session} maxSeconds={p.maxSeconds} saved={a.audio as { seconds: number } | undefined} onSaved={(seconds) => setLocal(q.id, { audio: { seconds } as Answer["audio"], text: undefined })} />}
         {(q.type === "text" || (q.type === "voice" && typing)) && (
@@ -334,6 +336,33 @@ function Nav({ err, busy, last, onBack, onNext }: { err: string | null; busy: bo
         <button type="button" className="btn-amber min-h-12 flex-1" onClick={onNext} disabled={busy}>{busy ? "Saving…" : last ? "Submit my answers" : "Next"}</button>
       </div>
     </>
+  );
+}
+
+/** "Don't understand the question?" The researcher's own spoken explanation, played on request. */
+function Explanation({ token, questionId, seconds }: { token: string; questionId: string; seconds: number }) {
+  const [open, setOpen] = useState(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    if (open) audio.current?.play().catch(() => null);
+  }, [open]);
+  return (
+    <div className="mt-3 rounded-sm bg-green-tint/70 p-3">
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-3 text-left">
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-green text-amber"><Icon name="play" size={16} /></span>
+          <span className="min-w-0">
+            <span className="block text-[13.5px] text-ink-muted">Don&apos;t understand the question?</span>
+            <span className="block font-bold text-green">Play the explanation{seconds ? ` (${fmtSeconds(seconds)})` : ""}</span>
+          </span>
+        </button>
+      ) : (
+        <div>
+          <div className="mb-1.5 text-[13px] font-bold text-green">The researcher explains this question</div>
+          <audio ref={audio} controls preload="auto" src={`/api/s/${token}/explain?q=${encodeURIComponent(questionId)}`} className="w-full" />
+        </div>
+      )}
+    </div>
   );
 }
 

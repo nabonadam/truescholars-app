@@ -35,6 +35,8 @@ export const questionSchema = z.object({
   scaleMax: z.number().int().min(3).max(10).optional().default(5),
   minLabel: z.string().trim().max(60).optional().default(""),
   maxLabel: z.string().trim().max(60).optional().default(""),
+  // a spoken explanation the researcher recorded; respondents can play it if the question is unclear
+  explain: z.object({ key: z.string().max(300), mime: z.string().max(60), seconds: z.number().min(0).max(600) }).nullable().optional(),
 });
 export type Question = z.infer<typeof questionSchema>;
 

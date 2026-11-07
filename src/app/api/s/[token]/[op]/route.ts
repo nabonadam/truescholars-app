@@ -3,10 +3,19 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { qualStudies, users } from "@/db/schema";
 import { canUse, peekToolAccess } from "@/server/toolAccess";
-import { MAX_AUDIO_BYTES, QualError, clearAudio, resumeResponse, saveAnswer, saveAudio, startResponse, submitResponse, transcribeResponse, transcriptionOn } from "@/server/qual";
+import { audioResponse } from "@/server/audioResponse";
+import { MAX_AUDIO_BYTES, publicExplanation, QualError, clearAudio, resumeResponse, saveAnswer, saveAudio, startResponse, submitResponse, transcribeResponse, transcriptionOn } from "@/server/qual";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** A question's spoken explanation, for respondents (GET /api/s/<token>/explain?q=<questionId>). */
+export async function GET(req: Request, { params }: { params: Promise<{ token: string; op: string }> }) {
+  const { token, op } = await params;
+  if (op !== "explain") return new Response("Not found", { status: 404 });
+  const file = await publicExplanation(getDb(), token, new URL(req.url).searchParams.get("q") ?? "").catch(() => null);
+  return file ? audioResponse(req, file, "public, max-age=600") : new Response("Not found", { status: 404 });
+}
 
 /**
  * The respondent's side of a study link. No account: `start` returns a response id and a secret,
