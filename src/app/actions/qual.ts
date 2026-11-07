@@ -16,6 +16,7 @@ import {
   setTags,
   transcribeStudy,
 } from "@/server/qual";
+import { PHASES, type Phase, editAnalysis, runPhase, saveSetup } from "@/server/qualAnalysis";
 import { createFromTemplate, createSampleStudy, TEMPLATES, type TemplateKey } from "@/server/qualTemplates";
 import { canUse, requestToolUpgrade, toolAccessFor } from "@/server/toolAccess";
 
@@ -153,4 +154,41 @@ export async function qualUpgradeAction(): Promise<QualState> {
   const user = await requireUser();
   await requestToolUpgrade(getDb(), "qual", user);
   return { ok: "sent" };
+}
+
+// ───────── analysis ─────────
+
+export async function analysisSetupAction(studyId: string, researchQuestion: string, background: string): Promise<QualState> {
+  try {
+    const user = await requireUser();
+    await saveSetup(getDb(), user.id, studyId, researchQuestion, background);
+    revalidatePath(`/tools/qual/${studyId}/analyse`);
+    return { ok: "Saved", at: Date.now() };
+  } catch (err) {
+    return known(err);
+  }
+}
+
+/** Runs one batch of a phase; the page calls again until `finished`. */
+export async function runPhaseAction(studyId: string, phase: Phase, restart = false): Promise<{ error?: string; done?: number; total?: number; finished?: boolean }> {
+  try {
+    const user = await worker();
+    if (!PHASES.includes(phase)) throw new QualError("Unknown step.");
+    const r = await runPhase(getDb(), user.id, studyId, phase, { restart });
+    if (r.finished) revalidatePath(`/tools/qual/${studyId}/analyse`);
+    return r;
+  } catch (err) {
+    return (known(err) as { error?: string }) ?? {};
+  }
+}
+
+export async function editAnalysisAction(studyId: string, edit: Parameters<typeof editAnalysis>[3]): Promise<QualState> {
+  try {
+    const user = await requireUser();
+    await editAnalysis(getDb(), user.id, studyId, edit);
+    revalidatePath(`/tools/qual/${studyId}/analyse`);
+    return { ok: "Saved", at: Date.now() };
+  } catch (err) {
+    return known(err);
+  }
 }
