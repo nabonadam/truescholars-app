@@ -118,7 +118,7 @@ export function findQuote(quote: string, source: string): string | null {
 
 export const aiOn = () => !!process.env.ANTHROPIC_API_KEY;
 
-async function claude(system: string, user: string, maxTokens: number): Promise<string> {
+export async function claude(system: string, user: string, maxTokens: number): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new QualError("AI analysis isn't switched on yet.");
   const messages: { role: "user" | "assistant"; content: string }[] = [{ role: "user", content: user }];
@@ -158,7 +158,7 @@ export function parseJson<T>(text: string): T | null {
   return null;
 }
 
-async function claudeJson<T>(system: string, user: string, maxTokens: number): Promise<T> {
+export async function claudeJson<T>(system: string, user: string, maxTokens: number): Promise<T> {
   const first = await claude(system + "\nReply with JSON only, no other text.", user, maxTokens);
   const parsed = parseJson<T>(first);
   if (parsed) return parsed;

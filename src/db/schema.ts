@@ -426,6 +426,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "LEVEL_UP",
   "TOOL_ACCESS",
   "STUDY_RESPONSE",
+  "LIT_REVIEW",
 ]);
 
 export const notifications = pgTable(
@@ -747,5 +748,75 @@ export const qualAnalyses = pgTable("qual_analyses", {
   researchQuestion: text("research_question").notNull().default(""),
   background: text("background").notNull().default(""),
   state: jsonb("state").notNull().default(sql`'{}'::jsonb`), // familiarisation, codes, codebook, themes, matrix, report
+  updatedAt: updatedAt(),
+});
+
+// ───────────────────────── Literature Review ─────────────────────────
+// A review: the research question and brief, the papers (uploaded by the client or delivered by an expert
+// through a marketplace job), and the AI analysis built from the accepted papers.
+
+export const litReviews = pgTable(
+  "lit_reviews",
+  {
+    id: id(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    researchQuestion: text("research_question").notNull().default(""),
+    brief: jsonb("brief").notNull().default(sql`'{}'::jsonb`), // purpose, discipline, papers wanted, years, scope, inclusion/exclusion…
+    style: text("style").notNull().default("apa"), // apa | harvard | mla | chicago | vancouver
+    // DRAFT → (RETRIEVAL → REVIEWING, when an expert finds the papers) → ANALYSIS
+    status: text("status").notNull().default("DRAFT"),
+    jobId: text("job_id").references(() => jobs.id, { onDelete: "set null" }),
+    orderId: text("order_id"),
+    expertUserId: text("expert_user_id").references(() => users.id, { onDelete: "set null" }),
+    searchLog: jsonb("search_log"), // the expert's databases, search strings, criteria and PRISMA counts
+    deliveredAt: timestamp("delivered_at", { mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("lit_reviews_owner_idx").on(t.ownerId), index("lit_reviews_job_idx").on(t.jobId)],
+);
+
+export const litPapers = pgTable(
+  "lit_papers",
+  {
+    id: id(),
+    reviewId: text("review_id")
+      .notNull()
+      .references(() => litReviews.id, { onDelete: "cascade" }),
+    n: integer("n").notNull(), // paper number within the review (P01, P02…)
+    source: text("source").notNull().default("CLIENT"), // CLIENT | EXPERT
+    status: text("status").notNull().default("ACCEPTED"), // PENDING (expert-delivered, awaiting the client) | ACCEPTED | REJECTED
+    rejectReason: text("reject_reason"),
+    fileKey: text("file_key"), // the PDF in storage (null for a DOI-only entry)
+    fileName: text("file_name"),
+    sizeBytes: integer("size_bytes"),
+    pages: integer("pages"),
+    meta: jsonb("meta").notNull().default(sql`'{}'::jsonb`), // title, authors, year, journal, doi, abstract
+    verify: jsonb("verify"), // Crossref check: found, title match, retraction
+    note: text("note"), // the expert's relevance note
+    card: jsonb("card"), // the AI reading card
+    cardStatus: text("card_status").notNull().default("none"), // none | done | failed
+    cardError: text("card_error"),
+    addedBy: text("added_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("lit_papers_review_idx").on(t.reviewId, t.n)],
+);
+
+export const litPaperText = pgTable("lit_paper_text", {
+  paperId: text("paper_id")
+    .primaryKey()
+    .references(() => litPapers.id, { onDelete: "cascade" }),
+  pages: jsonb("pages").notNull().default(sql`'[]'::jsonb`), // text of each page, for reading and checking quotes
+});
+
+export const litAnalyses = pgTable("lit_analyses", {
+  reviewId: text("review_id")
+    .primaryKey()
+    .references(() => litReviews.id, { onDelete: "cascade" }),
+  state: jsonb("state").notNull().default(sql`'{}'::jsonb`), // synthesis, outline, sections
   updatedAt: updatedAt(),
 });
