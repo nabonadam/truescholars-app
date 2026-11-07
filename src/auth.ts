@@ -2,12 +2,20 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import NextAuth, { type DefaultSession } from "next-auth";
+import { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
 import { grantRole, isAdminEmail } from "@/server/vetting";
+import { clearLimit, clientIp, hit } from "@/server/rateLimit";
+
+/** Shown on the sign-in form when an account or address has had too many failed tries. */
+export class TooManyAttempts extends CredentialsSignin {
+  code = "rate_limited";
+}
+const DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO5Ib3bBZtzDLkPDKfcFXSY.NnKQ26gNe";
 
 type AppRole = "CLIENT" | "EXPERT" | "ADMIN";
 
@@ -45,14 +53,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       ...(process.env.AUTH_GOOGLE_ID ? [Google({ allowDangerousEmailAccountLinking: false })] : []),
       Credentials({
         credentials: { email: {}, password: {} },
-        async authorize(raw) {
+        async authorize(raw, request) {
           const parsed = credentialsSchema.safeParse(raw);
           if (!parsed.success) return null;
           const email = parsed.data.email.toLowerCase();
+          // Password guessing: at most 8 tries per account and 40 per address every 15 minutes.
+          const ip = request instanceof Request ? clientIp(request.headers) : "unknown";
+          const [perEmail, perIp] = await Promise.all([hit(db, `signin:email:${email}`, 8, 900), hit(db, `signin:ip:${ip}`, 40, 900)]);
+          if (!perEmail || !perIp) throw new TooManyAttempts();
           const [user] = await db.select().from(users).where(eq(users.email, email));
-          if (!user?.passwordHash) return null;
+          if (!user?.passwordHash) {
+            await bcrypt.compare(parsed.data.password, DUMMY_HASH); // same timing whether or not the account exists
+            return null;
+          }
           const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
-          return ok ? { id: user.id, name: user.name, email: user.email, image: user.image } : null;
+          if (!ok) return null;
+          await clearLimit(db, `signin:email:${email}`);
+          return { id: user.id, name: user.name, email: user.email, image: user.image };
         },
       }),
     ],
@@ -61,7 +78,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
         const userId = user?.id ?? token.sub;
         if (userId) {
           const [row] = await db
-            .select({ roles: users.roles, email: users.email, name: users.name, image: users.image, sv: users.sessionVersion })
+            .select({ roles: users.roles, email: users.email, emailVerified: users.emailVerified, name: users.name, image: users.image, sv: users.sessionVersion })
             .from(users)
             .where(eq(users.id, userId));
           if (!row) return null; // account removed
@@ -71,8 +88,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
           token.name = row.name; // name and photo changes show up straight away
           token.picture = row.image;
           let roles = row?.roles ?? ["CLIENT"];
-          // Emails listed in ADMIN_EMAILS are promoted to ADMIN the next time their session refreshes.
-          if (row && isAdminEmail(row.email) && !roles.includes("ADMIN")) {
+          // Emails listed in ADMIN_EMAILS are promoted to ADMIN the next time their session refreshes, but only
+          // once the address is proven (verified by email link or Google): signing up with it isn't enough.
+          if (row && row.emailVerified && isAdminEmail(row.email) && !roles.includes("ADMIN")) {
             await grantRole(db, userId, "ADMIN");
             roles = [...roles, "ADMIN"];
           }

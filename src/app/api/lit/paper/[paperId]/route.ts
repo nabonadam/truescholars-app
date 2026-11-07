@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
-import { LitError, attachPdf, paperFile } from "@/server/lit";
+import { LitError, MAX_PDF_BYTES, attachPdf, paperFile } from "@/server/lit";
+import { readBody } from "@/server/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ paperId:
   if (!session?.user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   const { paperId } = await params;
   try {
-    await attachPdf(getDb(), session.user.id, paperId, new Uint8Array(await req.arrayBuffer()));
+    const bytes = await readBody(req, MAX_PDF_BYTES);
+    if (!bytes) return NextResponse.json({ error: "That PDF is larger than 40 MB." }, { status: 400 });
+    await attachPdf(getDb(), session.user.id, paperId, bytes);
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof LitError) return NextResponse.json({ error: err.message }, { status: 400 });

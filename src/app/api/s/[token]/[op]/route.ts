@@ -6,6 +6,10 @@ import { canUse, peekToolAccess } from "@/server/toolAccess";
 import { audioResponse } from "@/server/audioResponse";
 import { MAX_AUDIO_BYTES, publicExplanation, QualError, clearAudio, resumeResponse, saveAnswer, saveAudio, startResponse, submitResponse, transcribeResponse, transcriptionOn } from "@/server/qual";
 import { QuotaError, metered } from "@/server/usage";
+import { clientIp, hit, readBody } from "@/server/rateLimit";
+
+// per visitor and study link, per hour: generous for a real participant, a wall for scripts
+const CAPS: Record<string, number> = { start: 20, audio: 150, answer: 600, "clear-audio": 150, resume: 300, submit: 30 };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,14 +32,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const rid = req.headers.get("x-response") ?? "";
   const secret = req.headers.get("x-secret") ?? "";
   try {
+    const ip = clientIp(req.headers);
+    const [mine, all] = await Promise.all([hit(db, `s:${op}:${token}:${ip}`, CAPS[op] ?? 100, 3600), hit(db, `s:link:${token}`, 5000, 3600)]);
+    if (!mine || !all) return NextResponse.json({ error: "Too many requests from your connection. Please wait a while and try again." }, { status: 429 });
     if (op === "audio") {
-      const len = Number(req.headers.get("content-length") ?? 0);
-      if (len > MAX_AUDIO_BYTES) throw new QualError("That recording is too large. Please keep answers shorter.");
-      const bytes = new Uint8Array(await req.arrayBuffer());
+      const bytes = await readBody(req, MAX_AUDIO_BYTES);
+      if (!bytes) throw new QualError("That recording is too large. Please keep answers shorter.");
       const r = await saveAudio(db, token, rid, secret, req.headers.get("x-question") ?? "", bytes, req.headers.get("content-type") ?? "", Number(req.headers.get("x-seconds") ?? 0));
       return NextResponse.json({ ok: true, ...r });
     }
-    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const raw = await readBody(req, 256 * 1024);
+    if (!raw) return NextResponse.json({ error: "That answer is too long." }, { status: 413 });
+    let body: Record<string, unknown> = {};
+    try {
+      body = JSON.parse(new TextDecoder().decode(raw) || "{}") as Record<string, unknown>;
+    } catch {
+      /* treated as empty */
+    }
     switch (op) {
       case "start":
         return NextResponse.json(await startResponse(db, token, { name: String(body.name ?? ""), email: String(body.email ?? ""), userAgent: req.headers.get("user-agent") ?? "" }));

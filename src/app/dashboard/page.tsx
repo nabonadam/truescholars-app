@@ -25,6 +25,9 @@ import { openDisputeCount } from "@/server/disputes";
 import { LEVEL_INFO, type Level } from "@/server/levels";
 import { listWithdrawals } from "@/server/payouts";
 import { getApplicationForUser, listApplications } from "@/server/vetting";
+import { VerifyEmailBanner } from "@/components/AuthForms";
+import { users } from "@/db/schema";
+import { sql } from "drizzle-orm";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -67,9 +70,11 @@ function Step({ n, icon, title, body, done }: { n: number; icon: IconName; title
   );
 }
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ verified?: string }> }) {
   const user = await requireUser();
   const db = getDb();
+  const { verified } = await searchParams;
+  const [me] = await db.select({ email: users.email, verifiedAt: users.emailVerified, hasPassword: sql<boolean>`${users.passwordHash} is not null` }).from(users).where(eq(users.id, user.id));
   const isExpert = user.roles.includes("EXPERT");
   const isAdmin = user.roles.includes("ADMIN");
 
@@ -111,6 +116,14 @@ export default async function Dashboard() {
 
   return (
     <>
+      {(verified || (me && !me.verifiedAt && me.hasPassword)) && (
+        <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6">
+          {verified === "1" ? <p role="status" className="rounded-md bg-green-tint px-4 py-3 text-sm font-bold text-green">Thank you: your email is confirmed.</p>
+            : verified === "0" ? <p role="alert" className="rounded-md bg-amber-tint px-4 py-3 text-sm text-amber-deep">That confirmation link has expired or was already used. {me && !me.verifiedAt ? "Send yourself a new one below." : ""}</p>
+            : null}
+          {me && !me.verifiedAt && me.hasPassword && <div className="mt-2"><VerifyEmailBanner email={me.email} /></div>}
+        </div>
+      )}
       {/* ───── Welcome banner ───── */}
       <section className="relative overflow-hidden bg-green text-white">
         <div className="pointer-events-none absolute -top-40 -right-32 size-[26rem] rounded-full bg-amber/15" aria-hidden="true" />

@@ -3,8 +3,10 @@
  * are skipped silently, so the app works the same without it. Email never blocks or fails an action.
  */
 
+const resendKey = () => process.env.RESEND_API_KEY || process.env.SEND_API_KEY; // either name works
+
 export function emailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY);
+  return Boolean(resendKey());
 }
 
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -25,7 +27,7 @@ ${p.body ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#4b5c
 }
 
 export async function sendEmail(p: { to: string; subject: string; html: string }): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
+  const key = resendKey();
   if (!key) return false;
   try {
     const res = await fetch("https://api.resend.com/emails", {

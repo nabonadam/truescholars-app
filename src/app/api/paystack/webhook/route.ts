@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { isValidSignature, verifyTransaction } from "@/lib/paystack";
 import { applyVerifiedTransaction } from "@/server/payments";
+import { readBody } from "@/server/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,9 @@ export const runtime = "nodejs";
  * The signature proves the call came from Paystack; we still re-verify the transaction before booking it.
  */
 export async function POST(req: Request) {
-  const raw = await req.text();
+  const bytes = await readBody(req, 512 * 1024);
+  if (!bytes) return NextResponse.json({ error: "too large" }, { status: 413 });
+  const raw = new TextDecoder().decode(bytes);
   if (!isValidSignature(raw, req.headers.get("x-paystack-signature"))) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }

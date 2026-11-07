@@ -870,3 +870,27 @@ export const aiUsage = pgTable(
   },
   (t) => [index("ai_usage_user_tool_idx").on(t.userId, t.tool, t.createdAt), index("ai_usage_created_idx").on(t.createdAt)],
 );
+
+/** Counters for rate limits (sign-in attempts, sign-ups, public survey links…), one row per key. */
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  resetAt: timestamp("reset_at", { mode: "date" }).notNull(),
+});
+
+/** One-time links sent by email: password resets and email verification. Only a hash of the token is kept. */
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // reset | verify
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("auth_tokens_user_idx").on(t.userId, t.kind)],
+);

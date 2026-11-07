@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { ENDED } from "@/lib/statsCopy";
 import { accessFor, canRun } from "@/server/statsAccess";
 import { StatsError, checkUpload, createSession, maxDatasetMb } from "@/server/stats";
+import { hit } from "@/server/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return Response.json({ error: "Sign in again to upload." }, { status: 401 });
   if (!canRun(await accessFor(getDb(), session.user))) return Response.json({ error: ENDED }, { status: 403 });
+  if (!(await hit(getDb(), `stats:upload:${session.user.id}`, 40, 3600))) return Response.json({ error: "That's a lot of uploads in one hour. Please wait a little and try again." }, { status: 429 });
   const name = decodeURIComponent(req.headers.get("x-file-name") ?? "").trim();
   const declared = Number(req.headers.get("content-length") ?? 0);
   try {

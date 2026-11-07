@@ -3,13 +3,14 @@
  * Every reminder is recorded in cron_marks under a key, so running the job again never repeats one.
  */
 
-import { and, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
 import type { DB } from "@/db";
-import { cronMarks, litReviews, milestones, orders, statAccess, toolAccess, users } from "@/db/schema";
+import { authTokens, cronMarks, litReviews, milestones, orders, statAccess, toolAccess, users } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
 import { notify } from "./notifications";
 import { autoApproveDue } from "./orderRoom";
 import { refreshUsdRate } from "./fx";
+import { sweepLimits } from "./rateLimit";
 import { moveToR2 } from "./qualStorage";
 import { trialDays as statsTrialDays } from "./statsAccess";
 import { TOOLS, toolTrialDays } from "./toolAccess";
@@ -114,6 +115,11 @@ export async function runHourly(db: DB, now = new Date()) {
     ["retrievalReminders", () => retrievalReminders(db, now)],
     ["moveFilesToR2", () => moveToR2(db, 40)],
     ["exchangeRate", () => refreshUsdRate(db, now)],
+    ["sweep", async () => {
+      await sweepLimits(db, now);
+      await db.delete(authTokens).where(lt(authTokens.expiresAt, new Date(now.getTime() - 7 * DAY)));
+      return "ok";
+    }],
   ];
   for (const [name, job] of jobs) {
     try {
