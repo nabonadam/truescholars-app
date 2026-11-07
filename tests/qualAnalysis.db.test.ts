@@ -106,6 +106,30 @@ describe("thematic analysis", () => {
     expect(String((await analysisExport(db, s, "matrix"))!.body)).toContain("Rain you can no longer trust");
   });
 
+  it("continues a reply that hit the length limit instead of cutting it off", async () => {
+    const id = await createSampleStudy(db, owner);
+    await saveSetup(db, owner, id, "How do farmers experience changing rainfall?", "");
+    const base = fakeClaude([]);
+    let r;
+    vi.stubGlobal("fetch", base);
+    do r = await runPhase(db, owner, id, "codes");
+    while (!r.finished);
+    await runPhase(db, owner, id, "codebook");
+    await runPhase(db, owner, id, "themes");
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as { messages: { role: string; content: string }[] };
+      bodies.push(init.body);
+      const cont = body.messages.length > 1;
+      const text = cont ? " and the harvest failed." : "### Rain you can no longer trust\nThe rains came late";
+      return new Response(JSON.stringify({ content: [{ type: "text", text }], stop_reason: cont ? "end_turn" : "max_tokens" }), { status: 200 });
+    }));
+    await runPhase(db, owner, id, "report");
+    const { state } = await getAnalysis(db, id);
+    expect(state.report).toContain("The rains came late and the harvest failed.");
+    expect(bodies.some((b) => b.includes("You were cut off"))).toBe(true);
+  });
+
   it("lets the researcher rename and remove, and redoing a step clears the later ones", async () => {
     const id = await createSampleStudy(db, owner);
     await saveSetup(db, owner, id, "How do farmers experience changing rainfall?", "");

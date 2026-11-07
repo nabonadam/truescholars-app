@@ -121,18 +121,28 @@ export const aiOn = () => !!process.env.ANTHROPIC_API_KEY;
 async function claude(system: string, user: string, maxTokens: number): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new QualError("AI analysis isn't switched on yet.");
-  const res = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] }),
-    signal: AbortSignal.timeout(170_000),
-  });
-  if (!res.ok) {
-    console.error("anthropic", res.status, (await res.text().catch(() => "")).slice(0, 300));
-    throw new QualError("The analysis assistant is busy right now. Try again in a moment.");
+  const messages: { role: "user" | "assistant"; content: string }[] = [{ role: "user", content: user }];
+  let text = "";
+  // A reply that hits the length limit is continued (up to twice) instead of being cut off mid-sentence.
+  for (let round = 0; round < 3; round++) {
+    const res = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5", max_tokens: maxTokens, system, messages }),
+      signal: AbortSignal.timeout(170_000),
+    });
+    if (!res.ok) {
+      console.error("anthropic", res.status, (await res.text().catch(() => "")).slice(0, 300));
+      throw new QualError("The analysis assistant is busy right now. Try again in a moment.");
+    }
+    const data = (await res.json()) as { content: { type: string; text?: string }[]; stop_reason?: string };
+    const part = data.content.filter((c) => c.type === "text").map((c) => c.text).join("");
+    text += part;
+    if (data.stop_reason !== "max_tokens" || !part) break;
+    messages.push({ role: "assistant", content: text }, { role: "user", content: "You were cut off. Continue exactly where you stopped, without repeating anything." });
+    if (messages.length > 4) messages.splice(1, 2); // keep only the latest partial reply
   }
-  const data = (await res.json()) as { content: { type: string; text?: string }[] };
-  return data.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
+  return text.trim();
 }
 
 export function parseJson<T>(text: string): T | null {
@@ -308,20 +318,23 @@ async function writeReport(rq: string, bg: string, state: AnalysisState, list: C
   if (!themes.length) throw new QualError("Generate themes first.");
   const pids = Object.fromEntries(list.map((c) => [c.rid, c.pid]));
   const book = Object.fromEntries((state.codebook ?? []).map((k) => [k.id, k]));
-  const evidence = themes
-    .map((t) => {
-      const codes = t.codes.map((id) => book[id]).filter(Boolean);
-      const people = new Set(codes.flatMap((k) => k.rids));
-      const quotes = codes.flatMap((k) => k.quotes.slice(0, 3).map((q) => `- ${pids[q.rid]}: "${q.text}"`)).slice(0, 14);
-      return `${t.name} (${people.size} of ${list.length} participants)\nDefinition: ${t.definition}\n${t.subthemes.length ? `Subthemes: ${t.subthemes.map((s) => s.name).join("; ")}\n` : ""}Codes: ${codes.map((k) => k.label).join("; ")}\nQuotes you may use (verbatim):\n${quotes.join("\n")}`;
-    })
-    .join("\n\n");
-  const text = await claude(
-    `${ROLE}\nYou write the findings of a qualitative study for a thesis or journal article, in Markdown.`,
-    `${ctx(rq, bg)}\nParticipants: ${list.length} (labelled P01, P02...). Data: open-ended voice and typed answers to an online survey, transcribed. Analysis: reflexive thematic analysis following Braun and Clarke (2006, 2021), with AI-assisted initial coding reviewed and refined by the researcher.\n\nTHEMES AND EVIDENCE:\n${evidence.slice(0, 100_000)}\n\nWrite a report of about 1,800 to 2,500 words with these sections (Markdown headings): "## Method" (one short paragraph), "## Findings" (a short overview listing the themes, then "### <theme name>" for each theme: explain its central idea, how it varies across participants, and illustrate with 2 to 4 of the quotes above, attributed like (P03)), "## Discussion" (how the themes together answer the research question), "## Limitations" (one paragraph, including the role of AI assistance and the need for researcher review).\nRules: use only the quotes listed above, copied exactly, in double quotation marks. Do not invent numbers, participants or quotes. Say "most", "several" or "a few" rather than percentages unless counts are given. Use plain academic English (British spelling).`,
-    7000,
-  );
-  return text.slice(0, 60_000);
+  const info = themes.map((t) => {
+    const codes = t.codes.map((id) => book[id]).filter(Boolean);
+    const people = new Set(codes.flatMap((k) => k.rids));
+    const quotes = codes.flatMap((k) => k.quotes.slice(0, 3).map((q) => `- ${pids[q.rid]}: "${q.text}"`)).slice(0, 14);
+    return { t, summary: `${t.name} (${people.size} of ${list.length} participants): ${t.definition}`, detail: `${t.name} (${people.size} of ${list.length} participants)\nDefinition: ${t.definition}\n${t.subthemes.length ? `Subthemes: ${t.subthemes.map((s) => s.name).join("; ")}\n` : ""}Codes: ${codes.map((k) => k.label).join("; ")}\nQuotes you may use (verbatim):\n${quotes.join("\n")}` };
+  });
+  const system = `${ROLE}\nYou write the findings of a qualitative study for a thesis or journal article, in Markdown. Use plain academic English (British spelling). Use only quotes you are given, copied exactly, in double quotation marks, attributed like (P03). Never invent numbers, participants or quotes; say "most", "several" or "a few" rather than percentages.`;
+  const study = `${ctx(rq, bg)}\nParticipants: ${list.length} (labelled P01, P02...). Data: open-ended voice and typed answers to an online survey, transcribed. Analysis: reflexive thematic analysis following Braun and Clarke (2006, 2021), with AI-assisted initial coding reviewed and refined by the researcher.`;
+  const overview = info.map((x) => `- ${x.summary}`).join("\n");
+  // written in parts (in parallel) so no single reply is long enough to be cut off
+  const [intro, sections, closing] = await Promise.all([
+    claude(system, `${study}\n\nTHEMES:\n${overview}\n\nWrite "## Method" (one paragraph of about 120 words) and then "## Findings" with a short overview paragraph (about 100 words) naming the ${themes.length} themes. Nothing else.`, 1500),
+    Promise.all(info.map((x) => claude(system, `${study}\n\nWrite the findings section for ONE theme, starting with the heading "### ${x.t.name}". About 300 to 400 words: explain its central idea, how it varies across participants, and illustrate with 2 to 4 of the quotes below.\n\n${x.detail.slice(0, 20_000)}`, 2000))),
+    claude(system, `${study}\n\nTHEMES:\n${overview}\n\nWrite "## Discussion" (about 300 words: how the themes together answer the research question) and "## Limitations" (one paragraph, including the role of AI assistance and the need for researcher review). Nothing else.`, 2000),
+  ]);
+  const heading = (t: string, h: string) => (t.trimStart().startsWith("#") ? t.trim() : `${h}\n\n${t.trim()}`);
+  return [intro.trim(), ...sections.map((t, i) => heading(t, `### ${themes[i].name}`)), closing.trim()].join("\n\n").slice(0, 80_000);
 }
 
 // ───────── researcher edits ─────────
