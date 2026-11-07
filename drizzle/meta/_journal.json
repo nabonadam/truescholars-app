@@ -85,6 +85,13 @@
       "when": 1794006556692,
       "tag": "0011_upgrade_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794010707724,
+      "tag": "0012_stats_estimation",
+      "breakpoints": true
     }
   ]
 }

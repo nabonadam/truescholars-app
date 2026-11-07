@@ -38,14 +38,27 @@ ranksum y, by(group) | kwallis y, by(group) | signrank var == #  (or var1 = var2
 regress y x1 i.cat c.x##i.g [if] [, robust | vce(cluster id) | beta]
 logit / logistic (odds ratios) / probit  y01 xvars [, robust vce(cluster id)]
 poisson count xvars [, irr robust]
-generate newvar = exp [if] | replace var = exp [if]
+generate newvar = exp [if] | replace var = exp [if]   (runiform(), rnormal() work after set seed)
 recode var (rule = value "label") ... , gen(newvar)     e.g. recode age (18/34 = 1 "18-34") (35/max = 2 "35+"), gen(agegrp)
 drop varlist | drop if exp | keep varlist | keep if exp | rename old new
 label variable var "text" | label define name 1 "a" 2 "b" | label values var name
 mvdecode varlist, mv(99999)        turns codes such as 99, 999, 99999 into missing
 encode textvar, gen(newvar)        text categories -> numeric codes with value labels (needed before i.newvar)
 destring var, replace [force]      numbers stored as text -> numeric
-Prefix: by var: <command>   (not with data-changing commands)
+Weights (add before the comma):  [pw=wt] survey/sampling weights (mean, proportion, regress, logit, logistic, probit, poisson, graph bar)
+   [aw=wt] analytic weights (summarize, tabulate, correlate, regress, graph bar, tab x, summarize(y))   [fw=n] frequency weights
+mean y [pw=wt], over(group)          weighted means with linearized standard errors and CIs
+proportion x [pw=wt], over(group)    category proportions with CIs
+tabulate x, summarize(y)             mean-comparison table (mean, sd, n of y for each x)
+tabulate x z, summarize(y) means     controlled mean comparison (x by control z)
+tabulate y x, col chi2 V gamma taub  (all = chi2, V, gamma, tau-b)    somersd x y    lambda y x
+ci means varlist | ci proportions var01 [, wilson wald]    prtest var01 == 0.5 | prtest var01, by(group)
+egen z = std(x) | egen idx = rowmean(v1 v2 v3) | egen tot = rowtotal(v1 v2) | egen m = mean(x), by(g) | egen c = cut(x), at(0 18 35 60 120) | egen g = group(a b)
+xtile q = x, nquantiles(4)    tabulate x, generate(x_)   (dummy set x_1 x_2 ...)    set seed 123    sample 10 (percent)    sort x | gsort -x
+After regress: predict yhat | predict e, residuals | predict rs, rstandard | estat hettest | estat vif | estat ic | swilk e
+After logit/logistic/probit/poisson: predict p (probability) | margins | margins x | margins, dydx(*) | margins, dydx(x) | margins x, atmeans | margins, at(age=(20(10)60)) | marginsplot | estat classification | lroc
+Graphs: histogram x [, normal percent bin(#) discrete] | graph bar (mean) y [aw=wt], over(x) [over(z)] | graph bar, over(x) (percent) | graph hbar ... | graph box y, over(x) | scatter y x || lfit y x | twoway (scatter y x) (lfitci y x) | twoway line y x, sort
+Prefix: by var: <command>   (not with data-changing commands; bysort g: egen ... works)
 Factor variables: i.x (first level is base), ib2.x, ib(last).x, c.x, a#b, a##b
 Expressions: + - * / ^, == != > < >= <=, & | !, missing(), inrange(x,a,b), inlist(x,a,b), ln(), log10(), exp(), sqrt(), abs(), round(), cond()
 Missing values are larger than any number: "if income > 1000" includes missing income unless you add "& !missing(income)".`;
@@ -57,6 +70,11 @@ const RULES = `Rules:
 - If a variable has obvious missing-value codes (for example 99999 or 999 well outside the rest), add an mvdecode line first, unless an earlier command already did.
 - Pick the test that fits the data: a binary 0/1 outcome means logit/logistic, a count means poisson, two groups means ttest (ranksum if clearly skewed or ordinal), three or more groups means oneway (kwallis for ordinal), two categorical variables means tabulate with chi2.
 - For a cross-tab, add row percentages when the first variable is the explanatory one.
+- If the dataset has a weight variable (names like wt, weight, pweight, wgt, or labels mentioning weight) and the user asks for population estimates, use it: [pw=] for mean, proportion and models; [aw=] for summarize, tabulate and graphs.
+- For "compare the mean of y across groups" use tabulate x, summarize(y) (add a t-test or oneway only if they ask whether the difference is significant). For "controlling for z" with categories use by z: tabulate y x, col chi2 or tabulate x z, summarize(y) means; with a model use regress or logit and margins.
+- For predicted probabilities after logit/logistic use margins (margins x, or margins, at(...)) and marginsplot when they want a picture.
+- When they ask to check regression assumptions: predict e, residuals then swilk e, estat hettest and estat vif.
+- When they ask for a chart, choose: histogram for one numeric variable, graph bar (mean) y, over(x) for means by group, graph bar, over(x) for category shares, graph box for spread by group, scatter y x || lfit y x for two numeric variables.
 - Keep to the fewest commands that answer the request. Never invent results.
 - If the request cannot be answered with the supported commands, or a needed variable is missing or unclear, return no commands and ask one short clarification question.
 - explanation: one or two plain sentences saying what the commands do and why that test fits, for a student.`;

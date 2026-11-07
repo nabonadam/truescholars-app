@@ -639,6 +639,8 @@ export const statSessions = pgTable(
     nObs: integer("n_obs").notNull(),
     nVars: integer("n_vars").notNull(),
     variables: jsonb("variables").notNull(),
+    lastEstimation: text("last_estimation"), // the last model, so predict / estat / margins work later
+    lastMargins: text("last_margins"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -11,12 +11,15 @@ import { SampleButton, UploadForm } from "@/components/stats/UploadForm";
 export const metadata = { title: "Statistics Assistant" };
 
 const CAN_DO = [
-  { title: "Describe", text: "Summary statistics, frequencies and codebooks", cmds: ["summarize", "tabulate", "codebook"] },
-  { title: "Cross-tabulate", text: "Row and column percentages with chi-square, Fisher's exact and Cramér's V", cmds: ["tab x y, row chi2"] },
-  { title: "Compare groups", text: "t-tests, one-way and factorial ANOVA, with post-hoc comparisons", cmds: ["ttest", "oneway", "anova"] },
-  { title: "Relate", text: "Pearson and Spearman correlations with significance", cmds: ["pwcorr, sig", "spearman"] },
-  { title: "Model", text: "Linear, logistic, probit and Poisson regression with robust or clustered errors", cmds: ["regress", "logistic", "poisson"] },
-  { title: "No assumptions", text: "Mann-Whitney, Kruskal-Wallis and Wilcoxon signed-rank tests", cmds: ["ranksum", "kwallis", "signrank"] },
+  { title: "Describe", text: "Summary statistics, frequencies, codebooks and confidence intervals", cmds: ["summarize", "tabulate", "ci means"] },
+  { title: "Compare", text: "Mean-comparison tables, controlled comparisons, t-tests and tests of proportions", cmds: ["tab x, summarize(y)", "ttest", "prtest"] },
+  { title: "Associate", text: "Cross-tabs with chi-square, Cramér's V, gamma, tau-b, Somers' D and lambda; correlations", cmds: ["tab y x, all", "somersd", "pwcorr"] },
+  { title: "Model", text: "Linear, logistic, probit and Poisson regression with dummies, interactions, robust or clustered errors", cmds: ["regress", "logistic", "i.x##c.z"] },
+  { title: "After the model", text: "Predicted values and probabilities, marginal effects, residual and multicollinearity checks", cmds: ["margins", "predict", "estat vif"] },
+  { title: "Survey weights", text: "Sampling, analytic and frequency weights across means, tables, models and graphs", cmds: ["[pw=wt]", "mean y [pw=wt]", "[aw=wt]"] },
+  { title: "Graph", text: "Histograms, bar charts, box plots, scatterplots with fitted lines, and margins plots", cmds: ["histogram", "graph bar", "marginsplot"] },
+  { title: "Prepare data", text: "Recode, standardise, build indexes and quantile groups, dummy sets and random samples", cmds: ["egen", "xtile", "recode"] },
+  { title: "No assumptions", text: "Mann-Whitney, Kruskal-Wallis, Wilcoxon signed-rank and Shapiro-Wilk tests", cmds: ["ranksum", "kwallis", "swilk"] },
 ];
 
 const NEXT = "/tools/stats";

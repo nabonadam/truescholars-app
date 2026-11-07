@@ -77,3 +77,17 @@ def test_gzip_storage_and_shared_cache(monkeypatch):
     assert "a2" not in base.df  # the shared original was not modified
     r = c.post("/run", headers=H, json={"datasetId": "z", "history": ["gen a2 = age*2"], "commands": ["summarize a2"]}).json()
     assert r["results"][0]["ok"]
+
+
+def test_model_is_remembered_between_requests(client):
+    r1 = client.post("/run", headers=H, json={"datasetId": "d", "history": [], "commands": ["logit food_insecure age i.urban"]}).json()
+    est = r1["lastEstimation"]
+    assert est == "logit food_insecure age i.urban"
+    r2 = client.post("/run", headers=H, json={"datasetId": "d", "history": [], "commands": ["margins urban", "predict p"], "lastEstimation": est}).json()
+    assert all(x["ok"] for x in r2["results"]), r2["results"]
+    assert r2["lastMargins"] == "margins urban" and r2["changed"]
+    hist = [h for h in [est, "predict p"]]
+    r3 = client.post("/run", headers=H, json={"datasetId": "d", "history": hist, "commands": ["marginsplot", "summarize p"], "lastEstimation": est, "lastMargins": "margins urban"}).json()
+    assert r3["results"][0]["ok"] and r3["results"][0]["images"] and r3["results"][1]["ok"]
+    r4 = client.post("/run", headers=H, json={"datasetId": "d", "history": [], "commands": ["estat vif"]}).json()
+    assert not r4["results"][0]["ok"] and "last estimates not found" in r4["results"][0]["error"]

@@ -45,15 +45,38 @@ COMMANDS = {
     "destring": "destring",
     "list": "l",
     "count": "count",
+    "mean": "mean",
+    "proportion": "prop",
+    "ci": "ci",
+    "prtest": "prtest",
+    "somersd": "somersd",
+    "lambda": "lambda",
+    "egen": "egen",
+    "xtile": "xtile",
+    "sample": "sample",
+    "set": "set",
+    "version": "vers",
+    "sort": "sort",
+    "gsort": "gsort",
+    "predict": "predict",
+    "estat": "estat",
+    "margins": "margins",
+    "swilk": "swilk",
+    "histogram": "hist",
+    "graph": "gr",
+    "scatter": "sc",
+    "twoway": "tw",
+    "marginsplot": "marginsplot",
+    "lroc": "lroc",
 }
 
 # Real Stata commands we deliberately don't run, with what to do instead.
 NOT_HERE = {
     ("ssc", "net", "ado", "adoupdate", "update", "which"): "Installing Stata packages (ssc/net install) isn't possible here: this workspace runs its own engine that speaks Stata's language, not Stata itself. Ask in plain English for what the package does, or use the built-in commands.",
-    ("use", "import", "insheet", "sysuse", "webuse", "infile", "clear"): "Your data is already loaded from your upload. To work with a different file, start a new session with it.",
+    ("use", "import", "insheet", "sysuse", "webuse", "infile"): "Your data is already loaded from your upload. To work with a different file, start a new session with it.",
     ("save", "saveold", "export", "outsheet", "outreg2", "esttab", "estout", "putdocx", "putexcel", "asdoc", "log", "cmdlog"): "Saving and exporting work through the Export menu: Word or Excel tables, the do-file, and your data as .dta or .csv.",
-    ("graph", "histogram", "hist", "scatter", "twoway", "line", "kdensity", "graphbox", "boxplot", "qnorm", "pnorm"): "Graphs aren't available yet; they're coming soon. Tables and tests all work.",
-    ("cd", "dir", "ls", "shell", "set", "version", "capture", "quietly", "noisily", "display", "di", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "sort", "gsort", "merge", "append", "reshape", "collapse", "egen", "svy", "svyset", "xtreg", "xtset", "tsset", "margins", "predict", "estat", "test", "lincom", "help", "search"): "This command isn't available in the workspace yet. Ask in plain English and the assistant will use the commands that are, or tell you if it can't.",
+    ("line", "kdensity", "graphbox", "boxplot", "qnorm", "pnorm"): "Graphs aren't available yet; they're coming soon. Tables and tests all work.",
+    ("cd", "dir", "ls", "shell", "capture", "quietly", "noisily", "display", "di", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "merge", "append", "reshape", "collapse", "svy", "svyset", "xtreg", "xtset", "tsset", "test", "lincom", "help", "search"): "This command isn't available in the workspace yet. Ask in plain English and the assistant will use the commands that are, or tell you if it can't.",
 }
 
 
@@ -65,7 +88,7 @@ def _not_here(word: str) -> str | None:
     return None
 
 
-DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring"}
+DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring", "egen", "xtile", "sample", "set", "sort", "gsort", "predict"}
 
 
 def canonical(word: str) -> str | None:
@@ -98,14 +121,20 @@ class Command:
     if_: str | None = None
     in_: tuple[int, int] | None = None
     options: dict[str, str | None] = field(default_factory=dict)
+    weight: tuple[str, str] | None = None  # ("aw" | "pw" | "fw" | "iw", expression)
+    _design: tuple | None = None  # set by estimation commands (terms, factor levels)
 
     def opt(self, *names: str) -> str | bool | None:
-        """Option value by any of its spellings/abbreviations; True if given without arguments."""
+        """Option value by any of its spellings; True if given without arguments. Abbreviations
+        need at least 3 letters (Stata's rule for most options), plus a few short forms Stata allows."""
         for k, v in self.options.items():
             for n in names:
-                if k == n or n.startswith(k):
+                if k == n or SHORT.get(k) == n or (len(k) >= 3 and n.startswith(k)):
                     return True if v is None else v
         return None
+
+
+SHORT = {"d": "detail", "r": "robust", "ro": "robust", "nq": "nquantiles", "g": "generate", "ge": "generate", "co": "column", "ce": "cell", "ex": "exact", "m": "missing", "mi": "missing", "su": "summarize", "sum": "summarize", "fr": "frequency", "freq": "frequency", "perc": "percent", "per": "percent", "norm": "normal", "w": "width", "nog": "nograph"}
 
 
 def _split_top(text: str, sep: str) -> tuple[str, str | None]:
@@ -172,6 +201,11 @@ def parse(line: str) -> Command:
         raise StataError(f"{word}: {hint}" if hint else f"command {word} is unrecognized. See the list of available commands on the Statistics Assistant page.")
     main, opts = _split_top(rest, ",")
     cmd = Command(raw=raw, name=name, by=by, options=_parse_options(opts) if opts else {})
+    wm = re.search(r"\[\s*(aw|aweights?|pw|pweights?|fw|fweights?|iw|iweights?|weight)\s*=\s*([^\]]+)\]", main, re.I)
+    if wm:
+        kind = wm.group(1).lower()[:2]
+        cmd.weight = ("aw" if kind == "we" else kind, wm.group(2).strip())
+        main = main[: wm.start()] + " " + main[wm.end():]
     # in range
     m = re.search(r"\bin\s+(-?\d+|f)\s*(?:/\s*(-?\d+|l))?\s*$", main)
     if m and not re.search(r"\bif\b", main[m.start():]):
@@ -180,6 +214,9 @@ def parse(line: str) -> Command:
         cmd.in_ = (a, b)
         main = main[: m.start()]
     # if expression
+    if name in ("twoway", "graph", "scatter") and ("(" in main or "||" in main):
+        cmd.args = main.strip()  # layers carry their own if conditions; the handler reads them
+        return cmd
     if re.search(r"(^|\s)if\s*$", main):
         raise StataError("invalid syntax: nothing after if")
     m = re.search(r"(^|\s)if\s+", main)
@@ -187,7 +224,10 @@ def parse(line: str) -> Command:
         cmd.if_ = main[m.end():].strip()
         main = main[: m.start()]
     # = exp (generate / replace); "==" never appears here at top level
-    if name in ("generate", "replace"):
+    if name in ("generate", "replace", "egen", "xtile", "predict"):
+        if name == "predict" and "=" not in main:
+            cmd.args = main.strip()
+            return cmd
         lhs, rhs = _split_top(main, "=")
         if rhs is None:
             raise StataError(f"{name} needs: {name} newvar = expression")

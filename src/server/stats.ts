@@ -27,6 +27,7 @@ export type CommandResult = {
   notes?: string[];
   summary?: Record<string, unknown>;
   changesData?: boolean;
+  images?: { title: string; png: string; width?: number; height?: number }[];
 };
 type Overview = { nObs: number; nVars: number; variables: VarMeta[]; importNotes?: string[] };
 
@@ -136,7 +137,7 @@ export async function listSessions(db: DB, ownerId: string) {
 
 export async function getSession(db: DB, ownerId: string, id: string) {
   const [s] = await db
-    .select({ id: statSessions.id, title: statSessions.title, datasetId: statSessions.datasetId, history: statSessions.history, nObs: statSessions.nObs, nVars: statSessions.nVars, variables: statSessions.variables, fileName: statDatasets.fileName, createdAt: statSessions.createdAt })
+    .select({ id: statSessions.id, title: statSessions.title, datasetId: statSessions.datasetId, history: statSessions.history, nObs: statSessions.nObs, nVars: statSessions.nVars, variables: statSessions.variables, lastEstimation: statSessions.lastEstimation, lastMargins: statSessions.lastMargins, fileName: statDatasets.fileName, createdAt: statSessions.createdAt })
     .from(statSessions)
     .innerJoin(statDatasets, eq(statDatasets.id, statSessions.datasetId))
     .where(and(eq(statSessions.id, id), eq(statSessions.ownerId, ownerId)));
@@ -212,21 +213,25 @@ export async function cancel(db: DB, ownerId: string, runId: string) {
 }
 
 async function execute(db: DB, session: Session, runId: string, commands: string[], input: string, explain: boolean) {
-  let out: { results: CommandResult[]; changed: boolean; dataset?: Overview };
+  let out: { results: CommandResult[]; changed: boolean; dataset?: Overview; kept?: string[]; lastEstimation?: string | null; lastMargins?: string };
   try {
-    out = await engine("/run", { datasetId: session.datasetId, history: session.history, commands });
+    out = await engine("/run", { datasetId: session.datasetId, history: session.history, commands, lastEstimation: session.lastEstimation, lastMargins: session.lastMargins });
   } catch (err) {
     await db.update(statRuns).set({ status: "ERROR", commands, results: [{ command: commands[0], ok: false, error: err instanceof Error ? err.message : "failed" }] }).where(eq(statRuns.id, runId));
     throw err;
   }
   const ok = out.results.every((r) => r.ok);
   await db.update(statRuns).set({ status: ok ? "DONE" : "ERROR", commands, results: out.results }).where(eq(statRuns.id, runId));
+  // The model and margins carry over to later requests (predict, estat, margins, marginsplot).
+  const memory = { ...(out.lastEstimation ? { lastEstimation: out.lastEstimation } : {}), ...(out.lastMargins ? { lastMargins: out.lastMargins } : {}) };
   if (out.changed && out.dataset) {
-    const kept = out.results.filter((r) => r.ok && r.changesData).map((r) => r.command);
+    const kept = out.kept ?? out.results.filter((r) => r.ok && r.changesData).map((r) => r.command);
     await db
       .update(statSessions)
-      .set({ history: [...session.history, ...kept], nObs: out.dataset.nObs, nVars: out.dataset.nVars, variables: out.dataset.variables })
+      .set({ history: [...session.history, ...kept], nObs: out.dataset.nObs, nVars: out.dataset.nVars, variables: out.dataset.variables, ...memory })
       .where(eq(statSessions.id, session.id));
+  } else if (Object.keys(memory).length) {
+    await db.update(statSessions).set(memory).where(eq(statSessions.id, session.id));
   } else {
     await touch(db, session.id);
   }
@@ -255,7 +260,7 @@ export async function interpretRun(db: DB, ownerId: string, runId: string) {
 export async function resetData(db: DB, ownerId: string, sessionId: string) {
   const s = await mustSession(db, ownerId, sessionId);
   const o = await engine<Overview>("/load", { datasetId: s.datasetId, history: [] });
-  await db.update(statSessions).set({ history: [], nObs: o.nObs, nVars: o.nVars, variables: o.variables }).where(eq(statSessions.id, sessionId));
+  await db.update(statSessions).set({ history: [], nObs: o.nObs, nVars: o.nVars, variables: o.variables, lastEstimation: null, lastMargins: null }).where(eq(statSessions.id, sessionId));
   await db.insert(statRuns).values({ sessionId, input: "Restored the original data", mode: "STATA", status: "RESET" });
 }
 
@@ -312,6 +317,10 @@ export function doFile(session: Session, runs: Run[]) {
     lines.push(...okCommands, "");
   }
   return lines.join("\n");
+}
+
+export function imagesFor(runs: Run[]) {
+  return runs.flatMap((r) => r.results.filter((x) => x.ok).flatMap((x) => x.images ?? []));
 }
 
 export function tablesFor(runs: Run[]) {

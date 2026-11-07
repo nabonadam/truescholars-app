@@ -127,7 +127,7 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
   let tableNo = 0;
   const numbered = runs.map((r) => {
     const first = tableNo + 1;
-    tableNo += r.results.reduce((a, x) => a + (x.ok ? (x.tables?.length ?? 0) : 0), 0);
+    tableNo += r.results.reduce((a, x) => a + (x.ok ? (x.tables?.length ?? 0) + (x.images?.length ?? 0) : 0), 0);
     return first;
   });
 
@@ -480,7 +480,7 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
   }
 
   let tableN = firstTable;
-  const hasTables = run.results.some((r) => r.ok && r.tables?.length);
+  const hasTables = run.results.some((r) => r.ok && (r.tables?.length || r.images?.length));
   return (
     <article className="ts-rise">
       {english && <Asked text={run.input} time={run.createdAt} />}
@@ -507,7 +507,7 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
           })}
         </div>
       </div>
-      {run.status === "DONE" && hasTables && (
+      {run.status === "DONE" && run.results.some((r) => r.ok && r.tables?.length) && (
         run.interpretation ? (
           <Interpretation text={run.interpretation} />
         ) : (
@@ -554,7 +554,7 @@ function ResultView({ r, firstTable }: { r: CommandResult; firstTable: number })
       {!r.ok ? (
         <p className="mt-1.5 font-mono text-[13px] text-[#ff8f80]">{r.error}</p>
       ) : view === "out" ? (
-        r.log ? <div className="mt-2"><StataLog text={r.log} /></div> : null
+        r.log && !(r.images?.length && r.log.startsWith("(graph:")) ? <div className="mt-2"><StataLog text={r.log} /></div> : null
       ) : (
         <div className="mt-3 space-y-3">
           {tables.map((t, i) => (
@@ -564,6 +564,20 @@ function ResultView({ r, firstTable }: { r: CommandResult; firstTable: number })
                 <CopyButton text={tableAsText(t)} label="Copy table" className="text-[12px] font-bold text-green" />
               </div>
             </div>
+          ))}
+        </div>
+      )}
+      {r.ok && !!r.images?.length && (
+        <div className="mt-3 grid gap-3">
+          {r.images.map((im, i) => (
+            <figure key={i} className="overflow-hidden rounded-[6px] bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`data:image/png;base64,${im.png}`} alt={im.title} className="mx-auto block max-h-[520px] w-full max-w-[680px] object-contain p-3" />
+              <figcaption className="flex items-center justify-between gap-3 bg-[#f3efe6] px-3 py-1.5 text-[12px]">
+                <span className="truncate text-ink-muted italic">{im.title}</span>
+                <a href={`data:image/png;base64,${im.png}`} download={`${im.title.replace(/[^\w-]+/g, "_").slice(0, 60) || "graph"}.png`} className="flex-none font-bold text-green no-underline">Download PNG</a>
+              </figcaption>
+            </figure>
           ))}
         </div>
       )}

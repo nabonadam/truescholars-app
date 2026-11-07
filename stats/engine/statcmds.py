@@ -16,6 +16,7 @@ from .datacmds import selected
 from .result import Result, Table
 from .syntax import Command, Term, expand_varlist, parse_fvlist
 from .expr import resolve_var
+from .weights import normalized, sum_note, weight_values, weights
 
 W = 78  # Stata's results width
 
@@ -29,7 +30,11 @@ def _nonmissing(df: pd.DataFrame, vars_: list[str]) -> pd.Series:
 
 
 def sample(ds: Dataset, cmd: Command, vars_: list[str]) -> pd.DataFrame:
-    return ds.df[selected(ds, cmd) & _nonmissing(ds.df, vars_)]
+    mask = selected(ds, cmd) & _nonmissing(ds.df, vars_)
+    if cmd.weight:  # observations with missing or zero weight are left out, as in Stata
+        w = weight_values(ds, cmd)
+        mask &= w.notna() & w.ne(0)
+    return ds.df[mask]
 
 
 def nice(ds: Dataset, var: str) -> str:
@@ -68,24 +73,57 @@ def summarize(ds: Dataset, cmd: Command) -> Result:
     mask = selected(ds, cmd)
     detail = cmd.opt("detail")
     if detail:
+        if cmd.weight:
+            raise StataError("summarize, detail with weights isn't available yet; run it without weights, or use mean with weights")
         return _summarize_detail(ds, cmd, [v for v in vars_ if is_numeric(ds.df[v])], mask)
-    lines = [f"{'Variable':>12} |{'Obs':>11}{'Mean':>12}{'Std. dev.':>12}{'Min':>11}{'Max':>11}", fmt.rule(13, 57)]
+    kind = cmd.weight[0] if cmd.weight else None
+    if kind == "pw":
+        raise StataError("pweights not allowed with summarize; use [aw=...] for weighted means, or mean ... [pw=...] for survey standard errors")
+    wall = weight_values(ds, cmd)
+    if kind == "fw" and wall is not None and np.any(np.mod(wall.dropna(), 1) != 0):
+        raise StataError("may not use noninteger frequency weights")
+    show_w = kind in ("aw", "iw")
+    if show_w:
+        lines = [f"{'Variable':>12} |{'Obs':>8}{'Weight':>12}{'Mean':>11}{'Std. dev.':>11}{'Min':>11}{'Max':>11}", fmt.rule(13, 65)]
+    else:
+        lines = [f"{'Variable':>12} |{'Obs':>11}{'Mean':>12}{'Std. dev.':>12}{'Min':>11}{'Max':>11}", fmt.rule(13, 57)]
     rows, summ = [], []
     for v in vars_:
-        s = ds.df.loc[mask, v]
-        if not is_numeric(s):
-            lines.append(f"{fmt.name(v)} |{0:>11}")
+        s_ = ds.df.loc[mask, v]
+        if not is_numeric(s_):
+            lines.append(f"{fmt.name(v)} |{0:>11}" if not show_w else f"{fmt.name(v)} |{0:>8}")
             continue
-        d = s.dropna().astype(float)
-        nobs = len(d)
-        mean = d.mean() if nobs else float("nan")
-        sd = d.std(ddof=1) if nobs > 1 else float("nan")
-        lo, hi = (d.min(), d.max()) if nobs else (float("nan"), float("nan"))
-        lines.append(f"{fmt.name(v)} |{nobs:>11,}{fmt.g(mean, 12)}{fmt.g(sd, 12)}{fmt.g(lo, 11)}{fmt.g(hi, 11)}")
+        keep = s_.notna()
+        if wall is not None:
+            wv = wall.loc[s_.index]
+            if (wv < 0).any():
+                raise StataError("negative weights encountered")
+            keep &= wv.notna() & wv.ne(0)
+        d = s_[keep].astype(float).to_numpy()
+        n = len(d)
+        if wall is None:
+            w = np.ones(n)
+        else:
+            w = wall.loc[s_.index][keep].to_numpy(dtype=float)
+        sw = w.sum()
+        mean = float((w * d).sum() / sw) if n else float("nan")
+        ss = float((w * (d - mean) ** 2).sum()) if n else float("nan")
+        if kind == "aw":
+            var = ss / sw * n / (n - 1) if n > 1 else float("nan")
+        else:  # unweighted, fw, iw
+            var = ss / (sw - 1) if sw > 1 else float("nan")
+        sd = math.sqrt(var) if var == var else float("nan")
+        lo, hi = (d.min(), d.max()) if n else (float("nan"), float("nan"))
+        nobs = int(round(sw)) if kind == "fw" else n
+        if show_w:
+            lines.append(f"{fmt.name(v)} |{nobs:>8,}{fmt.g(sw, 12)}{fmt.g(mean, 11)}{fmt.g(sd, 11)}{fmt.g(lo, 11)}{fmt.g(hi, 11)}")
+        else:
+            lines.append(f"{fmt.name(v)} |{nobs:>11,}{fmt.g(mean, 12)}{fmt.g(sd, 12)}{fmt.g(lo, 11)}{fmt.g(hi, 11)}")
         rows.append([nice(ds, v), f"{nobs:,}", fmt.apa_num(mean), fmt.apa_num(sd), fmt.apa_num(lo), fmt.apa_num(hi)])
         summ.append({"var": v, "n": nobs, "mean": mean, "sd": sd, "min": lo, "max": hi})
-    t = Table("Descriptive statistics", ["Variable", "N", "M", "SD", "Min", "Max"], rows)
-    return Result(log="\n".join(lines), tables=[t] if rows else [], summary={"summarize": summ})
+    note = f"Weighted ({cmd.weight[0]}={cmd.weight[1]})." if cmd.weight else ""
+    t = Table("Descriptive statistics", ["Variable", "N", "M", "SD", "Min", "Max"], rows, note=note)
+    return Result(log="\n".join(lines), tables=[t] if rows else [], summary={"summarize": summ, "weight": cmd.weight})
 
 
 def _summarize_detail(ds: Dataset, cmd: Command, vars_: list[str], mask) -> Result:
@@ -149,6 +187,18 @@ def _eq(s: pd.Series, v):
 
 def tabulate(ds: Dataset, cmd: Command) -> Result:
     vars_ = expand_varlist(cmd.args, ds.df, allow_empty_all=False)
+    summ_var = cmd.opt("summarize")
+    if isinstance(summ_var, str):
+        from .inference import tab_summarize
+
+        if len(vars_) > 2:
+            raise StataError("tabulate, summarize() takes one or two variables")
+        return tab_summarize(ds, cmd, vars_, summ_var)
+    gen = cmd.opt("generate")
+    if isinstance(gen, str):
+        from .datamore import tab_generate
+
+        return tab_generate(ds, cmd, vars_, gen)
     if cmd.name == "tab1" or (cmd.name == "tabulate" and len(vars_) == 1):
         results = [_tab1(ds, cmd, v) for v in vars_]
         return Result(log="\n\n".join(r.log for r in results), tables=[t for r in results for t in r.tables], notes=[n for r in results for n in r.notes], summary={"tabulations": [r.summary for r in results]})
@@ -160,30 +210,51 @@ def tabulate(ds: Dataset, cmd: Command) -> Result:
     return _tab2(ds, cmd, vars_[0], vars_[1])
 
 
+def _fc(x: float, width: int = 11) -> str:
+    """A frequency: whole numbers with thousands separators, weighted ones as Stata shows them."""
+    return f"{int(round(x)):>{width},}" if abs(x - round(x)) < 1e-9 else fmt.g(x, width)
+
+
+def _tab_weights(ds: Dataset, cmd: Command, sub: pd.DataFrame) -> np.ndarray:
+    """Per-row weights for tabulate (aw rescaled to sum to N; pw is not allowed, as in Stata)."""
+    if not cmd.weight:
+        return np.ones(len(sub))
+    w_all = weight_values(ds, cmd)
+    kind, w = weights(ds, cmd, sub.assign(), "aw fw iw")
+    if np.isnan(w).any():
+        raise StataError("missing weights; drop those observations with an if condition")
+    return normalized(kind, w, len(sub))
+
+
 def _tab1(ds: Dataset, cmd: Command, v: str) -> Result:
     include_missing = bool(cmd.opt("missing"))
     s = ds.df.loc[selected(ds, cmd), v]
     if not include_missing:
         s = s[_nonmissing(s.to_frame(), [v])]
+    if cmd.weight:
+        wv = weight_values(ds, cmd).loc[s.index]
+        s = s[wv.notna() & wv.ne(0)]
     levels = _levels(ds, s, include_missing)
     if len(levels) > 3000:
         raise StataError(f"too many values ({len(levels):,}); tabulate is for categories, try summarize")
-    total = len(s)
-    if total == 0:
+    if len(s) == 0:
         return Result(log="no observations")
+    w = pd.Series(_tab_weights(ds, cmd, s.to_frame()), index=s.index)
+    total = float(w.sum())
     hdr = fmt.name(v)
     lines = [f"{hdr} |      Freq.     Percent        Cum.", fmt.rule(13, 35)]
     rows, cum, out = [], 0.0, []
     for lv in levels:
-        c = int(_eq(s, lv).sum())
+        c = float(w[_eq(s, lv)].sum())
         pctv = 100 * c / total
         cum += pctv
         lab = level_label(ds, v, lv) if not (isinstance(lv, float) and np.isnan(lv)) else "."
-        lines.append(f"{fmt.name(lab)} |{c:>11,}{pctv:>12.2f}{cum:>12.2f}")
-        rows.append([lab, f"{c:,}", f"{pctv:.1f}", f"{cum:.1f}"])
+        lines.append(f"{fmt.name(lab)} |{_fc(c)}{pctv:>12.2f}{cum:>12.2f}")
+        rows.append([lab, _fc(c, 0).strip(), f"{pctv:.1f}", f"{cum:.1f}"])
         out.append({"value": lab, "freq": c, "percent": pctv})
-    lines += [fmt.rule(13, 35), f"{'Total':>12} |{total:>11,}{100:>12.2f}"]
-    t = Table(f"Frequencies of {nice(ds, v)}", ["Value", "n", "%", "Cumulative %"], rows, note=f"N = {total:,}.")
+    lines += [fmt.rule(13, 35), f"{'Total':>12} |{_fc(total)}{100:>12.2f}"]
+    wnote = f" Weighted ({cmd.weight[0]}={cmd.weight[1]})." if cmd.weight else ""
+    t = Table(f"Frequencies of {nice(ds, v)}", ["Value", "n", "%", "Cumulative %"], rows, note=f"N = {_fc(total, 0).strip()}.{wnote}")
     return Result(log="\n".join(lines), tables=[t], summary={"var": v, "n": total, "levels": out})
 
 
@@ -192,11 +263,19 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
     sub = ds.df.loc[selected(ds, cmd), [rv, cv]]
     if not include_missing:
         sub = sub[_nonmissing(sub, [rv, cv])]
+    if cmd.weight:
+        wv = weight_values(ds, cmd).loc[sub.index]
+        sub = sub[wv.notna() & wv.ne(0)]
+        if cmd.opt("exact"):
+            raise StataError("exact not allowed with weights")
     rlev, clev = _levels(ds, sub[rv], include_missing), _levels(ds, sub[cv], include_missing)
     if len(clev) > 20 or len(rlev) > 200:
         raise StataError("too many values for a cross-tabulation (at most 20 columns)")
-    table = np.array([[int((_eq(sub[rv], r) & _eq(sub[cv], c)).sum()) for c in clev] for r in rlev])
-    N = int(table.sum())
+    wt = pd.Series(_tab_weights(ds, cmd, sub), index=sub.index)
+    table = np.array([[float(wt[_eq(sub[rv], r) & _eq(sub[cv], c)].sum()) for c in clev] for r in rlev])
+    if not cmd.weight:
+        table = table.astype(int)
+    N = table.sum()
     if N == 0:
         return Result(log="no observations")
     want_row, want_col, want_cell = bool(cmd.opt("row")), bool(cmd.opt("column", "col")), bool(cmd.opt("cell"))
@@ -224,7 +303,7 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
         first = True
         rowlines = []
         if not nofreq:
-            rowlines.append(("".join(f"{x:>11,}" for x in table[i]), f"{rt[i]:>11,}"))
+            rowlines.append(("".join(_fc(x) for x in table[i]), _fc(rt[i])))
         if want_row:
             rowlines.append(("".join(f"{100 * x / rt[i] if rt[i] else 0:>11.2f}" for x in table[i]), f"{100.0:>11.2f}"))
         if want_col:
@@ -239,7 +318,7 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
     lines.append(fmt.rule(13, width + 1) + "+" + "-" * 11)
     tot_lines = []
     if not nofreq:
-        tot_lines.append(("".join(f"{x:>11,}" for x in ct), f"{N:>11,}"))
+        tot_lines.append(("".join(_fc(x) for x in ct), _fc(N)))
     if want_row:
         tot_lines.append(("".join(f"{100 * x / N:>11.2f}" for x in ct), f"{100.0:>11.2f}"))
     if want_col:
@@ -249,7 +328,7 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
     for k, (cells, tot) in enumerate(tot_lines):
         lines.append(f"{'Total' if k == 0 else '':>12} |{cells} |{tot}")
 
-    notes, summ = [], {"row": rv, "col": cv, "n": N, "table": table.tolist(), "rowLabels": rlab, "colLabels": clab}
+    notes, summ = [], {"row": rv, "col": cv, "n": float(N), "table": table.tolist(), "rowLabels": rlab, "colLabels": clab}
     expected = np.outer(rt, ct) / N
     valid = (rt > 0).sum() > 1 and (ct > 0).sum() > 1
     chi2 = dfree = pval = cv_ = None
@@ -272,8 +351,20 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
     lines.append("")
     if cmd.opt("chi2") and valid:
         lines.append(f"{'Pearson chi2(' + str(dfree) + ') = ':>29}{chi2:>8.4f}   Pr = {pval:.3f}")
-    if cmd.opt("v") and valid:
+    want_all = bool(cmd.opt("all"))
+    if want_all and valid and not cmd.opt("chi2"):
+        lines.append(f"{'Pearson chi2(' + str(dfree) + ') = ':>29}{chi2:>8.4f}   Pr = {pval:.3f}")
+    if (cmd.opt("v") or want_all) and valid:
         lines.append("Cramér's V = ".rjust(29) + f"{cv_:>8.4f}")
+    if (cmd.opt("gamma") or cmd.opt("taub") or want_all) and valid:
+        from .inference import gamma_taub
+
+        gt = gamma_taub(np.asarray(table, dtype=float))
+        if (cmd.opt("gamma") or want_all) and "gamma" in gt:
+            lines.append("gamma = ".rjust(29) + f"{gt['gamma']:>8.4f}  ASE = {gt['gamma_ase']:.3f}")
+        if (cmd.opt("taub") or want_all) and "taub" in gt:
+            lines.append("Kendall's tau-b = ".rjust(29) + f"{gt['taub']:>8.4f}  ASE = {gt['taub_ase']:.3f}")
+        summ.update({k: v for k, v in gt.items()})
     if cmd.opt("exact") and valid:
         tab_nz = table[np.ix_(rt > 0, ct > 0)]
         if tab_nz.shape == (2, 2):
@@ -298,12 +389,12 @@ def _tab2(ds: Dataset, cmd: Command, rv: str, cv: str) -> Result:
         cells = []
         for j, x in enumerate(table[i]):
             pc = 100 * x / (ct[j] if use_col else rt[i]) if (ct[j] if use_col else rt[i]) else 0
-            cells.append(f"{x:,} ({pc:.1f}%)")
-        rows.append([lab] + cells + [f"{rt[i]:,}"])
-    rows.append(["Total"] + [f"{x:,}" for x in ct] + [f"{N:,}"])
-    note = f"Cells show n ({'column' if use_col else 'row'} %)."
+            cells.append(f"{_fc(x, 0).strip()} ({pc:.1f}%)")
+        rows.append([lab] + cells + [_fc(rt[i], 0).strip()])
+    rows.append(["Total"] + [_fc(x, 0).strip() for x in ct] + [_fc(N, 0).strip()])
+    note = f"Cells show n ({'column' if use_col else 'row'} %)." + (f" Weighted ({cmd.weight[0]}={cmd.weight[1]})." if cmd.weight else "")
     if valid:
-        note += f" χ²({dfree}, N = {N:,}) = {chi2:.2f}, p {('< .001' if pval < 0.001 else '= ' + fmt.apa_p(pval))}; Cramér's V = {fmt.apa_r(abs(cv_))}."
+        note += f" χ²({dfree}, N = {_fc(N, 0).strip()}) = {chi2:.2f}, p {('< .001' if pval < 0.001 else '= ' + fmt.apa_p(pval))}; Cramér's V = {fmt.apa_r(abs(cv_))}."
     t = Table(f"{nice(ds, rv)} by {nice(ds, cv)}", cols, rows, note=note)
     return Result(log="\n".join(lines).rstrip(), tables=[t], notes=notes, summary=summ)
 
@@ -532,7 +623,16 @@ def correlate(ds: Dataset, cmd: Command) -> Result:
     pairwise = cmd.name == "pwcorr"
     spearman = cmd.name == "spearman"
     mask = selected(ds, cmd)
+    wkind = None
+    if cmd.weight:
+        if spearman:
+            raise StataError("weights not allowed with spearman")
+        wall = weight_values(ds, cmd)
+        mask &= wall.notna() & wall.ne(0)
     df = ds.df.loc[mask, vs].astype(float)
+    if cmd.weight:
+        wkind, wfull = weights(ds, cmd, df, "aw fw")
+        df = df.assign(__w=wfull)
     if not pairwise:
         df = df.dropna()
     k = len(vs)
@@ -541,12 +641,20 @@ def correlate(ds: Dataset, cmd: Command) -> Result:
     Nm = np.zeros((k, k), dtype=int)
     for i in range(k):
         for j in range(i + 1):
-            pair = df[[vs[i], vs[j]]].dropna()
-            Nm[i, j] = len(pair)
+            pair = df[[vs[i], vs[j]] + (["__w"] if wkind else [])].dropna()
+            Nm[i, j] = int(round(pair["__w"].sum())) if wkind == "fw" else len(pair)
             if i == j:
                 R[i, j], P[i, j] = 1.0, np.nan
                 continue
-            if len(pair) > 2:
+            if wkind and len(pair) > 2:
+                ww = pair["__w"].to_numpy()
+                a, c = pair[vs[i]].to_numpy(), pair[vs[j]].to_numpy()
+                ma, mc = (ww * a).sum() / ww.sum(), (ww * c).sum() / ww.sum()
+                r = float((ww * (a - ma) * (c - mc)).sum() / math.sqrt((ww * (a - ma) ** 2).sum() * (ww * (c - mc) ** 2).sum()))
+                nn = Nm[i, j]
+                tt = r * math.sqrt((nn - 2) / max(1e-300, 1 - r * r))
+                R[i, j], P[i, j] = r, float(2 * st.t.sf(abs(tt), nn - 2))
+            elif len(pair) > 2:
                 r, pv = (st.spearmanr if spearman else st.pearsonr)(pair[vs[i]], pair[vs[j]])
                 R[i, j], P[i, j] = float(getattr(r, "statistic", r)), float(pv)
     level = cmd.opt("star")
@@ -558,7 +666,8 @@ def correlate(ds: Dataset, cmd: Command) -> Result:
         lines = [f" Number of obs = {n:>8,}", f"Spearman's rho = {R[1, 0]:>12.4f}", "", f"Test of H0: {vs[0]} and {vs[1]} are independent", f"    Prob > |t| = {P[1, 0]:>12.4f}"]
     else:
         if not pairwise:
-            lines.append(f"(obs={len(df):,})")
+            lines += sum_note(wkind, df["__w"].to_numpy() if wkind else None)
+            lines.append(f"(obs={Nm[0, 0]:,})")
             lines.append("")
         lines.append(f"{'':12} |" + "".join(f"{fmt.name(v, 8):>9}" for v in vs))
         lines.append(fmt.rule(13, 9 * k))
@@ -746,7 +855,9 @@ def _base_level(levels: list, base, s: pd.Series):
     return [x for x in levels if float(x) == b][0]
 
 
-def build_design(ds: Dataset, sub: pd.DataFrame, terms: list[Term]) -> list[Col]:
+def build_design(ds: Dataset, sub: pd.DataFrame, terms: list[Term], levels_map: dict | None = None, record: dict | None = None) -> list[Col]:
+    """Design columns for `terms`. `levels_map` fixes each factor's levels and base (used to predict
+    on other rows exactly as the model was estimated); `record` receives the ones used."""
     cols: list[Col] = []
     for term in terms:
         pieces: list[list[tuple[str, str, np.ndarray]]] = []  # per component: list of (label, apa, values)
@@ -765,8 +876,13 @@ def build_design(ds: Dataset, sub: pd.DataFrame, terms: list[Term]) -> list[Col]
                 s = sub[v]
                 if np.any(np.mod(s.dropna(), 1) != 0) or (s < 0).any():
                     raise StataError(f"{v}: factor variables may not contain negative or noninteger values")
-                levels = sorted(s.unique().tolist())
-                b = _base_level(levels, base, s)
+                if levels_map and v in levels_map:
+                    levels, b = levels_map[v]
+                else:
+                    levels = sorted(s.dropna().unique().tolist())
+                    b = _base_level(levels, base, s)
+                if record is not None:
+                    record[v] = (levels, b)
                 pieces.append([(level_label(ds, v, lv), level_label(ds, v, lv), (s == lv).to_numpy(dtype=float)) for lv in levels if lv != b])
                 names.append(("i", v))
         group = "#".join(("c." + v if (k == "c" and len(names) > 1) else v) for k, v in names)
@@ -851,8 +967,6 @@ def _apa_reg_rows(cols: list[Col], b, se, stat, pv, lo, hi, transform=None, with
 
 
 def _prepare(ds: Dataset, cmd: Command):
-    if "[" in cmd.args:
-        raise StataError("weights are coming in a later version (survey data support)")
     toks = cmd.args.split(None, 1)
     if len(toks) < 2:
         raise StataError(f"use: {cmd.name} outcome predictors")
@@ -872,11 +986,23 @@ def _prepare(ds: Dataset, cmd: Command):
     sub = sample(ds, cmd, vars_)
     if len(sub) == 0:
         raise StataError("no observations")
-    cols = build_design(ds, sub, terms)
+    rec: dict = {}
+    cols = build_design(ds, sub, terms, record=rec)
     X = np.column_stack([c.values for c in cols]) if cols else np.empty((len(sub), 0))
     X, cols, omitted = _drop_collinear(X, cols)
     robust = bool(cmd.opt("robust")) or (isinstance(vce, str) and vce.lower().startswith("r"))
+    cmd._design = (terms, rec)  # remembered for predict / margins
     return y, sub, cols, omitted, X, robust, cluster_var
+
+
+def remember(ds: Dataset, cmd: Command, kind: str, y: str, sub: pd.DataFrame, cols: list, b, V, df_r, w, extra: dict | None = None):
+    """The last estimation, for predict, estat and margins (Stata's e())."""
+    terms, levels = cmd._design
+    ds.last_est = {
+        "cmd": cmd.raw, "kind": kind, "y": y, "terms": terms, "levels": levels,
+        "keep": [(c.group, c.label) for c in cols], "b": np.asarray(b, dtype=float), "V": np.asarray(V, dtype=float),
+        "df_r": df_r, "sample": sub.index.copy(), "w": w, "weight": cmd.weight, **(extra or {}),
+    }
 
 
 def _hdr(label: str, value: str) -> str:
@@ -886,29 +1012,45 @@ def _hdr(label: str, value: str) -> str:
 
 def regress(ds: Dataset, cmd: Command) -> Result:
     y, sub, cols, omitted, X, robust, cluster_var = _prepare(ds, cmd)
+    kind, wraw = weights(ds, cmd, sub, "aw pw fw")
     yv = sub[y].astype(float).to_numpy()
     Xc = np.column_stack([X, np.ones(len(yv))])
-    n, k = Xc.shape
+    rows_n, k = Xc.shape
+    if kind == "pw" and not cluster_var:
+        robust = True  # Stata: pweights imply robust standard errors
+    w = normalized(kind, wraw, rows_n)
+    n = int(round(w.sum())) if kind == "fw" else rows_n  # frequency weights expand the sample
     if n <= k:
         raise StataError("insufficient observations")
+    model = sm.WLS(yv, Xc, weights=w) if kind else sm.OLS(yv, Xc)
     if cluster_var:
         groups = pd.factorize(sub[cluster_var])[0]
-        res = sm.OLS(yv, Xc).fit(cov_type="cluster", cov_kwds={"groups": groups, "use_correction": True, "df_correction": True})
+        res = model.fit(cov_type="cluster", cov_kwds={"groups": groups, "use_correction": True, "df_correction": True})
         G = int(groups.max() + 1)
         df_inf = G - 1
     elif robust:
-        res = sm.OLS(yv, Xc).fit(cov_type="HC1")
+        res = model.fit(cov_type="HC1")
+        df_inf = n - k
+    elif kind == "fw":
+        res = model.fit()
+        e = yv - Xc @ res.params
+        sigma2 = float((w * e**2).sum() / (n - k))
+        res_cov = sigma2 * np.linalg.inv(Xc.T @ (Xc * w[:, None]))
         df_inf = n - k
     else:
-        res = sm.OLS(yv, Xc).fit()
+        res = model.fit()
         df_inf = n - k
-    b, se = res.params, res.bse
+    b = res.params
+    Vb = res_cov if (kind == "fw" and not robust and not cluster_var) else np.asarray(res.cov_params())
+    se = np.sqrt(np.diag(Vb))
     tval = b / se
     pv = 2 * st.t.sf(np.abs(tval), df_inf)
     tc = st.t.ppf(0.975, df_inf)
     lo, hi = b - tc * se, b + tc * se
-    rss = float(res.ssr)
-    tss = float(((yv - yv.mean()) ** 2).sum())
+    resid = yv - Xc @ b
+    rss = float((w * resid**2).sum())
+    ybar = float((w * yv).sum() / w.sum())
+    tss = float((w * (yv - ybar) ** 2).sum())
     mss = tss - rss
     dfm, dfr = k - 1, n - k
     r2 = 1 - rss / tss if tss else float("nan")
@@ -918,13 +1060,13 @@ def regress(ds: Dataset, cmd: Command) -> Result:
     F_df2 = df_inf if cluster_var else dfr
     if q > 0 and not (cluster_var and q > df_inf):
         R = np.eye(k)[:-1]
-        V = res.cov_params()
+        V = Vb
         Rb = R @ b
         F = float(Rb @ np.linalg.solve(R @ V @ R.T, Rb) / q)
         pF = float(st.f.sf(F, q, F_df2))
     else:
         F, pF = float("nan"), float("nan")  # Stata reports F = . when there are too few clusters
-    lines = []
+    lines = sum_note(kind, wraw)
     if robust or cluster_var:
         Fs = "." if math.isnan(F) else f"{F:.2f}"
         pFs = "." if math.isnan(pF) else f"{pF:.4f}"
@@ -952,15 +1094,19 @@ def regress(ds: Dataset, cmd: Command) -> Result:
         ]
         lines += _coef_table(y, cols, omitted, b, se, tval, pv, lo, hi, "t", "Coefficient")
     if cmd.opt("beta"):
-        sy = yv.std(ddof=1)
-        betas = [b[i] * X[:, i].std(ddof=1) / sy for i in range(len(cols))]
+        def wsd(v):
+            m = (w * v).sum() / w.sum()
+            return math.sqrt((w * (v - m) ** 2).sum() / (w.sum() - 1))
+        sy = wsd(yv)
+        betas = [b[i] * wsd(X[:, i]) / sy for i in range(len(cols))]
         lines += ["", "Standardized coefficients (beta):"] + [f"{fmt.name(c.label)} |{fmt.g(bt, 11)}" for c, bt in zip(cols, betas)]
     rows, groups = _apa_reg_rows(cols, b, se, tval, pv, lo, hi, labels=ds.var_labels)
-    se_kind = " Robust standard errors." if robust and not cluster_var else (f" Standard errors clustered by {nice(ds, cluster_var)} ({G} clusters)." if cluster_var else "")
+    se_kind = (f" Weighted ({cmd.weight[0]}={cmd.weight[1]})." if kind else "") + (" Robust standard errors." if robust and not cluster_var else (f" Standard errors clustered by {nice(ds, cluster_var)} ({G} clusters)." if cluster_var else ""))
     ftxt = "" if math.isnan(F) else f", F({q}, {F_df2}) = {fmt.apa_num(F)}, p {('< .001' if pF < 0.001 else '= ' + fmt.apa_p(pF))}"
     note = f"N = {n:,}. R² = {fmt.apa_r(r2)}, adjusted R² = {fmt.apa_r(adj)}{ftxt}.{se_kind} *p < .05. **p < .01. ***p < .001."
     t = Table(f"Linear regression predicting {nice(ds, y)}", ["Predictor", "B", "SE", "t", "p", "95% CI"], rows, note=note, groups=groups)
     notes = [f"{c.label if not c.group else c.group + '=' + c.label} was omitted because of collinearity." for c in omitted]
+    remember(ds, cmd, "regress", y, sub, cols, b, Vb, df_inf, w if kind else None, {"rmse": rmse, "rss": rss, "n": n, "robust": robust, "cluster": cluster_var, "X": Xc, "yv": yv})
     summ = {"model": "OLS", "depvar": y, "n": n, "r2": r2, "adj_r2": adj, "F": F, "df": [q, F_df2], "p_F": pF, "robust": robust, "cluster": cluster_var, "coefs": [{"term": (c.group + "=" if c.group else "") + c.label, "b": float(b[i]), "se": float(se[i]), "t": float(tval[i]), "p": float(pv[i]), "ci": [float(lo[i]), float(hi[i])]} for i, c in enumerate(cols)] + [{"term": "_cons", "b": float(b[-1]), "p": float(pv[-1])}]}
     return Result(log="\n".join(lines), tables=[t], notes=notes, summary=summ)
 
@@ -979,29 +1125,59 @@ def binary_or_count(ds: Dataset, cmd: Command) -> Result:
             raise StataError("outcome does not vary")
     Xc = np.column_stack([X, np.ones(len(yv))])
     n, k = Xc.shape
+    wkind, wraw = weights(ds, cmd, sub, "pw fw iw")
+    if wkind == "pw":
+        robust = True  # pweights imply robust standard errors
     model_cls = {"logit": sm.Logit, "logistic": sm.Logit, "probit": sm.Probit, "poisson": sm.Poisson}[kind]
+    G = 0
     try:
-        if cluster_var:
-            groups = pd.factorize(sub[cluster_var])[0]
-            res = model_cls(yv, Xc).fit(disp=0, cov_type="cluster", cov_kwds={"groups": groups})
-            G = int(groups.max() + 1)
+        if wkind:
+            fam = sm.families.Poisson() if kind == "poisson" else sm.families.Binomial(link=sm.families.links.Probit() if kind == "probit" else sm.families.links.Logit())
+            glm = sm.GLM(yv, Xc, family=fam, freq_weights=wraw)
+            res = glm.fit()
+            b = res.params
+            if wkind in ("fw", "iw"):
+                n = int(round(wraw.sum())) if wkind == "fw" else n
+            if robust or cluster_var:
+                scores = glm.score_obs(b)
+                Hinv = np.linalg.inv(-glm.hessian(b))
+                if cluster_var:
+                    groups = pd.factorize(sub[cluster_var])[0]
+                    G = int(groups.max() + 1)
+                    S = np.zeros((G, k))
+                    np.add.at(S, groups, scores)
+                    V = Hinv @ (S.T @ S) @ Hinv * G / (G - 1)
+                else:
+                    V = Hinv @ (scores.T @ scores) @ Hinv * n / (n - 1)
+            else:
+                V = np.asarray(res.cov_params())
+            llf, ll0 = float(res.llf), float(res.llnull)
+            pred = res.predict(Xc)
         else:
-            res = model_cls(yv, Xc).fit(disp=0, maxiter=200)
+            if cluster_var:
+                groups = pd.factorize(sub[cluster_var])[0]
+                res = model_cls(yv, Xc).fit(disp=0, cov_type="cluster", cov_kwds={"groups": groups})
+                G = int(groups.max() + 1)
+            else:
+                res = model_cls(yv, Xc).fit(disp=0, maxiter=200)
+            b = res.params
+            V = np.asarray(res.cov_params())
+            if robust and not cluster_var:
+                rob = model_cls(yv, Xc).fit(disp=0, cov_type="HC0", start_params=b)
+                V = np.asarray(rob.cov_params()) * n / (n - 1)  # Stata's robust adds n/(n-1)
+            llf, ll0 = float(res.llf), float(res.llnull)
+            pred = res.predict(Xc)
+    except np.linalg.LinAlgError as e:
+        raise StataError("a predictor perfectly predicts the outcome (perfect separation); drop or combine that predictor's categories") from e
     except Exception as e:  # noqa: BLE001
         msg = str(e).lower()
         if "separation" in msg or "singular" in msg:
             raise StataError("a predictor perfectly predicts the outcome (perfect separation); drop or combine that predictor's categories") from e
         raise StataError(f"the model did not converge ({type(e).__name__})") from e
-    b = res.params
-    V = res.cov_params()
-    if robust and not cluster_var:
-        rob = model_cls(yv, Xc).fit(disp=0, cov_type="HC0", start_params=b)
-        V = rob.cov_params() * n / (n - 1)  # Stata's robust adds n/(n-1)
     se = np.sqrt(np.diag(V))
     z = b / se
     pv = 2 * st.norm.sf(np.abs(z))
     lo, hi = b - 1.959963984540054 * se, b + 1.959963984540054 * se
-    llf, ll0 = float(res.llf), float(res.llnull)
     pseudo = 1 - llf / ll0
     q = k - 1
     if robust or cluster_var:
@@ -1015,7 +1191,7 @@ def binary_or_count(ds: Dataset, cmd: Command) -> Result:
     pchi = float(st.chi2.sf(chi, q)) if q else float("nan")
     title = {"logit": "Logistic regression", "logistic": "Logistic regression", "probit": "Probit regression", "poisson": "Poisson regression"}[kind]
     ll_word = "Log pseudolikelihood" if (robust or cluster_var) else "Log likelihood"
-    lines = [
+    lines = sum_note(wkind, wraw) + [
         f"{title:<56}Number of obs = {n:>6,}",
         f"{'':56}{test_lab:<14}= {chi:>6.2f}",
         f"{'':56}{'Prob > chi2':<14}= {pchi:>6.4f}",
@@ -1033,7 +1209,6 @@ def binary_or_count(ds: Dataset, cmd: Command) -> Result:
     else:
         lines += _coef_table(y, cols, omitted, b, se, z, pv, lo, hi, "z", "Coefficient", robust_word="Robust" if (robust or cluster_var) else "")
     if kind in ("logit", "logistic", "probit"):
-        pred = res.predict(Xc)
         correct = float(((pred >= 0.5) == (yv == 1)).mean())
         summ_extra = {"classified_correctly": correct}
     else:
@@ -1050,6 +1225,7 @@ def binary_or_count(ds: Dataset, cmd: Command) -> Result:
     note = f"N = {n:,}. {test_lab.replace('chi2', 'χ²')} = {fmt.apa_num(chi)}, p {('< .001' if pchi < 0.001 else '= ' + fmt.apa_p(pchi))}; pseudo R² = {fmt.apa_r(pseudo)}. Table shows {effect}.{' Robust standard errors.' if robust and not cluster_var else ''} *p < .05. **p < .01. ***p < .001."
     t = Table(f"{title} predicting {nice(ds, y)}", cols_apa, rows, note=note, groups=groups)
     notes = [f"{c.label if not c.group else c.group + '=' + c.label} was omitted because of collinearity." for c in omitted]
+    remember(ds, cmd, kind, y, sub, cols, b, V, None, wraw, {"n": n, "llf": llf, "ll0": ll0, "X": Xc, "yv": yv, "pred": np.asarray(pred), "robust": robust or bool(cluster_var)})
     summ = {"model": title, "depvar": y, "n": n, "chi2": chi, "df": q, "p": pchi, "pseudo_r2": pseudo, "loglik": llf, **summ_extra, "coefs": [{"term": (c.group + "=" if c.group else "") + c.label, "b": float(b[i]), "exp_b": float(np.exp(b[i])), "se": float(se[i]), "z": float(z[i]), "p": float(pv[i])} for i, c in enumerate(cols)]}
     return Result(log="\n".join(lines), tables=[t], notes=notes, summary=summ)
 

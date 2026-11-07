@@ -11,7 +11,7 @@ from .data import Dataset
 FONT = "Times New Roman"
 
 
-def docx_bytes(title: str, tables: list[dict]) -> bytes:
+def docx_bytes(title: str, tables: list[dict], images: list[dict] | None = None) -> bytes:
     """APA 7 tables: bold table number, italic title, horizontal rules only, note below."""
     from docx import Document
     from docx.enum.table import WD_TABLE_ALIGNMENT
@@ -90,6 +90,15 @@ def docx_bytes(title: str, tables: list[dict]) -> bytes:
             p = doc.add_paragraph()
             p.add_run("Note. ").italic = True
             p.add_run(t["note"]).font.size = Pt(10)
+        doc.add_paragraph()
+    for k, im in enumerate(images or [], 1):
+        import base64
+
+        p = doc.add_paragraph()
+        p.add_run(f"Figure {k}").bold = True
+        p.paragraph_format.space_after = Pt(0)
+        doc.add_paragraph().add_run(im.get("title", "")).italic = True
+        doc.add_picture(io.BytesIO(base64.b64decode(im["png"])), width=Inches(5.5))
         doc.add_paragraph()
     buf = io.BytesIO()
     doc.save(buf)

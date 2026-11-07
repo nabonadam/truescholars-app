@@ -76,6 +76,16 @@ def _truth(x):
     return bool(np.nan_to_num(x, nan=1) != 0)
 
 
+RNG: np.random.Generator | None = None  # the current dataset's generator (set seed), set by run_line
+
+
+def _rng() -> np.random.Generator:
+    global RNG
+    if RNG is None:
+        RNG = np.random.default_rng(123456789)
+    return RNG
+
+
 class Parser:
     def __init__(self, text: str, df: pd.DataFrame, extra_names: dict | None = None):
         self.toks = tokenize(text)
@@ -232,6 +242,20 @@ class Parser:
         self.take(")")
         f = fname.lower()
         one = lambda fn: fn(args[0])  # noqa: E731
+        n = self.n
+        idx = self.df.index
+        if f == "runiform":
+            lo, hi = (float(args[0]), float(args[1])) if len(args) == 2 else (0.0, 1.0)
+            return pd.Series(_rng().uniform(lo, hi, n), index=idx)
+        if f in ("rnormal", "invnorm_rand"):
+            m, sd = (float(args[0]) if args else 0.0), (float(args[1]) if len(args) > 1 else 1.0)
+            return pd.Series(_rng().normal(m, sd, n), index=idx)
+        if f == "runiformint":
+            return pd.Series(_rng().integers(int(args[0]), int(args[1]) + 1, n).astype(float), index=idx)
+        if f == "rbinomial":
+            return pd.Series(_rng().binomial(int(args[0]), float(args[1]), n).astype(float), index=idx)
+        if f == "rpoisson":
+            return pd.Series(_rng().poisson(float(args[0]), n).astype(float), index=idx)
         if f in ("missing", "mi"):
             res = [(a.isna() if isinstance(a, pd.Series) and pd.api.types.is_numeric_dtype(a) else (a.fillna("") == "" if isinstance(a, pd.Series) else (a == "" if isinstance(a, str) else np.isnan(a)))) for a in args]
             out = res[0]

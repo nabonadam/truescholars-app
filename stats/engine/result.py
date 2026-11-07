@@ -25,9 +25,11 @@ class Result:
     notes: list[str] = field(default_factory=list)  # plain-English warnings (assumptions, small cells...)
     summary: dict = field(default_factory=dict)  # key numbers, for the AI's interpretation
     changes_data: bool = False
+    images: list[dict] = field(default_factory=list)  # graphs: {"title", "png" (base64), "width", "height"}
 
     def as_dict(self) -> dict:
         return {
+            "images": self.images,
             "log": self.log,
             "tables": [t.as_dict() for t in self.tables],
             "notes": self.notes,

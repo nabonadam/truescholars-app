@@ -128,11 +128,36 @@ class LoadBody(BaseModel):
 
 class RunBody(LoadBody):
     commands: list[str]
+    lastEstimation: str | None = None  # the session's last model, for predict / estat / margins
+    lastMargins: str | None = None  # the session's last margins, for marginsplot
+
+
+POST_ESTIMATION = ("predict", "estat", "margins", "marginsplot", "lroc")
+
+
+def _restore_estimation(ds: Dataset, body: RunBody):
+    """Re-fit the session's last model (and margins) when a request starts with post-estimation."""
+    from engine.run import run_line
+
+    first = body.commands[0].split()[0].lower() if body.commands and body.commands[0].split() else ""
+    if not first.startswith(POST_ESTIMATION) and not any(c.split()[0].lower().startswith(POST_ESTIMATION) for c in body.commands if c.split()):
+        return
+    if body.lastEstimation and (not ds.last_est or ds.last_est.get("cmd") != body.lastEstimation):
+        try:
+            run_line(ds, body.lastEstimation)
+        except Exception:  # noqa: BLE001 - the command itself will report what is missing
+            ds.last_est = None
+    if body.lastMargins and any(c.strip().lower().startswith("marginsplot") for c in body.commands) and not any(c.strip().lower().startswith("margins ") or c.strip().lower() == "margins" or c.strip().lower().startswith("margins,") for c in body.commands):
+        try:
+            run_line(ds, body.lastMargins)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class ExportBody(BaseModel):
     title: str = ""
     tables: list[dict]
+    images: list[dict] = Field(default_factory=list)
     logs: list[tuple[str, str]] = Field(default_factory=list)
 
 
@@ -151,15 +176,30 @@ def load(body: LoadBody):
 
 @app.post("/run", dependencies=[Depends(auth)])
 def run(body: RunBody):
+    needs_est = any(c.split()[0].lower().startswith(POST_ESTIMATION) for c in body.commands if c.split())
     try:
-        ds = state(body.datasetId, body.history, writable=_changes_data(body.commands))
+        ds = state(body.datasetId, body.history, writable=_changes_data(body.commands) or needs_est)
     except StataError as e:
         raise HTTPException(422, f"Replaying your earlier commands failed: {e}") from e
+    ds.last_est = None
+    ds.last_margins = None
+    _restore_estimation(ds, body)
     results = run_commands(ds, body.commands)
     changed = any(r.get("ok") and r.get("changesData") for r in results)
-    out = {"results": results, "changed": changed}
+    out = {"results": results, "changed": changed, "lastEstimation": ds.last_est["cmd"] if ds.last_est else None}
+    margins_cmds = [r["command"] for r in results if r.get("ok") and r["command"].strip().lower().split()[0] == "margins"]
+    if margins_cmds:
+        out["lastMargins"] = margins_cmds[-1]
     if changed:
-        kept = [r["command"] for r in results if r.get("ok") and r.get("changesData")]
+        kept: list[str] = []
+        for r in results:
+            if not (r.get("ok") and r.get("changesData")):
+                continue
+            est = (r.get("summary") or {}).get("est")
+            if est and (not kept or kept[-1] != est):
+                kept.append(est)  # predict needs its model: replaying the history re-fits it
+            kept.append(r["command"])
+        out["kept"] = kept
         STATES.put((body.datasetId, tuple(body.history + kept)), ds)
         out["dataset"] = overview(ds)
     return out
@@ -168,7 +208,7 @@ def run(body: RunBody):
 @app.post("/export/{fmt}", dependencies=[Depends(auth)])
 def export(fmt: str, body: ExportBody):
     if fmt == "docx":
-        return Response(docx_bytes(body.title, body.tables), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        return Response(docx_bytes(body.title, body.tables, body.images), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     if fmt == "xlsx":
         return Response(xlsx_bytes(body.tables, body.logs), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     raise HTTPException(404, "unknown format")

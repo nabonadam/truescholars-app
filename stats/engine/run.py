@@ -8,6 +8,10 @@ import numpy as np
 import pandas as pd
 
 from . import datacmds as dc
+from . import datamore as dm
+from . import inference as inf
+from . import graphs as gr
+from . import postest as pe
 from . import statcmds as sc
 from .data import Dataset, StataError, is_numeric
 from .result import Result
@@ -42,10 +46,45 @@ HANDLERS = {
     "kwallis": sc.kwallis,
     "signrank": sc.signrank,
     "regress": sc.regress,
+    "egen": dm.egen,
+    "xtile": dm.xtile,
+    "set": dm.set_,
+    "version": dm.version_,
+    "sample": dm.sample_,
+    "sort": dm.sort_,
+    "gsort": dm.sort_,
+    "histogram": gr.histogram,
+    "graph": gr.graph,
+    "scatter": gr.scatter,
+    "twoway": gr.twoway,
+    "marginsplot": gr.marginsplot,
+    "predict": pe.predict,
+    "estat": pe.estat,
+    "margins": pe.margins,
+    "lroc": pe.lroc,
+    "swilk": pe.swilk,
+    "mean": inf.mean,
+    "proportion": inf.proportion,
+    "ci": inf.ci,
+    "prtest": inf.prtest,
+    "somersd": inf.somersd,
+    "lambda": inf.lambda_,
     "logit": sc.binary_or_count,
     "logistic": sc.binary_or_count,
     "probit": sc.binary_or_count,
     "poisson": sc.binary_or_count,
+}
+
+
+NO_WEIGHTS = {
+    "ttest": "weights not allowed with ttest; compare weighted means with: mean y [pw=w], over(group), or regress y i.group [pw=w]",
+    "ranksum": "weights not allowed with ranksum",
+    "kwallis": "weights not allowed with kwallis",
+    "signrank": "weights not allowed with signrank",
+    "anova": "weights with anova aren't available yet; use regress y i.factor1 i.factor2 [aw=w]",
+    "oneway": "weights with oneway aren't available yet; use regress y i.group [aw=w] (its F test is the one-way ANOVA)",
+    "codebook": "weights not allowed with codebook",
+    "describe": "weights not allowed with describe",
 }
 
 
@@ -54,10 +93,24 @@ def run_line(ds: Dataset, line: str) -> Result:
     stripped = line.strip()
     if not stripped or stripped.startswith(("*", "//")):
         return Result(log="")
+    first = stripped.split(None, 1)[0].lower().rstrip(",")
+    if first in ("clear", "capture", "cap", "log", "quietly", "qui") and not stripped.lower().startswith(("quietly ", "qui ")):
+        return Result(log=f"({first}: not needed here, so it was skipped; your data stays loaded)")
+    if first in ("quietly", "qui"):
+        stripped = stripped.split(None, 1)[1] if " " in stripped else ""
+        if not stripped:
+            return Result(log="")
+    from . import expr as _expr
+
+    _expr.RNG = ds.rng
     cmd = parse(stripped)
+    if cmd.weight and cmd.name in NO_WEIGHTS:
+        raise StataError(NO_WEIGHTS[cmd.name])
     handler = HANDLERS[cmd.name]
     if not cmd.by:
         return handler(ds, cmd)
+    if cmd.name == "egen":
+        return handler(ds, cmd)  # egen handles by() itself
     if cmd.name in DATA_COMMANDS:
         raise StataError(f"by: with {cmd.name} is not available yet; use an if condition instead")
     from .expr import resolve_var

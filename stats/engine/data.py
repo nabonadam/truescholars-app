@@ -21,9 +21,14 @@ class Dataset:
     value_labels: dict[str, dict] = field(default_factory=dict)  # var -> {code: label}
     label_sets: dict[str, dict] = field(default_factory=dict)  # label define name -> {code: label}
     import_notes: list[str] = field(default_factory=list)  # what converting a CSV/Excel file changed
+    rng: np.random.Generator = field(default_factory=lambda: np.random.default_rng(123456789))  # set seed
+    last_est: dict | None = None  # the last estimation (Stata's e()), for predict / estat / margins
+    last_margins: dict | None = None  # for marginsplot
 
     def copy(self) -> "Dataset":
-        return Dataset(self.df.copy(), dict(self.var_labels), {k: dict(v) for k, v in self.value_labels.items()}, {k: dict(v) for k, v in self.label_sets.items()}, list(self.import_notes))
+        import copy
+
+        return Dataset(self.df.copy(), dict(self.var_labels), {k: dict(v) for k, v in self.value_labels.items()}, {k: dict(v) for k, v in self.label_sets.items()}, list(self.import_notes), copy.deepcopy(self.rng), self.last_est, self.last_margins)
 
     def label(self, var: str) -> str:
         return self.var_labels.get(var, "")
