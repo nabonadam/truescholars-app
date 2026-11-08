@@ -37,20 +37,39 @@ const engineBase = () => process.env.STATS_URL?.replace(/\/$/, "");
 const WAKE_MS = 100_000; // a sleeping free-plan engine takes 30-60 s to start
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const UA = { "user-agent": "TheTrueScholars-App/1.0 (+https://thetruescholars.com)" };
+let healthyAt = 0; // last time the engine answered; skip the health check for a minute after that
+let blockedUntil = 0; // the host answered 429 (too many requests): leave it alone until then
+
+const retryAfter = (r: Response) => {
+  const s = Number(r.headers.get("retry-after"));
+  return Number.isFinite(s) && s > 0 ? Math.min(s, 120) * 1000 : 30_000;
+};
+
 /**
  * Waits until the engine answers /health. On the free hosting plan it sleeps after ~15 minutes
- * without use, and while it starts the host answers 503 "loading" straight away.
+ * without use, and while it starts the host answers 503 "loading" straight away. Checks back off
+ * (2.5 s, 5 s, 10 s…) so a slow start never turns into a flood of requests, and a 429 from the
+ * host stops them altogether for a while.
  */
 export async function ping(maxMs = WAKE_MS) {
   const base = engineBase();
   if (!base) return false;
+  if (Date.now() - healthyAt < 60_000) return true;
+  if (Date.now() < blockedUntil) return false;
   const until = Date.now() + maxMs;
-  while (Date.now() < until) {
-    const ok = await fetch(base + "/health", { signal: AbortSignal.timeout(15_000), cache: "no-store" })
-      .then((r) => r.ok)
-      .catch(() => false);
-    if (ok) return true;
-    await pause(2_500);
+  for (let wait = 2_500; Date.now() < until; wait = Math.min(wait * 2, 15_000)) {
+    const r = await fetch(base + "/health", { headers: UA, signal: AbortSignal.timeout(15_000), cache: "no-store" }).catch(() => null);
+    if (r?.ok) {
+      healthyAt = Date.now();
+      return true;
+    }
+    if (r?.status === 429) {
+      blockedUntil = Date.now() + retryAfter(r);
+      console.error("stats engine: host answered 429 (rate limited)");
+      return false;
+    }
+    await pause(Math.min(wait, Math.max(0, until - Date.now())));
   }
   return false;
 }
@@ -65,7 +84,7 @@ export async function engine<T>(route: string, body: unknown, raw = false): Prom
     try {
       res = await fetch(base + route, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-stats-key": process.env.STATS_KEY ?? "" },
+        headers: { "content-type": "application/json", "x-stats-key": process.env.STATS_KEY ?? "", ...UA },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(180_000),
         cache: "no-store",
@@ -73,11 +92,18 @@ export async function engine<T>(route: string, body: unknown, raw = false): Prom
     } catch {
       res = null; // unreachable: probably still starting
     }
+    if (res?.status === 429) {
+      blockedUntil = Date.now() + retryAfter(res);
+      if (attempt >= 1) throw new StatsError("The statistics engine is busy right now. Please try again in a minute.");
+      await pause(Math.min(retryAfter(res), 10_000));
+      continue;
+    }
     if (res && !WAKING.has(res.status)) {
       if (!res.ok) {
         const detail = await res.json().then((j: { detail?: string }) => j.detail).catch(() => null);
         throw new StatsError(typeof detail === "string" ? detail : "The statistics engine could not finish that. Try again.");
       }
+      healthyAt = Date.now();
       return (raw ? res.arrayBuffer() : res.json()) as Promise<T>;
     }
     // Asleep, starting or restarting: wait for it once, then try again.
