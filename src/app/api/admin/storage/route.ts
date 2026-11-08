@@ -27,5 +27,19 @@ export async function GET(req: Request) {
     hourlyJob: !!process.env.CRON_SECRET,
     googleSignIn: !!process.env.AUTH_GOOGLE_ID,
   };
-  return NextResponse.json({ ...check, inDatabase: Number(n), moved, services });
+  return NextResponse.json({ ...check, inDatabase: Number(n), moved, services, statsEngine: await engineProbe() });
+}
+
+/** One quick look at the statistics engine: its /health reply and how the host routed it (never the address). */
+async function engineProbe() {
+  const base = process.env.STATS_URL?.replace(/\/$/, "");
+  if (!base) return { configured: false };
+  const t0 = Date.now();
+  try {
+    const r = await fetch(base + "/health", { signal: AbortSignal.timeout(20_000), cache: "no-store" });
+    const body = (await r.text()).replace(/\s+/g, " ").slice(0, 300);
+    return { configured: true, host: new URL(base).host.replace(/^[^.]+/, "…"), status: r.status, ms: Date.now() - t0, routing: r.headers.get("x-render-routing"), body };
+  } catch (err) {
+    return { configured: true, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err), ms: Date.now() - t0 };
+  }
 }
