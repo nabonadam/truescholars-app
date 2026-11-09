@@ -139,8 +139,9 @@ export async function createSession(db: DB, ownerId: string, file: { name: strin
     .values({ ownerId, datasetId: ds.id, title: name, nObs: o.nObs, nVars: o.nVars, variables: o.variables })
     .returning({ id: statSessions.id });
   if (o.importNotes?.length) {
-    // What converting a CSV/Excel file to Stata format changed, shown at the top of the session.
-    await db.insert(statRuns).values({ sessionId: s.id, input: "Converted to Stata format", mode: "NOTE", status: "IMPORT", explanation: o.importNotes.join("\n") });
+    // What converting a CSV/Excel file changed, or what a Stata/SPSS file needs before analysis, shown at the top of the session.
+    const native = /\.(dta|sav|zsav)$/i.test(file.name);
+    await db.insert(statRuns).values({ sessionId: s.id, input: native ? "Checked your data" : "Converted to Stata format", mode: "NOTE", status: "IMPORT", explanation: o.importNotes.join("\n") });
   }
   return s.id;
 }

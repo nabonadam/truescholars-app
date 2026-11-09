@@ -192,3 +192,26 @@ def test_encode_and_destring_for_text_data():
     assert not r["ok"] and "not a string" in r["error"]
     r = run_commands(d, ["summarize amt if"])[0]
     assert not r["ok"] and "invalid syntax" in r["error"]
+
+
+def test_describe_short_and_value_label_names(ds):
+    short = one(ds, "describe, short")
+    assert "Observations:" in short["log"] and "Variables:" in short["log"]
+    assert "Variable label" not in short["log"] and "storage" not in short["log"].lower()
+    full = one(ds, "describe")
+    assert "Variable label" in full["log"]
+
+
+def test_stata_file_notes_point_out_what_needs_fixing(tmp_path):
+    import pyreadstat
+    from engine.data import load_path
+
+    df = pd.DataFrame({"note": ["", "", ""], "age": [21, 22, 23], "gender": ["Male", "Female", "Male"], "family_count": ["1", "2", "10"], "comment": ["a b c", "d e", "f"]})
+    p = tmp_path / "survey.dta"
+    pyreadstat.write_dta(df, str(p))
+    d = load_path(str(p), "survey.dta")
+    notes = "\n".join(d.import_notes)
+    assert "drop note" in notes
+    assert "destring family_count, replace" in notes
+    assert "encode gender" in notes
+    assert not pd.api.types.is_numeric_dtype(d.df["gender"])  # the file itself is left exactly as it is

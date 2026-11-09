@@ -305,10 +305,12 @@ def destring(ds: Dataset, cmd: Command) -> Result:
 def describe(ds: Dataset, cmd: Command) -> Result:
     vars_ = expand_varlist(cmd.args, ds.df)
     n, k = ds.df.shape
+    head = ["Contains data", f" Observations:{n:>14,}", f"    Variables:{k:>14,}"]
+    if cmd.opt("short"):
+        # Stata's describe, short: the counts only, no variable list
+        return Result(log="\n".join(head + ["Sorted by: "]), summary={"observations": n, "variables": k})
     lines = [
-        "Contains data",
-        f" Observations:{n:>14,}",
-        f"    Variables:{k:>14,}",
+        *head,
         "-" * 78,
         "Variable      Storage   Display    Value",
         "    name         type    format    label      Variable label",
@@ -318,7 +320,7 @@ def describe(ds: Dataset, cmd: Command) -> Result:
     for v in vars_:
         st = storage_type(ds.df[v])
         disp = "%9.0g" if st in ("byte", "int", "long") else "%10.0g" if st == "double" else f"%-{min(int(st[3:] or 1), 30)}s"
-        vl = "labels" if v in ds.value_labels else ""
+        vl = v[:10] if v in ds.value_labels else ""  # the value label's name (ours are named after the variable)
         name = v if len(v) <= 15 else v[:13] + "~" + v[-1]
         lines.append(f"{name:<15} {st:<7} {disp:<10} {vl:<10} {ds.label(v)}")
         rows.append([v, st, ds.label(v) or "—"])

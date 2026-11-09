@@ -98,7 +98,7 @@ def load_path(path: str, filename: str) -> Dataset:
             df, meta = reader(path, apply_value_formats=False)
             var_labels = {k: v for k, v in zip(meta.column_names, meta.column_labels or []) if v}
             value_labels = {k: {(int(c) if isinstance(c, float) and c.is_integer() else c): lab for c, lab in v.items()} for k, v in (meta.variable_value_labels or {}).items()}
-            return Dataset(df, var_labels, value_labels)
+            return Dataset(df, var_labels, value_labels, import_notes=stata_file_notes(df, value_labels, ext))
         if ext in ("csv", "txt", "tsv"):
             with open(path, "rb") as fh:
                 head = fh.read(65536).decode("utf-8-sig", errors="replace")
@@ -160,6 +160,40 @@ def to_stata(df: pd.DataFrame, ext: str) -> Dataset:
     if left:
         notes.append(f"Kept as text (too many different values to be categories): {', '.join(left[:8])}{', …' if len(left) > 8 else ''}.")
     return Dataset(df, var_labels, value_labels, {k: dict(v) for k, v in value_labels.items()}, notes)
+
+
+def stata_file_notes(df: pd.DataFrame, value_labels: dict, ext: str) -> list[str]:
+    """A Stata or SPSS file is loaded exactly as it is. These notes point out what will get in the way of
+    analysis, with the command that fixes it, the way an experienced analyst would on first look."""
+    kind = "Stata" if ext == "dta" else "SPSS"
+    notes = [f"Loaded your {kind} file as it is: {df.shape[1]} variables, {len(df):,} observations."]
+    empty, numeric_text, categories = [], [], []
+    for c in df.columns:
+        s = df[c]
+        if is_numeric(s):
+            if s.notna().sum() == 0:
+                empty.append(c)
+            continue
+        vals = s.dropna().astype(str).str.strip()
+        vals = vals[vals != ""]
+        if vals.empty:
+            empty.append(c)
+            continue
+        if pd.to_numeric(vals, errors="coerce").notna().all():
+            numeric_text.append(c)
+            continue
+        uniq = vals.nunique()
+        looks_like_dates = vals.head(50).str.match(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}").mean() > 0.8
+        if 1 <= uniq <= 30 and (uniq <= 2 or uniq <= 0.5 * len(vals)) and not looks_like_dates:
+            categories.append(c)
+    show = lambda xs, n=8: " ".join(xs[:n]) + (" …" if len(xs) > n else "")
+    if empty:
+        notes.append(f"{len(empty)} variable{'s are' if len(empty) != 1 else ' is'} completely empty (often section headings or notes from a survey tool): {show(empty)}. You can remove {'them' if len(empty) != 1 else 'it'} with: drop {show(empty, 12)}")
+    if numeric_text:
+        notes.append(f"{len(numeric_text)} variable{'s hold' if len(numeric_text) != 1 else ' holds'} numbers stored as text, so {'they' if len(numeric_text) != 1 else 'it'} can't be used in calculations yet: {show(numeric_text)}. Convert with: destring {show(numeric_text, 12)}, replace")
+    if categories:
+        notes.append(f"{len(categories)} text variable{'s look' if len(categories) != 1 else ' looks'} like categories (for example {show(categories, 5)}). To use {'them' if len(categories) != 1 else 'it'} in tables and models, encode {'each' if len(categories) != 1 else 'it'}, e.g.: encode {categories[0]}, generate({categories[0][:28]}_n)")
+    return notes if len(notes) > 1 else []
 
 
 def is_numeric(s: pd.Series) -> bool:
