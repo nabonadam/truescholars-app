@@ -202,7 +202,10 @@ export function apaRound(value: unknown, key = ""): unknown {
   if (typeof value !== "number" || !Number.isFinite(value)) return value;
   if (/^(p|pv|pvalue|p_?value|prob)(_|$)|_p$/i.test(key)) return value < 0.001 ? "< .001" : value.toFixed(3).replace(/^0/, "");
   if (Number.isInteger(value)) return value;
-  if (/^(r|rho|r2|r2_a|adj_r2|pseudo_r2|eta2|v|cramers_v|cohens_d|d)$/i.test(key)) return Number(value.toFixed(2));
+  // statistics that can't exceed 1 are reported without the leading zero, keeping their decimals (r = .60)
+  if (/^(r|rho|r2|r2_a|adj_r2|pseudo_r2|eta2|partial_eta2|omega2|v|cramers_v|gamma|taub|tau_b|alpha|kappa)$/i.test(key)) return value.toFixed(2).replace(/^(-?)0\./, "$1.");
+  if (/^w$/i.test(key)) return value.toFixed(3).replace(/^(-?)0\./, "$1.");
+  if (/^(cohens_d|d)$/i.test(key)) return Number(value.toFixed(2));
   const a = Math.abs(value);
   if (a >= 0.1) return Number(value.toFixed(2));
   if (a >= 0.001) return Number(value.toFixed(3));
@@ -226,12 +229,12 @@ Fill the explain tool:
 - effect: how big the effect is in practice. Name the effect size given (Cohen's d, eta squared, R squared, Cramer's V, odds ratio, incidence-rate ratio, correlation) and call it small, medium or large by the usual conventions (d .2/.5/.8; r .1/.3/.5; eta squared .01/.06/.14; V depends on df; OR about 1.5/2.5/4.3). Separate statistical significance from practical importance. Omit if no effect size applies.
 - assumptions: up to four short items. State which assumptions this method needs, which the output already checked (quote the notes), and the exact Stata command to check the rest (e.g. "Normality of residuals: predict e, residuals then swilk e"). Only commands from this workspace: predict, estat hettest, estat vif, estat ic, swilk, histogram, graph box, kdensity, qnorm, lroc, estat classification, misstable summarize.
 - limitations: up to three short items that matter for these data (observational data and causation, missing observations dropped, small groups, multiple tests, a non-significant result is not proof of no effect, weights not used).
-- next: up to three short suggestions of a sensible next analysis, each with its Stata command.
+- next: up to three short suggestions of a sensible next analysis, each with its Stata command (only commands from this workspace: the analysis commands already used, plus ttest ..., unequal, testparm, test, lincom, margins, qreg, glm, mediate, tabstat, pwcorr, graph box, kdensity).
 - writeup: the results paragraph in APA 7 style, ready to paste: test, statistic with df, p, effect size and confidence interval where given, in past tense, one or two paragraphs. No headings or bullets in the writeup.
 Plain words throughout; no hedging filler; finish every sentence.`;
 
 const FULL_EXTRA = `
-This was a full analysis (preparation, descriptives, bivariate tests, a main model, diagnostics, effects). Also fill methods: a short "Statistical analysis" paragraph for the methods section (software: The True Scholars Statistics Assistant following Stata conventions; the tests and model used and why; how assumptions were checked; significance level .05). Make the writeup a complete results section: sample description first, then bivariate results, then the model, then what the diagnostics showed. The finding should answer the research question directly.`;
+This was a full analysis (preparation, descriptives, bivariate tests, a main model, diagnostics, effects). Also fill methods: a short paragraph for the methods section, without a heading of its own (software: The True Scholars Statistics Assistant following Stata conventions; the tests and model used and why; how assumptions were checked; significance level .05). Make the writeup a complete results section: sample description first, then bivariate results, then the model, then what the diagnostics showed. The finding should answer the research question directly.`;
 
 export async function interpret(input: string, results: { command: string; summary?: unknown; notes?: string[] }[], vars: VarMeta[] = [], opts: { full?: boolean } = {}): Promise<Interpretation | null> {
   const used = new Set(results.flatMap((r) => r.command.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []));
@@ -265,7 +268,7 @@ export async function interpret(input: string, results: { command: string; summa
   const x = (call?.input ?? null) as Partial<Interpretation> | null;
   if (x?.finding && x.writeup) {
     const list = (v: unknown) => (Array.isArray(v) ? v.map(String).map((t) => t.trim()).filter(Boolean).slice(0, 4) : undefined);
-    return { finding: x.finding.trim(), methods: x.methods?.trim() || undefined, effect: x.effect?.trim() || undefined, assumptions: list(x.assumptions), limitations: list(x.limitations), next: list(x.next), writeup: x.writeup.trim() };
+    return { finding: x.finding.trim(), methods: x.methods?.trim().replace(/^statistical analys[ie]s\.?\s*/i, "") || undefined, effect: x.effect?.trim() || undefined, assumptions: list(x.assumptions), limitations: list(x.limitations), next: list(x.next), writeup: x.writeup.trim() };
   }
   const text = out.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
   return text ? { finding: text, writeup: text } : null;

@@ -158,3 +158,10 @@ def test_survey_scales_and_prepare_fixes(tmp_path):
 
 def is_num(s):
     return pd.api.types.is_numeric_dtype(s)
+
+
+def test_testparm_matches_test(ds):
+    ok(ds, "regress wellbeing age i.region")
+    a = ok(ds, "testparm i.region")["summary"]
+    b = ok(ds, "test 2.region 3.region 4.region 5.region")["summary"]
+    assert a["F"] == pytest.approx(b["F"]) and a["df1"] == 4

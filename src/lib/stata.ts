@@ -32,7 +32,8 @@ export function looksLikeStata(input: string): boolean {
   const lines = input
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("*") && !l.startsWith("//"));
+    // comments are dropped, except a full analysis's "* Step 2: ..." headings, which lay out the results
+    .filter((l) => l && ((!l.startsWith("*") && !l.startsWith("//")) || /^\*\s*Step\s+\d+\s*:/i.test(l)));
   if (!lines.length) return false;
   return lines.every((l) => {
     const m = l.match(WORD);
@@ -49,5 +50,6 @@ export function splitCommands(input: string): string[] {
   return input
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("*") && !l.startsWith("//"));
+    // comments are dropped, except a full analysis's "* Step 2: ..." headings, which lay out the results
+    .filter((l) => l && ((!l.startsWith("*") && !l.startsWith("//")) || /^\*\s*Step\s+\d+\s*:/i.test(l)));
 }

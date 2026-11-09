@@ -472,6 +472,48 @@ def test(ds: Dataset, cmd: Command) -> Result:
     return Result(log="\n".join(lines), tables=[t], summary=summ)
 
 
+def testparm(ds: Dataset, cmd: Command) -> Result:
+    """Joint test that all coefficients of the listed terms are zero: testparm i.region age."""
+    e = _need_est(ds)
+    terms = parse_fvlist(cmd.args, ds.df)
+    idx = []
+    for t in terms:
+        names = {p[1] for p in t.parts}
+        group = "#".join(p[1] for p in t.parts)
+        for i, (g, l) in enumerate(e["keep"]):
+            if (g and (g == group or g in names)) or (not g and l in names):
+                idx.append(i)
+    idx = sorted(set(idx))
+    if not idx:
+        raise StataError("no such variables in the last model")
+    shown = [f"{(e['keep'][i][0] + '=' + e['keep'][i][1]) if e['keep'][i][0] else e['keep'][i][1]} = 0" for i in idx]
+    cmd.args = " ".join(f"_coef{i}" for i in idx)
+    cmd.exp = None
+    return _wald(ds, e, idx, shown)
+
+
+def _wald(ds: Dataset, e: dict, idx: list[int], shown: list[str]) -> Result:
+    b, V = np.asarray(e["b"], dtype=float), np.asarray(e["V"], dtype=float)
+    R = np.zeros((len(idx), len(b)))
+    for row, i in enumerate(idx):
+        R[row, i] = 1
+    d = R @ b
+    W = float(d @ np.linalg.pinv(R @ V @ R.T) @ d)
+    q = len(idx)
+    lines = [""] + [f" ({k + 1})  {s_}" for k, s_ in enumerate(shown)] + [""]
+    if e.get("df_r"):
+        F = W / q
+        p = float(st.f.sf(F, q, e["df_r"]))
+        lines += [f"{'':7}F({q}, {int(e['df_r'])}) = {F:>8.2f}", f"{'':12}Prob > F = {p:>8.4f}"]
+        summ, txt = {"F": F, "df1": q, "df2": int(e["df_r"]), "p": p}, f"F({q}, {int(e['df_r'])}) = {fmt.apa_num(F)}"
+    else:
+        p = float(st.chi2.sf(W, q))
+        lines += [f"{'':11}chi2({q}) = {W:>8.2f}", f"{'':9}Prob > chi2 = {p:>8.4f}"]
+        summ, txt = {"chi2": W, "df": q, "p": p}, f"χ²({q}) = {fmt.apa_num(W)}"
+    t = Table("Joint test of coefficients", ["Hypothesis", "Statistic", "p"], [["All listed coefficients = 0", txt, fmt.apa_p(p)]], note=f"After: {e['cmd']}")
+    return Result(log="\n".join(lines), tables=[t], summary=summ)
+
+
 def lincom(ds: Dataset, cmd: Command) -> Result:
     e = _need_est(ds)
     b, V = np.asarray(e["b"], dtype=float), np.asarray(e["V"], dtype=float)

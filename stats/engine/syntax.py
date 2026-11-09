@@ -91,6 +91,7 @@ COMMANDS = {
     "tobit": "tobit",
     "test": "test",
     "lincom": "lincom",
+    "testparm": "testparm",
     "mediate": "mediate",
     "pca": "pca",
     "cluster": "cluster",

@@ -132,7 +132,7 @@ class RunBody(LoadBody):
     lastMargins: str | None = None  # the session's last margins, for marginsplot
 
 
-POST_ESTIMATION = ("predict", "estat", "margins", "marginsplot", "lroc", "test", "lincom", "di")
+POST_ESTIMATION = ("predict", "estat", "margins", "marginsplot", "lroc", "test", "testparm", "lincom", "di")
 
 
 def _restore_estimation(ds: Dataset, body: RunBody):

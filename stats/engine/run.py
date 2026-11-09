@@ -99,6 +99,7 @@ HANDLERS = {
     "tobit": ex.tobit,
     "test": ex.test,
     "lincom": ex.lincom,
+    "testparm": ex.testparm,
     "mediate": ex.mediate,
     "pca": ex.pca,
     "cluster": ex.cluster,
