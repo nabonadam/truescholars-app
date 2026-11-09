@@ -257,12 +257,29 @@ def encode(ds: Dataset, cmd: Command) -> Result:
         raise StataError(f"{var} is not a string variable; it is already numeric")
     text = s.where(s.notna(), "").astype(str)
     levels = sorted(v for v in text.unique() if v != "")
-    codes = {v: i + 1 for i, v in enumerate(levels)}
+    lbl = cmd.opt("label")
+    if isinstance(lbl, str):
+        # Stata: use an existing value label's codes; text not in it gets the next codes (unless noextend)
+        name = lbl.strip()
+        labels = dict(ds.label_sets.get(name, {}))
+        codes = {v: k for k, v in labels.items()}
+        nxt = int(max([k for k in labels if isinstance(k, (int, float))] or [0])) + 1
+        extra = [v for v in levels if v not in codes]
+        if extra and cmd.opt("noextend"):
+            raise StataError(f"{len(extra)} value{'s' if len(extra) > 1 else ''} of {var} not in label {name}: {', '.join(extra[:5])}")
+        for v in extra:
+            codes[v] = nxt
+            labels[nxt] = v
+            nxt += 1
+        ds.label_sets[name] = labels
+    else:
+        name = target
+        codes = {v: i + 1 for i, v in enumerate(levels)}
+        labels = {i + 1: v for i, v in enumerate(levels)}
+        ds.label_sets[name] = labels
     keep = selected(ds, cmd)
     ds.df[target] = text.map(codes).where(keep).astype(float)
-    labels = {i + 1: v for i, v in enumerate(levels)}
-    ds.label_sets[target] = labels
-    ds.value_labels[target] = dict(labels)
+    ds.value_labels[target] = ds.label_sets[name]
     if ds.label(var):
         ds.var_labels[target] = ds.label(var)
     return Result(log="", changes_data=True, summary={"encoded": var, "into": target, "levels": len(levels)})

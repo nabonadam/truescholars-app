@@ -83,6 +83,23 @@ COMMANDS = {
     "stset": "stset",
     "stcox": "stcox",
     "sts": "sts",
+    "tabstat": "tabstat",
+    "misstable": "misstable",
+    "duplicates": "duplicates",
+    "qreg": "qreg",
+    "glm": "glm",
+    "tobit": "tobit",
+    "test": "test",
+    "lincom": "lincom",
+    "mediate": "mediate",
+    "pca": "pca",
+    "cluster": "cluster",
+    "power": "power",
+    "collapse": "collapse",
+    "reshape": "reshape",
+    "kdensity": "kdensity",
+    "qnorm": "qnorm",
+    "display": "di",
 }
 
 # Real Stata commands we deliberately don't run, with what to do instead.
@@ -90,8 +107,8 @@ NOT_HERE = {
     ("ssc", "net", "ado", "adoupdate", "update", "which"): "Installing Stata packages (ssc/net install) isn't possible here: this workspace runs its own engine that speaks Stata's language, not Stata itself. Ask in plain English for what the package does, or use the built-in commands.",
     ("use", "import", "insheet", "sysuse", "webuse", "infile"): "Your data is already loaded from your upload. To work with a different file, start a new session with it.",
     ("save", "saveold", "export", "outsheet", "outreg2", "esttab", "estout", "putdocx", "putexcel", "asdoc", "log", "cmdlog"): "Saving and exporting work through the Export menu: Word or Excel tables, the do-file, and your data as .dta or .csv.",
-    ("kdensity", "graphbox", "boxplot", "qnorm", "pnorm", "melogit", "meologit", "mepoisson", "xtlogit", "xtprobit", "xtpoisson", "gsem", "sem", "streg", "heckman", "tobit", "zinb", "zip", "arima", "var", "pca", "cluster", "kmeans", "teffects", "psmatch2", "qreg", "glm", "fracreg", "betareg", "nl", "irt", "lca"): "This one isn't a built-in command yet. Describe it in plain English (for example 'run a multilevel logistic model of passed on hours with random intercepts for school') and the assistant will write and run it as an advanced analysis.",
-    ("cd", "dir", "ls", "shell", "capture", "quietly", "noisily", "display", "di", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "merge", "append", "reshape", "collapse", "tsset", "test", "lincom", "help", "search"): "This command isn't a built-in command yet. Ask for it in plain English: the assistant can run it as an advanced analysis.",
+    ("graphbox", "boxplot", "pnorm", "melogit", "meologit", "mepoisson", "xtlogit", "xtprobit", "xtpoisson", "gsem", "sem", "streg", "heckman", "zinb", "zip", "arima", "var", "kmeans", "teffects", "psmatch2", "fracreg", "betareg", "nl", "irt", "lca"): "This one isn't a built-in command yet. Describe it in plain English (for example 'run a multilevel logistic model of passed on hours with random intercepts for school') and the assistant will write and run it as an advanced analysis.",
+    ("cd", "dir", "ls", "shell", "capture", "quietly", "noisily", "macro", "local", "global", "foreach", "forvalues", "program", "preserve", "restore", "merge", "append", "tsset", "help", "search"): "This command isn't a built-in command yet. Ask for it in plain English: the assistant can run it as an advanced analysis.",
 }
 
 
@@ -103,7 +120,7 @@ def _not_here(word: str) -> str | None:
     return None
 
 
-DATA_COMMANDS = {"generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring", "egen", "xtile", "sample", "set", "sort", "gsort", "predict", "svyset", "xtset", "stset"}
+DATA_COMMANDS = {"alpha", "collapse", "reshape", "duplicates", "cluster", "generate", "replace", "recode", "drop", "keep", "rename", "label", "mvdecode", "encode", "destring", "egen", "xtile", "sample", "set", "sort", "gsort", "predict", "svyset", "xtset", "stset"}
 
 
 def canonical(word: str) -> str | None:

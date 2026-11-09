@@ -29,7 +29,7 @@ export type CommandResult = {
   changesData?: boolean;
   images?: { title: string; png: string; width?: number; height?: number }[];
 };
-type Overview = { nObs: number; nVars: number; variables: VarMeta[]; importNotes?: string[] };
+type Overview = { nObs: number; nVars: number; variables: VarMeta[]; importNotes?: string[]; importFixes?: string[] };
 
 // ───────── engine ─────────
 
@@ -141,7 +141,7 @@ export async function createSession(db: DB, ownerId: string, file: { name: strin
   if (o.importNotes?.length) {
     // What converting a CSV/Excel file changed, or what a Stata/SPSS file needs before analysis, shown at the top of the session.
     const native = /\.(dta|sav|zsav)$/i.test(file.name);
-    await db.insert(statRuns).values({ sessionId: s.id, input: native ? "Checked your data" : "Converted to Stata format", mode: "NOTE", status: "IMPORT", explanation: o.importNotes.join("\n") });
+    await db.insert(statRuns).values({ sessionId: s.id, input: native ? "Checked your data" : "Converted to Stata format", mode: "NOTE", status: "IMPORT", explanation: o.importNotes.join("\n"), commands: (o.importFixes ?? []).slice(0, 40) });
   }
   return s.id;
 }
@@ -195,12 +195,13 @@ async function mustRun(db: DB, ownerId: string, runId: string) {
 // ───────── running ─────────
 
 /** Stata typed by the user runs at once; English becomes a plan the user confirms. */
-export async function submit(db: DB, ownerId: string, sessionId: string, input: string, mode: "auto" | "stata" | "english" = "auto") {
+export async function submit(db: DB, ownerId: string, sessionId: string, input: string, mode: "auto" | "stata" | "english" | "full" = "auto") {
   const text = input.trim();
   if (!text) throw new StatsError("Type a request or a command.");
   if (text.length > 4000) throw new StatsError("That is too long. Split it into smaller requests.");
   const session = await mustSession(db, ownerId, sessionId);
   const isStata = mode === "stata" || (mode === "auto" && looksLikeStata(text));
+  const full = mode === "full";
   if (isStata) {
     const commands = splitCommands(text);
     if (commands.length > 40) throw new StatsError("Run at most 40 commands at a time.");
@@ -211,7 +212,7 @@ export async function submit(db: DB, ownerId: string, sessionId: string, input: 
   const recent = (await listRuns(db, sessionId)).filter((r) => r.status === "DONE").slice(-6).flatMap((r) => (r.mode === "PYTHON" ? [`* (Python analysis) ${r.input}`] : r.commands));
   let plan;
   try {
-    plan = await translate(text, { vars: session.variables, nObs: session.nObs, history: session.history, recent });
+    plan = await translate(text, { vars: session.variables, nObs: session.nObs, history: session.history, recent }, { full });
   } catch (err) {
     if (err instanceof AiUnavailable) throw new StatsError(err.message);
     throw err;
@@ -224,7 +225,7 @@ export async function submit(db: DB, ownerId: string, sessionId: string, input: 
   const status = plan.commands.length ? "PLAN" : "CLARIFY";
   const [r] = await db
     .insert(statRuns)
-    .values({ sessionId, input: text, mode: "ENGLISH", commands: plan.commands, status, explanation: plan.clarification && !plan.commands.length ? plan.clarification : plan.explanation })
+    .values({ sessionId, input: full ? `Full analysis: ${text}` : text, mode: "ENGLISH", commands: plan.commands, status, explanation: plan.clarification && !plan.commands.length ? plan.clarification : plan.explanation })
     .returning({ id: statRuns.id });
   await touch(db, sessionId);
   return r.id;
@@ -294,8 +295,10 @@ async function executePython(db: DB, session: Session, runId: string, code: stri
 async function explainRun(db: DB, runId: string, input: string, results: CommandResult[]) {
   const analyses = results.filter((r) => r.ok && r.tables?.length && !r.changesData);
   if (!analyses.length) return;
-  const text = await interpret(input, analyses);
-  if (text) await db.update(statRuns).set({ interpretation: text }).where(eq(statRuns.id, runId));
+  const [row] = await db.select({ variables: statSessions.variables }).from(statRuns).innerJoin(statSessions, eq(statSessions.id, statRuns.sessionId)).where(eq(statRuns.id, runId));
+  const x = await interpret(input, analyses, (row?.variables as VarMeta[] | null) ?? [], { full: input.startsWith("Full analysis: ") });
+  // stored as JSON; older runs hold plain text, which the page still shows
+  if (x) await db.update(statRuns).set({ interpretation: JSON.stringify(x) }).where(eq(statRuns.id, runId));
 }
 
 export async function interpretRun(db: DB, ownerId: string, runId: string) {

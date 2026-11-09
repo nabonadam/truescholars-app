@@ -15,6 +15,7 @@ from . import postest as pe
 from . import survey as sv
 from . import models as md
 from . import statcmds as sc
+from . import extra as ex
 from .data import Dataset, StataError, is_numeric
 from .result import Result
 from .syntax import DATA_COMMANDS, parse
@@ -90,6 +91,23 @@ HANDLERS = {
     "logistic": sc.binary_or_count,
     "probit": sc.binary_or_count,
     "poisson": sc.binary_or_count,
+    "tabstat": ex.tabstat,
+    "misstable": ex.misstable,
+    "duplicates": ex.duplicates,
+    "qreg": ex.qreg,
+    "glm": ex.glm,
+    "tobit": ex.tobit,
+    "test": ex.test,
+    "lincom": ex.lincom,
+    "mediate": ex.mediate,
+    "pca": ex.pca,
+    "cluster": ex.cluster,
+    "power": ex.power,
+    "collapse": ex.collapse,
+    "reshape": ex.reshape,
+    "kdensity": ex.kdensity,
+    "qnorm": ex.qnorm,
+    "display": ex.display,
 }
 
 
@@ -102,6 +120,7 @@ NO_WEIGHTS = {
     "oneway": "weights with oneway aren't available yet; use regress y i.group [aw=w] (its F test is the one-way ANOVA)",
     "codebook": "weights not allowed with codebook",
     "describe": "weights not allowed with describe",
+    **{c: f"weights with {c} aren't available yet; run it unweighted, or describe the weighted analysis in plain English" for c in ("tabstat", "qreg", "glm", "tobit", "mediate", "pca", "cluster", "collapse", "kdensity", "qnorm", "misstable", "duplicates")},
     **{c: f"weights with {c} aren't built in yet; describe the weighted model in plain English and the assistant will run it as an advanced analysis" for c in ("xtreg", "mixed", "ologit", "oprobit", "mlogit", "nbreg", "ivregress", "factor", "alpha", "stcox", "sts")},
 }
 

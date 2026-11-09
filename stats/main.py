@@ -118,7 +118,7 @@ def _changes_data(commands: list[str]) -> bool:
 
 
 def overview(ds: Dataset) -> dict:
-    return {"nObs": int(len(ds.df)), "nVars": int(ds.df.shape[1]), "variables": variables_meta(ds), "importNotes": ds.import_notes}
+    return {"nObs": int(len(ds.df)), "nVars": int(ds.df.shape[1]), "variables": variables_meta(ds), "importNotes": ds.import_notes, "importFixes": ds.settings.get("import_fixes", [])}
 
 
 class LoadBody(BaseModel):
@@ -132,7 +132,7 @@ class RunBody(LoadBody):
     lastMargins: str | None = None  # the session's last margins, for marginsplot
 
 
-POST_ESTIMATION = ("predict", "estat", "margins", "marginsplot", "lroc")
+POST_ESTIMATION = ("predict", "estat", "margins", "marginsplot", "lroc", "test", "lincom", "di")
 
 
 def _restore_estimation(ds: Dataset, body: RunBody):

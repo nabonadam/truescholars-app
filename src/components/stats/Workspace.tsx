@@ -23,7 +23,7 @@ export type RunView = {
   createdAt: string;
 };
 type SessionView = { id: string; title: string; fileName: string; nObs: number; nVars: number; history: string[]; variables: VarMeta[] };
-type Mode = "ask" | "stata";
+type Mode = "ask" | "full" | "stata";
 
 function suggestions(vars: VarMeta[]) {
   const isId = (v: VarMeta) => v.unique === v.nonmissing && v.nonmissing > 50 && /id$|^id|_no$|serial/i.test(v.name);
@@ -84,10 +84,10 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
     setInput("");
     histIdx.current = -1;
     start(async () => {
-      const r = await submitAction(session.id, t, as === "stata" ? "stata" : "auto");
+      const r = await submitAction(session.id, t, as === "stata" ? "stata" : as === "full" ? "full" : "auto");
       if (r?.error) {
         setError(r.error);
-        if (as === "ask") setInput(t);
+        if (as !== "stata") setInput(t);
       }
       setPending(null);
     });
@@ -154,14 +154,14 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
         <div ref={feed} className="lab-paper flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[920px] px-3 py-6 sm:px-6">
             {runs.filter((r) => r.status === "IMPORT").map((r) => (
-              <div key={r.id} className="mb-7"><RunBlock run={r} sessionId={session.id} firstTable={0} aiEnabled={aiEnabled} onEdit={putCommand} /></div>
+              <div key={r.id} className="mb-7"><RunBlock run={r} sessionId={session.id} firstTable={0} aiEnabled={aiEnabled} onEdit={putCommand} onPrepare={access.canRun && r.commands.length && !runs.some((x) => x.status === "DONE" && x.commands.includes(r.commands[0])) ? () => send(r.commands.join("\n"), "stata") : undefined} /></div>
             ))}
             {!runs.some((r) => r.status !== "IMPORT") && !pending && access.canRun && <Welcome sugg={sugg} aiEnabled={aiEnabled} onAsk={(t) => { setMode("ask"); setInput(t); box.current?.focus(); }} onCmd={putCommand} />}
             <div className="space-y-7">
               {runs.map((r, i) => r.status === "IMPORT" ? null : (
                 <RunBlock key={r.id} run={r} sessionId={session.id} firstTable={numbered[i]} aiEnabled={aiEnabled} onEdit={putCommand} />
               ))}
-              {pending && <Pending text={pending} ask={mode === "ask"} />}
+              {pending && <Pending text={pending} ask={mode !== "stata"} />}
             </div>
           </div>
         </div>
@@ -182,7 +182,7 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
             {!input && !pending && runs.length > 0 && (
               <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
                 {sugg.slice(1).map((s) => (
-                  <button key={s.label} type="button" onClick={() => (mode === "ask" ? setInput(s.ask) : setInput(s.cmd))} className="flex-none rounded-full border border-line bg-white px-3 py-1 text-[12.5px] font-medium text-ink-muted hover:border-green hover:text-green">
+                  <button key={s.label} type="button" onClick={() => (mode !== "stata" ? setInput(s.ask) : setInput(s.cmd))} className="flex-none rounded-full border border-line bg-white px-3 py-1 text-[12.5px] font-medium text-ink-muted hover:border-green hover:text-green">
                     {s.label}
                   </button>
                 ))}
@@ -200,6 +200,9 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
                   <button type="button" onClick={() => setMode("ask")} className={`flex items-center gap-1.5 rounded-full px-3 py-1 ${mode === "ask" ? "bg-amber text-ink" : "text-white/70 hover:text-white"}`}>
                     <Icon name="spark" size={13} /> Ask
                   </button>
+                  <button type="button" onClick={() => setMode("full")} title="Plan and run a complete analysis of a research question, with a write-up" className={`flex items-center gap-1.5 rounded-full px-3 py-1 ${mode === "full" ? "bg-amber text-ink" : "text-white/70 hover:text-white"}`}>
+                    <Icon name="layers" size={13} /> Full analysis
+                  </button>
                   <button type="button" onClick={() => setMode("stata")} className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono ${mode === "stata" ? "bg-amber text-ink" : "text-white/70 hover:text-white"}`}>
                     <span className="font-bold">.</span> Stata
                   </button>
@@ -214,10 +217,10 @@ export function Workspace({ session, runs, aiEnabled, access }: { session: Sessi
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onKey}
                   rows={1}
-                  spellCheck={mode === "ask"}
-                  placeholder={mode === "ask" ? (aiEnabled ? "Ask about your data, e.g. Does income differ between urban and rural households?" : "Plain-English requests are not switched on yet. Switch to Stata.") : sugg.find((x) => x.cmd.startsWith("regress"))?.cmd ?? sugg[1]?.cmd ?? "summarize"}
+                  spellCheck={mode !== "stata"}
+                  placeholder={mode === "full" ? (aiEnabled ? "Your research question, e.g. What predicts household well-being? Plans and runs every step, then writes it up." : "Plain-English requests are not switched on yet. Switch to Stata.") : mode === "ask" ? (aiEnabled ? "Ask about your data, e.g. Does income differ between urban and rural households?" : "Plain-English requests are not switched on yet. Switch to Stata.") : sugg.find((x) => x.cmd.startsWith("regress"))?.cmd ?? sugg[1]?.cmd ?? "summarize"}
                   className={`max-h-[220px] min-h-[26px] flex-1 resize-none bg-transparent leading-[1.55] text-white outline-none placeholder:text-white/35 ${mode === "stata" ? "font-mono text-[14px]" : "text-[15px]"}`}
-                  aria-label={mode === "ask" ? "Ask a question" : "Stata command"}
+                  aria-label={mode === "full" ? "Research question for a full analysis" : mode === "ask" ? "Ask a question" : "Stata command"}
                 />
                 <button type="button" onClick={() => send()} disabled={!input.trim() || !!pending} className="grid h-9 w-9 flex-none place-items-center rounded-full bg-amber text-ink transition hover:scale-105 disabled:opacity-40 disabled:hover:scale-100" aria-label="Run">
                   {pending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink/30 border-t-ink" /> : <Icon name="play" size={15} />}
@@ -399,7 +402,7 @@ function When({ iso }: { iso: string }) {
   return <>{t}</>;
 }
 
-function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunView; sessionId: string; firstTable: number; aiEnabled: boolean; onEdit: (c: string) => void }) {
+function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit, onPrepare }: { run: RunView; sessionId: string; firstTable: number; aiEnabled: boolean; onEdit: (c: string) => void; onPrepare?: () => void }) {
   const [busy, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState(run.commands.join("\n"));
@@ -417,6 +420,17 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
           <ul className="mt-1.5 space-y-1 text-[13.5px] text-ink-muted">
             {rest.map((line, i) => <li key={i}>{line}</li>)}
           </ul>
+          {onPrepare && run.commands.length > 0 && (
+            <div className="mt-3 rounded-sm border border-amber/40 bg-amber-tint/50 p-3">
+              <p className="text-[13px] font-bold text-ink">Prepare my data: {run.commands.length} fix{run.commands.length === 1 ? "" : "es"}</p>
+              <pre className="mt-1.5 max-h-36 overflow-auto font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-ink-muted">{run.commands.join("\n")}</pre>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className="btn-amber min-h-9 px-4 text-sm" onClick={onPrepare}>Prepare my data</button>
+                <button type="button" className="text-sm font-bold text-green" onClick={() => onEdit(run.commands.join("\n"))}>Edit first</button>
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-ink-muted">Runs as ordinary Stata commands, so they go into your do-file. Your original file is never changed.</p>
+            </div>
+          )}
           <p className="mt-2 text-[12.5px] text-ink-muted">Download it as a Stata file any time from Export → Original data (.dta).</p>
         </div>
       </div>
@@ -537,6 +551,16 @@ function RunBlock({ run, sessionId, firstTable, aiEnabled, onEdit }: { run: RunV
 function ResultView({ r, firstTable }: { r: CommandResult; firstTable: number }) {
   const tables = r.ok ? (r.tables ?? []) : [];
   const [view, setView] = useState<"out" | "table">("out");
+  const step = /^\*\s*Step\s+(\d+)\s*:\s*(.+)$/i.exec(r.command.trim());
+  if (step) {
+    // a full analysis is laid out in steps: "* Step 2: Describe the sample"
+    return (
+      <div className="flex items-center gap-2.5 bg-white/[0.04] px-4 py-2">
+        <span className="grid size-6 flex-none place-items-center rounded-full bg-amber text-[12px] font-bold text-ink">{step[1]}</span>
+        <span className="text-[13.5px] font-bold text-white">{step[2]}</span>
+      </div>
+    );
+  }
   if (r.skipped) {
     return (
       <div className="px-4 py-2.5">
@@ -603,17 +627,69 @@ function ResultView({ r, firstTable }: { r: CommandResult; firstTable: number })
   );
 }
 
+type Explained = { finding: string; methods?: string; effect?: string; assumptions?: string[]; limitations?: string[]; next?: string[]; writeup: string };
+
+function parseInterpretation(text: string): Explained {
+  try {
+    const x = JSON.parse(text) as Explained;
+    if (x && typeof x.finding === "string" && typeof x.writeup === "string") return x;
+  } catch {}
+  return { finding: text, writeup: text }; // older runs: plain paragraphs
+}
+
 function Interpretation({ text }: { text: string }) {
+  const x = parseInterpretation(text);
+  const legacy = x.finding === x.writeup;
+  const section = (title: string, items?: string[]) =>
+    items?.length ? (
+      <div className="mt-3">
+        <span className="text-[12px] font-bold tracking-wide text-ink-muted uppercase">{title}</span>
+        <ul className="mt-1 space-y-1">
+          {items.map((t, i) => (
+            <li key={i} className="flex gap-2 text-[14px] leading-relaxed text-ink"><span className="mt-2 size-1.5 flex-none rounded-full bg-amber" />{t}</li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
   return (
     <div className="relative mt-3 rounded-sm border border-line bg-white p-4 pl-5 sm:p-5 sm:pl-6">
       <span className="absolute top-4 bottom-4 left-0 w-1 rounded-r bg-amber" />
       <div className="mb-1.5 flex items-center justify-between">
         <span className="eyebrow">What this means</span>
-        <CopyButton text={text} label="Copy" className="text-[12px] font-bold text-green" />
+        {legacy && <CopyButton text={text} label="Copy" className="text-[12px] font-bold text-green" />}
       </div>
-      {text.split(/\n{2,}/).map((p, i) => (
+      {x.finding.split(/\n{2,}/).map((p, i) => (
         <p key={i} className="mt-1.5 text-[15px] leading-relaxed text-ink">{p}</p>
       ))}
+      {!legacy && (
+        <>
+          {x.effect && (
+            <div className="mt-3">
+              <span className="text-[12px] font-bold tracking-wide text-ink-muted uppercase">How big is the effect?</span>
+              <p className="mt-1 text-[14px] leading-relaxed text-ink">{x.effect}</p>
+            </div>
+          )}
+          {section("Assumptions and checks", x.assumptions)}
+          {section("Keep in mind", x.limitations)}
+          {section("What to run next", x.next)}
+          <div className="mt-4 rounded-sm bg-parchment p-3.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-bold tracking-wide text-ink-muted uppercase">For your paper (APA 7)</span>
+              <CopyButton text={x.methods ? `Statistical analysis\n\n${x.methods}\n\nResults\n\n${x.writeup}` : x.writeup} label="Copy" className="text-[12px] font-bold text-green" />
+            </div>
+            {x.methods && (
+              <>
+                <p className="mt-2 text-[12.5px] font-bold text-ink">Statistical analysis</p>
+                <p className="mt-1 text-[14.5px] leading-relaxed text-ink">{x.methods}</p>
+                <p className="mt-3 text-[12.5px] font-bold text-ink">Results</p>
+              </>
+            )}
+            {x.writeup.split(/\n{2,}/).map((p, i) => (
+              <p key={i} className="mt-1.5 text-[14.5px] leading-relaxed text-ink">{p}</p>
+            ))}
+          </div>
+        </>
+      )}
       <p className="mt-3 text-[11.5px] text-ink-muted">Written by AI from the numbers above. Check it against the output before you use it.</p>
     </div>
   );

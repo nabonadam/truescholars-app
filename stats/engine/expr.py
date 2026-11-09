@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 import numpy as np
+from scipy import stats as st
 import pandas as pd
 
 from .data import StataError
@@ -293,6 +294,29 @@ class Parser:
                 "lower": lambda: args[0].str.lower() if isinstance(args[0], pd.Series) else args[0].lower(),
                 "upper": lambda: args[0].str.upper() if isinstance(args[0], pd.Series) else args[0].upper(),
                 "trim": lambda: args[0].str.strip() if isinstance(args[0], pd.Series) else args[0].strip(),
+                "strtrim": lambda: args[0].str.strip() if isinstance(args[0], pd.Series) else args[0].strip(),
+                "itrim": lambda: args[0].str.replace(r"\s+", " ", regex=True) if isinstance(args[0], pd.Series) else " ".join(args[0].split()),
+                "proper": lambda: args[0].str.title() if isinstance(args[0], pd.Series) else args[0].title(),
+                "substr": lambda: _substr(*args),
+                "strpos": lambda: _strfn(args[0], lambda v: float(v.find(str(args[1])) + 1)),
+                "subinstr": lambda: _strfn(args[0], lambda v: v.replace(str(args[1]), str(args[2])) if len(args) < 4 or args[3] == "." or (isinstance(args[3], float) and np.isnan(args[3])) else v.replace(str(args[1]), str(args[2]), int(args[3]))),
+                "regexm": lambda: _bool(args[0].fillna("").astype(str).str.contains(str(args[1]), regex=True)) if isinstance(args[0], pd.Series) else float(bool(__import__("re").search(str(args[1]), str(args[0])))),
+                "word": lambda: _strfn(args[0], lambda v: (v.split() + [""] * int(args[1]))[int(args[1]) - 1] if int(args[1]) > 0 else ""),
+                "wordcount": lambda: _strfn(args[0], lambda v: float(len(v.split()))),
+                "mod": lambda: _dist(np.mod, args[0], args[1]),
+                "normal": lambda: _dist(st.norm.cdf, args[0]),
+                "normalden": lambda: _dist(st.norm.pdf, args[0]) if len(args) == 1 else _dist(lambda x, m, s: st.norm.pdf(x, m, s), *args),
+                "invnormal": lambda: _dist(st.norm.ppf, args[0]),
+                "ttail": lambda: _dist(lambda df_, t: st.t.sf(t, df_), args[0], args[1]),
+                "invttail": lambda: _dist(lambda df_, p: st.t.isf(p, df_), args[0], args[1]),
+                "chi2": lambda: _dist(lambda df_, x: st.chi2.cdf(x, df_), args[0], args[1]),
+                "chi2tail": lambda: _dist(lambda df_, x: st.chi2.sf(x, df_), args[0], args[1]),
+                "invchi2tail": lambda: _dist(lambda df_, p: st.chi2.isf(p, df_), args[0], args[1]),
+                "ftail": lambda: _dist(lambda a, b, f_: st.f.sf(f_, a, b), args[0], args[1], args[2]),
+                "invftail": lambda: _dist(lambda a, b, p: st.f.isf(p, a, b), args[0], args[1], args[2]),
+                "binomialtail": lambda: _dist(lambda n, k, p: st.binom.sf(k - 1, n, p), args[0], args[1], args[2]),
+                "comb": lambda: _dist(lambda n, k: __import__("scipy.special", fromlist=["comb"]).comb(n, k, exact=False), args[0], args[1]),
+                "lnfactorial": lambda: _dist(lambda n: __import__("scipy.special", fromlist=["gammaln"]).gammaln(n + 1), args[0]),
             }
         if f not in fns:
             raise StataError(f"unknown function {fname}()")
@@ -313,6 +337,32 @@ def _cond(args):
     if isinstance(t, pd.Series):
         return pd.Series(np.where(t, a, b), index=t.index)
     return a if t else b
+
+
+def _dist(fn, *args):
+    """A numeric function applied elementwise; a Series comes back as a Series."""
+    idx = next((a.index for a in args if isinstance(a, pd.Series)), None)
+    vals = [a.astype(float).to_numpy() if isinstance(a, pd.Series) else float(a) for a in args]
+    with np.errstate(all="ignore"):
+        out = fn(*vals)
+    return pd.Series(out, index=idx, dtype=float) if idx is not None else float(out)
+
+
+def _strfn(x, fn):
+    if isinstance(x, pd.Series):
+        return x.map(lambda v: fn("" if pd.isna(v) else str(v)))
+    return fn(str(x))
+
+
+def _substr(x, start, length=None):
+    def cut(v: str) -> str:
+        n1 = int(start)
+        i = n1 - 1 if n1 > 0 else len(v) + n1
+        if length is None or (isinstance(length, float) and np.isnan(length)):
+            return v[max(i, 0):]
+        return v[max(i, 0): max(i, 0) + int(length)]
+
+    return _strfn(x, cut)
 
 
 def resolve_var(name: str, df: pd.DataFrame) -> str:

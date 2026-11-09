@@ -61,6 +61,13 @@ def _complete(ds: Dataset, e: dict, frame: pd.DataFrame) -> pd.Series:
 
 def predict(ds: Dataset, cmd: Command) -> Result:
     e = _est(ds)
+    if e["kind"] == "pca":  # component scores: predict pc1 pc2 ...
+        from .extra import pca_scores
+
+        names = cmd.args.split()
+        if not names:
+            raise StataError("use: predict newvar1 [newvar2 ...] after pca")
+        return pca_scores(ds, names)
     name = _new_name(cmd.args.split()[-1] if cmd.args.split() else "", ds)
     opts = {k.lower() for k in cmd.options}
     kind = e["kind"]

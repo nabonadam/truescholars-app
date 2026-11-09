@@ -14,6 +14,7 @@ from scipy import stats as st
 from . import fmt
 from .data import Dataset, StataError, is_numeric
 from .expr import resolve_var
+from .datacmds import selected
 from .result import Result, Table
 from .statcmds import (_apa_reg_rows, _coef_table, _drop_collinear, _hdr, _levels, build_design, level_label, nice, remember, sample)
 from .syntax import Command, expand_varlist, parse_fvlist
@@ -674,7 +675,23 @@ def alpha(ds: Dataset, cmd: Command) -> Result:
     if rows:
         tables.append(Table("Item statistics", ["Item", "Item–rest r", "α if item deleted"], rows))
     notes = [f"{', '.join(rev)} correlated negatively with the scale and {'was' if len(rev) == 1 else 'were'} reversed (add asis to stop this)."] if rev else []
-    return Result(log="\n".join(lines), tables=tables, notes=notes, summary={"alpha": a, "items": k, "n": len(sub), "reversed": rev})
+    gen = cmd.opt("generate")
+    if isinstance(gen, str):
+        # Stata: the summative score is the mean of the (reversed / standardized) items, over each
+        # observation's nonmissing items, or complete observations only with casewise
+        name = gen.strip()
+        if name in ds.df.columns:
+            raise StataError(f"variable {name} already defined")
+        Xa = ds.df[vs].astype(float)
+        if std:
+            Xa = (Xa - sub[vs].mean()) / sub[vs].std(ddof=1)
+        for v in rev:
+            Xa[v] = -Xa[v]
+        score = Xa.mean(axis=1) if not cmd.opt("casewise") else Xa.mean(axis=1).where(Xa.notna().all(axis=1))
+        ds.df[name] = score.where(selected(ds, cmd))
+        ds.var_labels[name] = f"Scale of {' '.join(vs)}"[:80]
+        lines.append(f"(scale {name} created: mean of the {k} items{', reversed items negated' if rev else ''})")
+    return Result(log="\n".join(lines), tables=tables, notes=notes, changes_data=isinstance(gen, str), summary={"alpha": a, "items": k, "n": len(sub), "reversed": rev})
 
 
 # ───────────── survival: stset / stcox / sts ─────────────

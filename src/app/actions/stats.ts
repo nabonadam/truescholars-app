@@ -42,7 +42,7 @@ export async function sampleAction(): Promise<StatsState> {
 
 const page = (id: string) => revalidatePath(`/tools/stats/${id}`);
 
-export async function submitAction(sessionId: string, input: string, mode: "auto" | "stata" | "english"): Promise<StatsState> {
+export async function submitAction(sessionId: string, input: string, mode: "auto" | "stata" | "english" | "full"): Promise<StatsState> {
   let user;
   try {
     user = await runner();
