@@ -4,7 +4,7 @@
  * only, so a US$ price is charged as its cedi equivalent at the day's rate.
  */
 
-export type PlanId = "stats" | "qual" | "lit" | "all";
+export type PlanId = "stats" | "qual" | "lit" | "all" | "api";
 export type PlanTool = "stats" | "qual" | "lit";
 export type Currency = "GHS" | "USD";
 
@@ -14,6 +14,8 @@ export const PLANS: Record<PlanId, { name: string; tools: PlanTool[]; GHS: numbe
   qual: { name: "Qualitative Studio", tools: ["qual"], GHS: 159, USD: 19 },
   lit: { name: "Literature Review", tools: ["lit"], GHS: 189, USD: 24 },
   all: { name: "All three tools", tools: ["stats", "qual", "lit"], GHS: 379, USD: 45 },
+  // for organisations: the Qualitative Studio plus the developer API, webhooks and 5× the transcription allowance
+  api: { name: "Qualitative Studio API", tools: ["qual"], GHS: 669, USD: 79 },
 };
 
 /** Literature retrieval by an expert, per paper (the admin's starting price when assigning). */

@@ -8,6 +8,7 @@ import type { VerifiedTransaction } from "@/lib/paystack";
 import { notify } from "./notifications";
 import { grantAccess } from "./statsAccess";
 import { grantToolAccess } from "./toolAccess";
+import { grantApiAccess } from "./apiAccess";
 
 const day = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -43,12 +44,16 @@ export async function applyToolPayment(db: DB, tx: VerifiedTransaction): Promise
     const r = t === "stats" ? await grantAccess(db, u.email, days, note, new Date(), { quiet: true }) : await grantToolAccess(db, t, u.email, days, note, new Date(), { quiet: true });
     if (r.until > until) until = r.until;
   }
+  if (m.plan === "api") {
+    const r = await grantApiAccess(db, userId!, days, note, new Date(), { quiet: true });
+    if (r.until > until) until = r.until;
+  }
   await notify(db, {
     userId: userId!,
     kind: "TOOL_ACCESS",
     title: `Payment received: ${plan.name} is on`,
     body: `${m.months === 1 ? "One month" : `${m.months} months`} of access, until ${day(until)}. Thank you!`,
-    link: TOOL_PATH[plan.tools[0]],
+    link: m.plan === "api" ? "/settings/api" : TOOL_PATH[plan.tools[0]],
   });
   return "applied";
 }

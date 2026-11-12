@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 /** Paystack sends the customer back here. We never trust the URL: we verify with Paystack first. */
 export default async function PaymentCallback({ searchParams }: { searchParams: Promise<{ reference?: string; order?: string; tool?: string }> }) {
   const { reference, order, tool: t } = await searchParams;
-  const tool = t && t in TOOL_PATH ? (t as PlanTool) : null;
+  const api = t === "api";
+  const tool = api ? ("qual" as PlanTool) : t && t in TOOL_PATH ? (t as PlanTool) : null;
   let title = "We couldn't confirm this payment";
   let detail = "No payment reference was provided.";
   let ok = false;
@@ -38,7 +39,7 @@ export default async function PaymentCallback({ searchParams }: { searchParams: 
       <div className="card flex flex-col gap-4 text-center">
         <h1 className={`text-2xl font-bold ${ok ? "text-green" : "text-amber-deep"}`}>{title}</h1>
         <p className="text-ink-muted">{detail}</p>
-        <Link href={order ? `/orders/${order}` : tool ? TOOL_PATH[tool] : "/dashboard"} className="btn-primary mx-auto">{order ? "View your order" : tool ? `Open ${TOOL_NAME[tool]}` : "Back to dashboard"}</Link>
+        <Link href={order ? `/orders/${order}` : api ? "/settings/api" : tool ? TOOL_PATH[tool] : "/dashboard"} className="btn-primary mx-auto">{order ? "View your order" : api ? "Create your API key" : tool ? `Open ${TOOL_NAME[tool]}` : "Back to dashboard"}</Link>
       </div>
     </section>
   );

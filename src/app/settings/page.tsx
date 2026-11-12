@@ -53,6 +53,9 @@ export default async function Settings() {
               <Icon name={s.icon} size={16} className="text-green" /> {s.label}
             </a>
           ))}
+          <Link href="/settings/api" className="inline-flex shrink-0 items-center gap-2.5 rounded-full border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink no-underline lg:rounded-sm lg:border-transparent lg:bg-transparent lg:hover:bg-white">
+            <Icon name="lock" size={16} className="text-green" /> Developer API
+          </Link>
           {a.roles.includes("EXPERT") && (
             <Link href="/earnings" className="inline-flex shrink-0 items-center gap-2.5 rounded-full border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink no-underline lg:rounded-sm lg:border-transparent lg:bg-transparent lg:hover:bg-white">
               <Icon name="wallet" size={16} className="text-green" /> Payout account

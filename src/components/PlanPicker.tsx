@@ -33,13 +33,13 @@ export function PlanPicker({ tool, testMode, initialCurrency, usdToGhs }: { tool
   const price = planPrice(plan, months, currency);
   const full = PLANS[plan][currency] * months;
   const ghs = chargeGhsMinor(price, currency, usdToGhs) / 100;
-  const options: PlanId[] = [tool, "all"];
+  const options: PlanId[] = tool === "api" ? ["api"] : [tool, "all"];
   const seg = (on: boolean) => `rounded-full px-3 py-1 text-[13px] font-bold transition ${on ? "bg-green text-white" : "text-ink-muted hover:text-ink"}`;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-bold">Choose a plan</span>
+        <span className="text-sm font-bold">{tool === "api" ? "Choose a length" : "Choose a plan"}</span>
         <div role="radiogroup" aria-label="Currency" className="inline-flex rounded-full border border-line bg-white p-0.5">
           <button type="button" role="radio" aria-checked={currency === "GHS"} onClick={() => choose("GHS")} className={seg(currency === "GHS")}>GH₵</button>
           <button type="button" role="radio" aria-checked={currency === "USD"} onClick={() => choose("USD")} className={seg(currency === "USD")}>US$</button>
@@ -51,7 +51,7 @@ export function PlanPicker({ tool, testMode, initialCurrency, usdToGhs }: { tool
             <input type="radio" name="plan" checked={plan === p} onChange={() => setPlan(p)} className="size-4 accent-green" />
             <span className="min-w-0 flex-1">
               <span className="block font-bold">{PLANS[p].name}</span>
-              <span className="block text-[13px] text-ink-muted">{p === "all" ? "Statistics, Qualitative Studio and Literature Review" : "This tool only"}</span>
+              <span className="block text-[13px] text-ink-muted">{p === "all" ? "Statistics, Qualitative Studio and Literature Review" : p === "api" ? "Qualitative Studio, API keys and webhooks" : "This tool only"}</span>
             </span>
             <span className="text-right font-bold whitespace-nowrap">{money(PLANS[p][currency], currency)}<span className="text-[12px] font-normal text-ink-muted"> /month</span></span>
           </label>

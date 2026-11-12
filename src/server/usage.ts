@@ -6,6 +6,7 @@
  * report to the current action through AsyncLocalStorage, so nothing has to be passed down by hand).
  */
 
+import { apiAccessFor } from "./apiAccess";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import type { DB } from "@/db";
@@ -40,6 +41,9 @@ export const LIMITS: Record<UsageTool, { paid: Limit; trial: Limit }> = {
   qual: { paid: { units: { "qual.minutes": 600 }, costUsd: 11 }, trial: { units: { "qual.minutes": 30 }, costUsd: 1.5 } },
   lit: { paid: { units: { "lit.read": 150 }, costUsd: 12 }, trial: { units: { "lit.read": 10 }, costUsd: 1.5 } },
 };
+
+/** Qualitative Studio allowance on the API plan, per calendar month. */
+export const API_PLAN_LIMIT: Limit = { units: { "qual.minutes": 3000 }, costUsd: 45 };
 
 export const UNIT_LABEL: Record<UnitKind, { one: string; many: string }> = {
   "stats.ai": { one: "AI request", many: "AI requests" },
@@ -91,8 +95,10 @@ const nextMonth = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.get
 export async function usageStatus(db: DB, user: { id: string; roles: string[] }, tool: UsageTool, now = new Date()) {
   const access = await accessOf(db, user, tool);
   if (access.kind === "admin") return { access, unlimited: true as const, units: [] as { kind: UnitKind; used: number; limit: number }[], costUsedPct: 0, resetsAt: null as Date | null, blocked: null as string | null };
-  const trial = access.kind === "trial";
-  const limit = LIMITS[tool][trial ? "trial" : "paid"];
+  // the API plan includes the Qualitative Studio, with a larger monthly allowance
+  const api = tool === "qual" && (await apiAccessFor(db, user, now)).active;
+  const trial = !api && access.kind === "trial";
+  const limit = api ? API_PLAN_LIMIT : LIMITS[tool][trial ? "trial" : "paid"];
   // a trial's limits cover the whole trial; a paid plan's reset each calendar month
   const from = trial ? new Date(0) : monthStart(now);
   const kinds = Object.keys(limit.units) as UnitKind[];
@@ -110,7 +116,7 @@ export async function usageStatus(db: DB, user: { id: string; roles: string[] },
   const when = resetsAt ? ` It resets on ${resetsAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" })}.` : " Choose a plan to keep going.";
   const over = units.find((u) => u.used >= u.limit);
   const blocked =
-    access.kind === "ended" ? null
+    access.kind === "ended" && !api ? null
     : over ? `You've used all ${over.limit} ${UNIT_LABEL[over.kind].many} ${trial ? "in your free trial" : "for this month"}.${when}`
     : costUsedPct >= 100 ? `You've reached the fair-use limit for AI work ${trial ? "in your free trial" : "this month"}.${when}`
     : null;

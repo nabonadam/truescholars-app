@@ -28,7 +28,7 @@ export async function buyPlanAction(plan: string, months: number, currency: stri
       amountMinor,
       currency: "GHS",
       reference,
-      callbackUrl: `${appUrl}/payments/callback?tool=${PLANS[plan].tools[0]}`,
+      callbackUrl: `${appUrl}/payments/callback?tool=${plan === "api" ? "api" : PLANS[plan].tools[0]}`,
       metadata: { purpose: "tool", plan, months, currency, price, userId: user.id },
     });
     url = r.authorization_url;

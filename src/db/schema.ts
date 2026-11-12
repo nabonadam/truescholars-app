@@ -905,3 +905,72 @@ export const authTokens = pgTable(
   },
   (t) => [index("auth_tokens_user_idx").on(t.userId, t.kind)],
 );
+
+// ───────────────────────── Developer API (Qualitative Studio) ─────────────────────────
+// Keys are shown once and stored only as a SHA-256 hash; `prefix` is what the owner sees in lists.
+
+/** The API plan: access to the developer API (separate from the Qualitative Studio's own access). */
+export const apiAccess = pgTable("api_access", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  accessUntil: timestamp("access_until", { mode: "date" }).notNull(),
+  note: text("note"),
+  updatedAt: updatedAt(),
+});
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    prefix: text("prefix").notNull(), // e.g. ts_live_ab12cd
+    keyHash: text("key_hash").notNull().unique(),
+    scopes: textArray("scopes").notNull(), // read | write | submit
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("api_keys_user_idx").on(t.userId)],
+);
+
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    events: textArray("events").notNull(), // response.submitted | response.processed
+    studyId: text("study_id").references(() => qualStudies.id, { onDelete: "cascade" }), // null = every study
+    secret: text("secret").notNull(), // signs each delivery (HMAC-SHA256)
+    active: boolean("active").notNull().default(true),
+    failures: integer("failures").notNull().default(0), // consecutive; switched off after too many
+    lastStatus: text("last_status"),
+    lastDeliveryAt: timestamp("last_delivery_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("webhooks_user_idx").on(t.userId)],
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: id(),
+    webhookId: text("webhook_id")
+      .notNull()
+      .references(() => webhooks.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    payload: jsonb("payload").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "date" }),
+    deliveredAt: timestamp("delivered_at", { mode: "date" }),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("webhook_deliveries_due_idx").on(t.nextAttemptAt)],
+);
