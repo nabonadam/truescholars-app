@@ -6,7 +6,7 @@ import { Avatar, LEVEL_LABEL, Stars } from "@/components/People";
 import { getDb } from "@/db";
 import { coverFor, iconFor, POPULAR_SEARCHES } from "@/lib/categoryIcons";
 import { formatMoney } from "@/lib/money";
-import { browseServices, categoryCounts, type BrowseService, type Budget, type Delivery, type LevelFilter, type Sort } from "@/server/browse";
+import { browseServices, categoryCounts, groupByExpert, type BrowseExpert, type BrowseService, type Budget, type Delivery, type LevelFilter, type Sort } from "@/server/browse";
 
 export const metadata: Metadata = { title: "Find an expert" };
 export const dynamic = "force-dynamic";
@@ -49,160 +49,106 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
   const [cats, results] = await Promise.all([categoryCounts(db), browseServices(db, { q, category, sort, budget, delivery, level })]);
   const activeCat = cats.find((c) => c.slug === category);
   const filtering = Boolean(budget || delivery || level);
-  const browsing = !q && !category && !filtering;
 
-  const href = (o: Partial<Record<"q" | "category" | "sort" | "budget" | "delivery" | "level", string>>) => {
+  const view = sp.view === "experts" ? "experts" : "services";
+  const experts = view === "experts" ? groupByExpert(results) : [];
+
+  const href = (o: Partial<Record<"q" | "category" | "sort" | "budget" | "delivery" | "level" | "view", string>>) => {
     const p = new URLSearchParams();
-    const m = { q, category, sort, budget, delivery, level, ...o };
-    for (const [k, v] of Object.entries(m)) if (v && !(k === "sort" && v === "recommended")) p.set(k, v);
+    const m = { q, category, sort, budget, delivery, level, view, ...o };
+    for (const [k, v] of Object.entries(m)) if (v && !(k === "sort" && v === "recommended") && !(k === "view" && v === "services")) p.set(k, v);
     const s = p.toString();
     return s ? `/services?${s}` : "/services";
   };
-
-  // A few distinct experts to introduce on the landing view
-  const seen = new Set<string>();
-  const experts = [...results].sort((a, b) => b.score - a.score).filter((s) => !seen.has(s.expertUserId) && seen.add(s.expertUserId)).slice(0, 4);
-  const showcase = results.slice(0, 3);
+  const filters = (
+    <>
+      <FilterRow label="Price" items={BUDGETS.map((b) => ({ label: b.label, href: href({ budget: b.v }), on: budget === b.v }))} />
+      <FilterRow label="Delivery" items={DELIVERY.map((d) => ({ label: d.label, href: href({ delivery: d.v }), on: delivery === d.v }))} />
+      <FilterRow label="Expert" items={LEVELS.map((l) => ({ label: l.label, href: href({ level: l.v }), on: level === l.v }))} />
+    </>
+  );
+  const count = view === "experts" ? `${experts.length} expert${experts.length === 1 ? "" : "s"}` : `${results.length} service${results.length === 1 ? "" : "s"}`;
 
   return (
     <>
-      {/* ───── Hero ───── */}
-      <section className="relative overflow-hidden bg-green text-white">
-        <div className="pointer-events-none absolute -top-32 -left-24 size-[28rem] rounded-full bg-white/[.04]" aria-hidden="true" />
-        <div className="pointer-events-none absolute -right-24 -bottom-40 size-[30rem] rounded-full bg-amber/10" aria-hidden="true" />
-        <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 sm:py-16 lg:grid-cols-[1.15fr_1fr]">
-          <div className="flex flex-col gap-5">
-            <span className="text-xs font-bold tracking-wider text-amber uppercase">Find an expert</span>
-            <h1 className="text-4xl leading-[1.02] font-extrabold text-white sm:text-6xl">
-              The right expert for <span className="text-amber">your research.</span>
-            </h1>
-            <p className="max-w-xl text-lg text-on-green-muted">Statisticians, editors and methodologists whose credentials we&apos;ve checked. Pay into escrow; release it only when you&apos;re happy.</p>
-            <form action="/services" className="flex max-w-2xl flex-wrap gap-2 rounded-[18px] bg-white p-2 shadow-xl" role="search">
-              {category && <input type="hidden" name="category" value={category} />}
-              <label htmlFor="q" className="sr-only">What do you need help with?</label>
-              <span className="hidden items-center pl-3 text-ink-muted sm:flex"><Icon name="search" size={20} /></span>
-              <input id="q" name="q" defaultValue={q} placeholder="What do you need help with?" className="min-w-0 flex-[1_1_200px] px-2 py-3 text-ink outline-none" />
-              <button className="btn-primary flex-[1_1_auto] sm:flex-none">Search</button>
-            </form>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-on-green-muted">Popular:</span>
-              {POPULAR_SEARCHES.map((p) => (
-                <Link key={p} href={`/services?q=${encodeURIComponent(p)}`} className="rounded-full border border-white/25 px-3 py-1 text-white no-underline hover:border-amber hover:text-amber">{p}</Link>
-              ))}
-            </div>
-            <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-on-green-muted">
-              {["Credentials verified", "Money held in escrow", "Revisions included"].map((t) => (
-                <li key={t} className="inline-flex items-center gap-1.5"><span className="grid size-5 place-items-center rounded-full bg-amber text-[11px] font-bold text-ink">✓</span>{t}</li>
-              ))}
-            </ul>
+      {/* ───── Search header: short, so results show straight away ───── */}
+      <section className="bg-green text-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-5 pb-0 sm:px-6 sm:pt-8">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+            <h1 className="text-2xl font-extrabold text-white sm:text-4xl">Find an expert</h1>
+            <p className="hidden text-sm text-on-green-muted sm:block">Vetted statisticians, editors and methodologists · payment held in escrow until you&apos;re happy</p>
           </div>
-
-          {/* A small collage of real services */}
-          <div className="relative hidden h-[26rem] lg:block" aria-hidden="true">
-            {showcase.map((s, i) => {
-              const c = coverFor(s.categorySlug);
-              const pos = ["top-0 left-4 -rotate-[4deg] z-0", "top-14 right-0 rotate-[3deg] z-10", "bottom-0 left-24 -rotate-[1deg] z-20"][i];
-              return (
-                <div key={s.id} className={`absolute w-64 overflow-hidden rounded-md bg-white text-ink shadow-2xl ${pos}`}>
-                  <div className="flex h-20 items-center justify-between px-4" style={{ background: c.bg, color: c.fg }}>
-                    <Icon name={iconFor(s.categorySlug)} size={30} />
-                    <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-bold text-ink">{s.fastestDays}-day delivery</span>
-                  </div>
-                  <div className="flex flex-col gap-1.5 p-3.5">
-                    <div className="flex items-center gap-2 text-xs"><Avatar name={s.expertName ?? "?"} size={22} userId={s.expertUserId} /><b>{s.expertName}</b></div>
-                    <div className="line-clamp-2 text-sm font-bold">{s.title}</div>
-                    <div className="text-xs text-ink-muted">From <b className="text-ink">{cedi(s.fromMinor)}</b></div>
-                  </div>
-                </div>
-              );
-            })}
-            {showcase.length === 0 && (
-              <div className="absolute inset-8 grid place-items-center rounded-lg border-2 border-dashed border-white/20 text-on-green-muted">Experts are setting up their services</div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ───── Categories ───── */}
-      <section className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-8 sm:px-6">
-        <div className="flex items-end justify-between gap-3">
-          <h2 className="text-2xl font-bold">Browse by subject</h2>
-          {category && <Link href={href({ category: "" })} className="text-sm font-bold text-green">All subjects</Link>}
-        </div>
-        <ul className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-5">
-          {cats.map((c) => {
-            const on = category === c.slug;
-            return (
-              <li key={c.id} className="w-40 flex-none snap-start sm:w-auto">
-                <Link
-                  href={href({ category: on ? "" : c.slug })}
-                  aria-current={on ? "true" : undefined}
-                  className={`flex h-full flex-col gap-3 rounded-md border p-4 no-underline transition-all hover:-translate-y-0.5 hover:shadow-md ${on ? "border-green bg-green text-white" : "border-line bg-white text-ink"}`}
-                >
-                  <span className={`grid size-10 place-items-center rounded-sm ${on ? "bg-amber text-ink" : "bg-green-tint text-green"}`}><Icon name={iconFor(c.slug)} size={20} /></span>
-                  <span className="text-sm leading-snug font-bold">{c.name}</span>
-                  <span className={`mt-auto text-xs ${on ? "text-on-green-muted" : "text-ink-muted"}`}>{c.n ? `${c.n} service${c.n === 1 ? "" : "s"}` : "Coming soon"}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      {/* ───── Experts to meet ───── */}
-      {browsing && experts.length > 1 && (
-        <section className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-10 sm:px-6">
-          <h2 className="text-2xl font-bold">Meet some of our experts</h2>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {experts.map((s) => (
-              <li key={s.expertUserId}>
-                <Link href={`/services/${s.id}`} className="flex h-full flex-col items-center gap-2 rounded-md border border-line bg-white p-5 text-center text-ink no-underline transition-shadow hover:shadow-lg">
-                  <Avatar name={s.expertName ?? "?"} size={64} userId={s.expertUserId} />
-                  <b className="font-display text-lg">{s.expertName}</b>
-                  <span className="line-clamp-2 text-sm text-ink-muted">{s.expertHeadline}</span>
-                  <span className="mt-auto flex flex-wrap items-center justify-center gap-2 text-xs">
-                    <span className="rounded-full bg-amber-tint px-2.5 py-0.5 font-bold text-amber-deep">{LEVEL_LABEL[s.level]}</span>
-                    <Stars rating={s.rating} count={s.reviews} small />
-                  </span>
-                </Link>
-              </li>
+          <form action="/services" className="flex gap-2 rounded-[14px] bg-white p-1.5 shadow-lg" role="search">
+            {category && <input type="hidden" name="category" value={category} />}
+            {view === "experts" && <input type="hidden" name="view" value="experts" />}
+            <label htmlFor="q" className="sr-only">Search experts and services</label>
+            <span className="flex items-center pl-2 text-ink-muted"><Icon name="search" size={18} /></span>
+            <input id="q" name="q" type="search" defaultValue={q} placeholder="e.g. Stata regression, thesis editing" className="min-w-0 flex-1 py-2.5 text-ink outline-none" />
+            <button className="btn-primary px-4 py-2">Search</button>
+          </form>
+          <nav aria-label="Show" className="flex gap-1">
+            {([["services", "Services"], ["experts", "Experts"]] as const).map(([v, label]) => (
+              <Link key={v} href={href({ view: v })} aria-current={view === v ? "page" : undefined} className={`rounded-t-md px-5 py-2.5 text-sm font-bold no-underline ${view === v ? "bg-parchment text-ink" : "text-on-green-muted hover:text-white"}`}>{label}</Link>
             ))}
-          </ul>
-        </section>
-      )}
+          </nav>
+        </div>
+      </section>
 
-      {/* ───── Results ───── */}
-      <section className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-10 sm:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+      <section className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 sm:py-6">
+        {/* subjects as a scrolling chip row */}
+        <nav aria-label="Subjects" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+          <Link href={href({ category: "" })} aria-current={!category ? "true" : undefined} className={chip(!category)}>All subjects</Link>
+          {cats.map((c) => (
+            <Link key={c.id} href={href({ category: category === c.slug ? "" : c.slug })} aria-current={category === c.slug ? "true" : undefined} className={chip(category === c.slug)}>
+              <Icon name={iconFor(c.slug)} size={15} /> {c.name}{c.n ? <span className="opacity-60">{c.n}</span> : null}
+            </Link>
+          ))}
+        </nav>
+        {!q && !category && (
+          <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 text-sm sm:mx-0 sm:flex-wrap sm:px-0">
+            <span className="flex-none text-ink-muted">Popular:</span>
+            {POPULAR_SEARCHES.map((p) => (
+              <Link key={p} href={href({ q: p })} className="flex-none rounded-full bg-white px-3 py-1 text-ink no-underline ring-1 ring-line hover:ring-green">{p}</Link>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <div>
-            <h2 className="text-2xl font-bold">{activeCat ? activeCat.name : q ? `Results for “${q}”` : "All services"}</h2>
+            <h2 className="text-xl font-bold sm:text-2xl">{activeCat ? activeCat.name : q ? `Results for “${q}”` : view === "experts" ? "All experts" : "All services"}</h2>
             <p className="text-sm text-ink-muted">
-              {results.length} service{results.length === 1 ? "" : "s"}
-              {(filtering || q) && <> · <Link href={href({ q: "", budget: "", delivery: "", level: "" })} className="font-bold text-green">Clear filters</Link></>}
+              {count}
+              {(filtering || q || category) && <> · <Link href={href({ q: "", category: "", budget: "", delivery: "", level: "" })} className="font-bold text-green">Clear all</Link></>}
             </p>
           </div>
-          <nav className="flex flex-wrap gap-1 rounded-full border border-line bg-white p-1 text-sm" aria-label="Sort">
+          <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 text-sm sm:mx-0 sm:rounded-full sm:border sm:border-line sm:bg-white sm:p-1 sm:px-1" aria-label="Sort">
             {SORTS.map((s) => (
-              <Link key={s.v} href={href({ sort: s.v })} aria-current={sort === s.v ? "true" : undefined} className={`rounded-full px-3 py-1.5 font-bold no-underline ${sort === s.v ? "bg-green text-white" : "text-ink"}`}>{s.label}</Link>
+              <Link key={s.v} href={href({ sort: s.v })} aria-current={sort === s.v ? "true" : undefined} className={`flex-none rounded-full px-3 py-1.5 font-bold no-underline ${sort === s.v ? "bg-green text-white" : "text-ink"}`}>{s.label}</Link>
             ))}
           </nav>
         </div>
 
-        <div className="flex flex-wrap gap-x-6 gap-y-3 rounded-md border border-line bg-white px-4 py-3 text-sm">
-          <FilterRow label="Price" items={BUDGETS.map((b) => ({ label: b.label, href: href({ budget: b.v }), on: budget === b.v }))} />
-          <FilterRow label="Delivery" items={DELIVERY.map((d) => ({ label: d.label, href: href({ delivery: d.v }), on: delivery === d.v }))} />
-          <FilterRow label="Expert" items={LEVELS.map((l) => ({ label: l.label, href: href({ level: l.v }), on: level === l.v }))} />
-        </div>
+        <details className="rounded-md border border-line bg-white text-sm sm:hidden" open={filtering}>
+          <summary className="cursor-pointer px-4 py-3 font-bold">Filters{filtering ? " · on" : ""}</summary>
+          <div className="flex flex-col gap-3 border-t border-line px-4 py-3">{filters}</div>
+        </details>
+        <div className="hidden flex-wrap gap-x-6 gap-y-3 rounded-md border border-line bg-white px-4 py-3 text-sm sm:flex">{filters}</div>
 
-        {results.length === 0 ? (
+        {(view === "experts" ? experts.length : results.length) === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-line bg-white/60 px-6 py-14 text-center">
             <span className="grid size-16 place-items-center rounded-full bg-amber-tint text-amber-deep"><Icon name="search" size={28} /></span>
-            <h3 className="text-xl font-bold">No services match yet</h3>
+            <h3 className="text-xl font-bold">No {view} match yet</h3>
             <p className="max-w-md text-ink-muted">Describe what you need and let vetted experts come to you with a price and a plan.</p>
             <Link href="/jobs/new" className="btn-primary">Post a job instead</Link>
           </div>
+        ) : view === "experts" ? (
+          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {experts.map((e) => (
+              <li key={e.userId}><ExpertCard e={e} /></li>
+            ))}
+          </ul>
         ) : (
-          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
             {results.map((s, i) => (
               <Fragment key={s.id}>
                 {i === 8 && (
@@ -217,9 +163,50 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
             ))}
           </ul>
         )}
-        {results.length > 0 && results.length <= 8 && <PostJobBanner />}
+        {(view === "experts" ? experts.length : results.length) > 0 && (view === "experts" || results.length <= 8) && <PostJobBanner />}
       </section>
     </>
+  );
+}
+
+const chip = (on: boolean) => `inline-flex flex-none items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-bold no-underline ring-1 ${on ? "bg-green text-white ring-green" : "bg-white text-ink ring-line hover:ring-green"}`;
+
+function ExpertCard({ e }: { e: BrowseExpert }) {
+  return (
+    <div className="flex h-full flex-col gap-3 rounded-md border border-line bg-white p-4 transition-shadow hover:shadow-lg">
+      <Link href={`/experts/${e.userId}`} className="flex items-start gap-3 text-ink no-underline">
+        <Avatar name={e.name ?? "?"} size={56} userId={e.userId} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <b className="font-display text-lg leading-tight">{e.name}</b>
+            <span className="rounded-full bg-amber-tint px-2 py-0.5 text-[11px] font-bold text-amber-deep">{LEVEL_LABEL[e.level]}</span>
+          </div>
+          <p className="line-clamp-2 text-sm text-ink-muted">{e.headline}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+            <Stars rating={e.rating} count={e.reviews} small />
+            <span className="inline-flex items-center gap-1 text-green"><span aria-hidden="true">✓</span> Verified</span>
+            {e.orders > 0 && <span>{e.orders} order{e.orders === 1 ? "" : "s"} done</span>}
+          </div>
+        </div>
+      </Link>
+      <div className="flex flex-wrap gap-1.5">
+        {e.categories.slice(0, 3).map((c) => <span key={c} className="rounded-full bg-parchment px-2.5 py-0.5 text-[12px] font-bold">{c}</span>)}
+      </div>
+      <ul className="flex flex-col divide-y divide-line rounded-sm border border-line text-sm">
+        {e.services.slice(0, 2).map((s) => (
+          <li key={s.id}>
+            <Link href={`/services/${s.id}`} className="flex items-center gap-3 px-3 py-2 text-ink no-underline hover:bg-parchment">
+              <span className="line-clamp-1 flex-1">{s.title}</span>
+              <span className="flex-none text-xs text-ink-muted">from <b className="text-ink">{cedi(s.fromMinor)}</b></span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-auto flex items-center justify-between gap-3">
+        <span className="text-xs text-ink-muted">{e.services.length} service{e.services.length === 1 ? "" : "s"} · from <b className="text-ink">{cedi(e.fromMinor)}</b> · {e.fastestDays}-day delivery</span>
+        <Link href={`/experts/${e.userId}`} className="btn-outline flex-none px-3 py-1.5 text-sm">View profile</Link>
+      </div>
+    </div>
   );
 }
 
@@ -238,7 +225,7 @@ function ServiceCard({ s }: { s: BrowseService }) {
   const c = coverFor(s.categorySlug);
   return (
     <Link href={`/services/${s.id}`} className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-white text-ink no-underline transition-all hover:-translate-y-1 hover:shadow-xl">
-      <div className="relative flex h-32 items-end justify-between overflow-hidden p-4" style={{ background: c.bg, color: c.fg }}>
+      <div className="relative flex h-24 items-end justify-between overflow-hidden p-4 sm:h-32" style={{ background: c.bg, color: c.fg }}>
         <span className="absolute -top-6 -right-6 size-28 rounded-full" style={{ background: c.dot }} aria-hidden="true" />
         <span className="absolute top-8 right-16 size-10 rounded-full" style={{ background: c.dot }} aria-hidden="true" />
         <span className="relative transition-transform group-hover:scale-110"><Icon name={iconFor(s.categorySlug)} size={40} /></span>

@@ -3,7 +3,7 @@
 import { publishedReview } from "./reviews";
 import { and, avg, count, eq, inArray } from "drizzle-orm";
 import type { DB } from "@/db";
-import { categories, orders, reviews, services } from "@/db/schema";
+import { categories, expertProfiles, orders, reviews, services, users } from "@/db/schema";
 import { searchServices } from "./services";
 
 export type Sort = "recommended" | "rating" | "price" | "fast";
@@ -66,4 +66,37 @@ export async function categoryCounts(db: DB) {
     .groupBy(categories.id)
     .orderBy(categories.name);
   return rows.map((r) => ({ ...r, n: Number(r.n) }));
+}
+
+/** The same search, one card per expert: their best-matching services, price range and reputation. */
+export function groupByExpert(list: BrowseService[]) {
+  const by = new Map<string, { userId: string; name: string | null; headline: string; level: string; rating: number | null; reviews: number; orders: number; fromMinor: number; fastestDays: number; categories: string[]; services: BrowseService[]; score: number }>();
+  for (const s of list) {
+    const e = by.get(s.expertUserId);
+    if (!e) {
+      by.set(s.expertUserId, { userId: s.expertUserId, name: s.expertName, headline: s.expertHeadline, level: s.level, rating: s.rating, reviews: s.reviews, orders: s.orders, fromMinor: s.fromMinor, fastestDays: s.fastestDays, categories: [s.categoryName], services: [s], score: s.score });
+    } else {
+      e.services.push(s);
+      e.orders += s.orders;
+      e.fromMinor = Math.min(e.fromMinor, s.fromMinor);
+      e.fastestDays = Math.min(e.fastestDays, s.fastestDays);
+      if (!e.categories.includes(s.categoryName)) e.categories.push(s.categoryName);
+    }
+  }
+  return [...by.values()]; // keeps the order of the list it was given (each expert's best-ranked service first)
+}
+export type BrowseExpert = ReturnType<typeof groupByExpert>[number];
+
+/** A public expert profile: who they are, their live services and what clients say. */
+export async function expertPublicProfile(db: DB, userId: string) {
+  const [p] = await db
+    .select({ userId: users.id, name: users.name, image: users.image, country: users.country, memberSince: users.createdAt, headline: expertProfiles.headline, bio: expertProfiles.bio, skills: expertProfiles.skills, credentials: expertProfiles.credentials, level: expertProfiles.level, verifiedAt: expertProfiles.verifiedAt })
+    .from(expertProfiles)
+    .innerJoin(users, eq(users.id, expertProfiles.userId))
+    .where(eq(expertProfiles.userId, userId));
+  if (!p || !p.verifiedAt) return null;
+  const all = await browseServices(db, {});
+  const svc = all.filter((s) => s.expertUserId === userId);
+  const [done] = await db.select({ n: count() }).from(orders).where(and(eq(orders.expertId, userId), eq(orders.status, "COMPLETED")));
+  return { ...p, services: svc, completed: Number(done?.n ?? 0) };
 }
