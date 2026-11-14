@@ -27,9 +27,9 @@ beforeEach(async () => {
   other = o.id;
   admin = a.id;
   // Ama signs up as a literature retriever; Kofi is an expert who didn't
-  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", litRetriever: true });
+  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", sampleUrl: "https://x.org/s", idFile: new File([new Uint8Array(10)], "id.jpg"), litRetriever: true });
   await approveApplication(db, { applicationId: app.id });
-  const app2 = await submitApplication(db, other, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
+  const app2 = await submitApplication(db, other, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", sampleUrl: "https://x.org/s", idFile: new File([new Uint8Array(10)], "id.jpg") });
   await approveApplication(db, { applicationId: app2.id });
 });
 

@@ -26,7 +26,7 @@ beforeEach(async () => {
   client = { id: c.id, roles: c.roles };
   expert = e.id;
   admin = a.id;
-  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", litRetriever: true });
+  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Sociology"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", sampleUrl: "https://x.org/s", idFile: new File([new Uint8Array(10)], "id.jpg"), litRetriever: true });
   await approveApplication(db, { applicationId: app.id });
 });
 

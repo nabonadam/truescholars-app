@@ -33,7 +33,7 @@ beforeEach(async () => {
   expert = e.id;
   client = c.id;
   admin = a.id;
-  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Statistics"], experienceYears: 4, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
+  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Statistics"], experienceYears: 4, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", sampleUrl: "https://x.org/s", idFile: new File([new Uint8Array(10)], "id.jpg") });
   await approveApplication(db, { applicationId: app.id });
   const [cat] = await d.select().from(schema.categories).limit(1);
   const serviceId = await saveService(db, expert, { title: "Stata analysis", categoryId: cat.id, description: "d".repeat(130), requirements: [], tiers: [{ name: "BASIC", priceMinor: 100_000, deliveryDays: 5, revisions: 1, includes: [] }] });

@@ -51,7 +51,7 @@ const plan = (...amounts: number[]) => amounts.map((a, i) => ({ title: `Part ${i
 
 async function makeExpert(email: string, name: string) {
   const [u] = await db.insert(schema.users).values({ email, name }).returning();
-  const app = await submitApplication(db, u.id, { qualification: "PhD", fields: ["Statistics"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
+  const app = await submitApplication(db, u.id, { qualification: "PhD", fields: ["Statistics"], experienceYears: 5, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", sampleUrl: "https://x.org/s", idFile: new File([new Uint8Array(10)], "id.jpg") });
   await approveApplication(db, { applicationId: app.id });
   return u.id;
 }

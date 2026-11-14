@@ -40,6 +40,8 @@ beforeEach(async () => {
     experienceYears: 5,
     pitch: "p".repeat(90),
     cvUrl: "https://example.com/cv",
+    sampleUrl: "https://example.com/s",
+    idFile: new File([new Uint8Array(10)], "id.jpg"),
   });
   await approveApplication(db, { applicationId: app.id });
   const [cat] = await d.select().from(schema.categories).where(eq(schema.categories.slug, "statistics-data-analysis"));

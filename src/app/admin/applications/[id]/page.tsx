@@ -5,7 +5,7 @@ import { approveAction } from "@/app/actions/vetting";
 import { RejectForm } from "@/components/RejectForm";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/guards";
-import { getApplication, markInReview } from "@/server/vetting";
+import { applicationDocs, getApplication, markInReview } from "@/server/vetting";
 
 export const metadata: Metadata = { title: "Review application" };
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ export default async function ReviewApplication({
   if (row.app.status === "SUBMITTED") await markInReview(db, id); // opening it claims it for review
   const { app } = row;
   const decided = app.status === "APPROVED" || app.status === "REJECTED";
+  const docs = await applicationDocs(db, app);
 
   return (
     <section className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10 sm:px-6">
@@ -52,14 +53,9 @@ export default async function ReviewApplication({
           <div className="text-sm font-bold text-ink-muted">Pitch</div>
           <p className="whitespace-pre-line">{app.pitch}</p>
         </div>
-        <div>
-          <div className="text-sm font-bold text-ink-muted">CV</div>
-          {app.cvUrl ? <a href={app.cvUrl} target="_blank" rel="noopener noreferrer nofollow" className="font-bold text-green break-all">Open CV ↗</a> : "—"}
-        </div>
-        <div>
-          <div className="text-sm font-bold text-ink-muted">Work sample</div>
-          {app.sampleUrl ? <a href={app.sampleUrl} target="_blank" rel="noopener noreferrer nofollow" className="font-bold text-green break-all">Open sample ↗</a> : "Not provided"}
-        </div>
+        <Doc label="CV" file={docs.cv} url={app.cvUrl} />
+        <Doc label="Work sample" file={docs.sample} url={app.sampleUrl} />
+        <Doc label="Government ID" file={docs.id} url={null} empty={decided ? "Deleted after the decision, or not provided" : "Not provided"} />
       </div>
 
       {decided ? (
@@ -84,5 +80,21 @@ export default async function ReviewApplication({
         </div>
       )}
     </section>
+  );
+}
+
+function Doc({ label, file, url, empty = "Not provided" }: { label: string; file: { id: string; name: string; sizeBytes: number } | null; url: string | null; empty?: string }) {
+  return (
+    <div>
+      <div className="text-sm font-bold text-ink-muted">{label}</div>
+      {file ? (
+        <a href={`/api/files/${file.id}`} className="font-bold text-green break-all">{file.name}</a>
+      ) : url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer nofollow" className="font-bold text-green break-all">Open link ↗</a>
+      ) : (
+        <span className="text-ink-muted">{empty}</span>
+      )}
+      {file && <span className="block text-[12px] text-ink-muted">{file.sizeBytes < 1048576 ? `${Math.max(1, Math.round(file.sizeBytes / 1024))} KB` : `${(file.sizeBytes / 1048576).toFixed(1)} MB`} · downloads, never opens in the browser</span>}
+    </div>
   );
 }

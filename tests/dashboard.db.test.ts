@@ -24,7 +24,7 @@ beforeEach(async () => {
   const [c] = await d.insert(schema.users).values({ email: "akosua@example.com", name: "Akosua Mensah" }).returning();
   expert = e.id;
   client = c.id;
-  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Qualitative analysis"], experienceYears: 4, pitch: "p".repeat(90), cvUrl: "https://x.org/cv" });
+  const app = await submitApplication(db, expert, { qualification: "PhD", fields: ["Qualitative analysis"], experienceYears: 4, pitch: "p".repeat(90), cvUrl: "https://x.org/cv", sampleUrl: "https://x.org/s", idFile: new File([new Uint8Array(10)], "id.jpg") });
   await approveApplication(db, { applicationId: app.id });
   const [cat] = await d.select().from(schema.categories).limit(1);
   const serviceId = await saveService(db, expert, {

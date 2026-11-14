@@ -1,8 +1,8 @@
 /** Expert vetting: applications, admin decisions, and the admin allow-list. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import type { DB } from "@/db";
-import { expertApplications, expertProfiles, users } from "@/db/schema";
+import { expertApplications, expertProfiles, files, users } from "@/db/schema";
 import { notify } from "./notifications";
 
 export class VettingError extends Error {}
@@ -27,7 +27,31 @@ export interface ApplicationInput {
   cvUrl?: string | null;
   sampleUrl?: string | null;
   litRetriever?: boolean;
+  cvFile?: File | null;
+  sampleFile?: File | null;
+  idFile?: File | null;
 }
+
+const DOC_TYPES = new Set(["pdf", "doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "csv", "ppt", "pptx", "png", "jpg", "jpeg", "webp", "zip", "dta", "do", "log", "sav", "r", "rmd", "py", "ipynb"]);
+const ID_TYPES = new Set(["pdf", "png", "jpg", "jpeg", "webp", "heic"]);
+const MAX_DOC = 10 * 1024 * 1024;
+
+function checkDoc(f: File, label: string, types: Set<string>) {
+  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!types.has(ext)) throw new VettingError(`${label}: that file type isn't accepted. ${types === ID_TYPES ? "Use a photo (JPG, PNG) or a PDF." : "Use a PDF, Word document or similar."}`);
+  if (f.size > MAX_DOC) throw new VettingError(`${label} is larger than 10 MB.`);
+}
+
+/** Stores one private document; only its owner and admins can download it (see getFileForUser). */
+async function saveDoc(db: DB, userId: string, f: File) {
+  const [row] = await db
+    .insert(files)
+    .values({ ownerId: userId, name: f.name.slice(0, 200), mimeType: f.type || "application/octet-stream", sizeBytes: f.size, data: Buffer.from(await f.arrayBuffer()) })
+    .returning({ id: files.id });
+  return row.id;
+}
+
+const real = (f: File | null | undefined) => (f && f.size > 0 ? f : null);
 
 /** Emails in ADMIN_EMAILS (comma-separated) get the ADMIN role when they sign in. */
 export function isAdminEmail(email: string | null | undefined, list = process.env.ADMIN_EMAILS ?? ""): boolean {
@@ -54,13 +78,31 @@ export async function getApplicationForUser(db: DB, userId: string) {
 /** Submit a new application, or resubmit after a rejection. */
 export async function submitApplication(db: DB, userId: string, input: ApplicationInput) {
   const existing = await getApplicationForUser(db, userId);
+  if (existing && existing.status !== "REJECTED") {
+    throw new VettingError(`You already have an application (${existing.status.toLowerCase().replace("_", " ")}).`);
+  }
+  const cv = real(input.cvFile), sample = real(input.sampleFile), id = real(input.idFile);
+  if (cv) checkDoc(cv, "Your CV", DOC_TYPES);
+  if (sample) checkDoc(sample, "Your work sample", DOC_TYPES);
+  if (id) checkDoc(id, "Your ID", ID_TYPES);
+  // after a rejection, documents already sent can be kept
+  const keep = existing?.status === "REJECTED";
+  if (!cv && !input.cvUrl && !(keep && (existing!.cvFileId || existing!.cvUrl))) throw new VettingError("Please upload your CV (or add a link to it).");
+  if (!sample && !input.sampleUrl && !(keep && (existing!.sampleFileId || existing!.sampleUrl))) throw new VettingError("Please upload a work sample (or add a link to one).");
+  if (!id && !(keep && existing!.idFileId)) throw new VettingError("Please upload a photo or scan of a government-issued ID.");
+
+  const [cvFileId, sampleFileId, idFileId] = await Promise.all([cv ? saveDoc(db, userId, cv) : null, sample ? saveDoc(db, userId, sample) : null, id ? saveDoc(db, userId, id) : null]);
+  const replaced = keep ? [cvFileId && existing!.cvFileId, sampleFileId && existing!.sampleFileId, idFileId && existing!.idFileId].filter((x): x is string => !!x) : [];
   const values = {
     qualification: input.qualification,
     fields: input.fields,
     experienceYears: input.experienceYears,
     pitch: input.pitch,
-    cvUrl: input.cvUrl || null,
-    sampleUrl: input.sampleUrl || null,
+    cvUrl: cv ? null : input.cvUrl || (keep ? existing!.cvUrl : null),
+    sampleUrl: sample ? null : input.sampleUrl || (keep ? existing!.sampleUrl : null),
+    cvFileId: cvFileId ?? (keep && !input.cvUrl ? existing!.cvFileId : null),
+    sampleFileId: sampleFileId ?? (keep && !input.sampleUrl ? existing!.sampleFileId : null),
+    idFileId: idFileId ?? (keep ? existing!.idFileId : null),
     litRetriever: !!input.litRetriever,
     status: "SUBMITTED" as const,
     reviewerNote: null,
@@ -70,11 +112,30 @@ export async function submitApplication(db: DB, userId: string, input: Applicati
     const [row] = await db.insert(expertApplications).values({ userId, ...values }).returning();
     return row;
   }
-  if (existing.status !== "REJECTED") {
-    throw new VettingError(`You already have an application (${existing.status.toLowerCase().replace("_", " ")}).`);
-  }
   const [row] = await db.update(expertApplications).set(values).where(eq(expertApplications.id, existing.id)).returning();
+  if (replaced.length) await db.delete(files).where(inArray(files.id, replaced));
   return row;
+}
+
+/** ID documents are deleted `days` after the decision: they were needed only to verify the person. */
+export async function purgeIdDocuments(db: DB, now = new Date(), days = 60) {
+  const old = await db
+    .select({ id: expertApplications.id, fileId: expertApplications.idFileId })
+    .from(expertApplications)
+    .where(and(isNotNull(expertApplications.idFileId), inArray(expertApplications.status, ["APPROVED", "REJECTED"]), lt(expertApplications.reviewedAt, new Date(now.getTime() - days * 86_400_000))));
+  for (const a of old) {
+    await db.update(expertApplications).set({ idFileId: null }).where(eq(expertApplications.id, a.id));
+    await db.delete(files).where(eq(files.id, a.fileId!));
+  }
+  return old.length;
+}
+
+/** File names and sizes for an application's uploads (admin view). */
+export async function applicationDocs(db: DB, app: { cvFileId: string | null; sampleFileId: string | null; idFileId: string | null }) {
+  const ids = [app.cvFileId, app.sampleFileId, app.idFileId].filter((x): x is string => !!x);
+  const rows = ids.length ? await db.select({ id: files.id, name: files.name, sizeBytes: files.sizeBytes }).from(files).where(inArray(files.id, ids)) : [];
+  const get = (id: string | null) => rows.find((r) => r.id === id) ?? null;
+  return { cv: get(app.cvFileId), sample: get(app.sampleFileId), id: get(app.idFileId) };
 }
 
 export async function listApplications(db: DB, status?: "SUBMITTED" | "IN_REVIEW" | "APPROVED" | "REJECTED") {

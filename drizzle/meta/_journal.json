@@ -176,6 +176,13 @@
       "when": 1794503714998,
       "tag": "0024_api",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794693134391,
+      "tag": "0025_application_documents",
+      "breakpoints": true
     }
   ]
 }

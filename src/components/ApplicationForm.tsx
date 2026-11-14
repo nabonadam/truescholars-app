@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { submitApplicationAction, type FormState } from "@/app/actions/vetting";
 
-export function ApplicationForm({ qualifications, fields }: { qualifications: readonly string[]; fields: readonly string[] }) {
+export function ApplicationForm({ qualifications, fields, keep = false }: { qualifications: readonly string[]; fields: readonly string[]; keep?: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(submitApplicationAction, undefined);
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -60,17 +60,16 @@ export function ApplicationForm({ qualifications, fields }: { qualifications: re
         <p className="mt-1 text-xs text-ink-muted">80–1,500 characters.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="cvUrl" className="label">Link to your CV</label>
-          <input id="cvUrl" name="cvUrl" type="url" required placeholder="https://drive.google.com/…" className="field" />
-        </div>
-        <div>
-          <label htmlFor="sampleUrl" className="label">Link to a work sample (optional)</label>
-          <input id="sampleUrl" name="sampleUrl" type="url" placeholder="https://…" className="field" />
-        </div>
-      </div>
-      <p className="-mt-3 text-xs text-ink-muted">Share a Google Drive or Dropbox link set to &ldquo;anyone with the link can view&rdquo;. File upload is coming soon.</p>
+      <fieldset className="flex flex-col gap-4">
+        <legend className="label">Documents for vetting</legend>
+        <p className="-mt-1 text-sm text-ink-muted">
+          Seen only by our vetting team, never by clients. Up to 10 MB each.{" "}
+          {keep && "Your earlier documents are kept unless you upload new ones."}
+        </p>
+        <DocField id="cvFile" label="Your CV" hint="PDF or Word document" accept=".pdf,.doc,.docx,.odt,.rtf" required={!keep} linkName="cvUrl" linkLabel="or link to your CV instead" />
+        <DocField id="sampleFile" label="A sample of your work" hint="An analysis, an edited chapter, a report… remove anything confidential" accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.csv,.ppt,.pptx,.zip,.do,.log,.dta,.sav,.r,.rmd,.py,.ipynb,.txt" required={!keep} linkName="sampleUrl" linkLabel="or link to a sample instead" />
+        <DocField id="idFile" label="Government-issued ID" hint="A photo or scan of your passport, national ID (e.g. Ghana Card) or driver's licence. Deleted 60 days after we decide." accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,image/*" required={!keep} />
+      </fieldset>
 
       {state?.error && (
         <p role="alert" className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">{state.error}</p>
@@ -79,5 +78,25 @@ export function ApplicationForm({ qualifications, fields }: { qualifications: re
         {pending ? "Submitting…" : "Submit application"}
       </button>
     </form>
+  );
+}
+
+function DocField({ id, label, hint, accept, required, linkName, linkLabel }: { id: string; label: string; hint: string; accept: string; required: boolean; linkName?: string; linkLabel?: string }) {
+  const [useLink, setUseLink] = useState(false);
+  return (
+    <div className="rounded-sm border border-line bg-white p-4">
+      <label htmlFor={useLink ? linkName : id} className="font-bold">{label}{required && !useLink ? "" : " (optional)"}</label>
+      <p className="mb-2 text-[13px] text-ink-muted">{hint}</p>
+      {useLink && linkName ? (
+        <input id={linkName} name={linkName} type="url" required={required} placeholder="https://drive.google.com/… (anyone with the link can view)" className="field" />
+      ) : (
+        <input id={id} name={id} type="file" accept={accept} required={required} className="block w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-green-tint file:px-4 file:py-2 file:font-bold file:text-green" />
+      )}
+      {linkName && (
+        <button type="button" onClick={() => setUseLink(!useLink)} className="mt-2 text-[13px] font-bold text-green">
+          {useLink ? "Upload a file instead" : linkLabel}
+        </button>
+      )}
+    </div>
   );
 }

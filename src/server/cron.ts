@@ -12,6 +12,7 @@ import { autoApproveDue } from "./orderRoom";
 import { refreshUsdRate } from "./fx";
 import { reviewReminders } from "./reviews";
 import { retryWebhooks } from "./webhooks";
+import { purgeIdDocuments } from "./vetting";
 import { sweepLimits } from "./rateLimit";
 import { moveToR2 } from "./qualStorage";
 import { trialDays as statsTrialDays } from "./statsAccess";
@@ -117,6 +118,7 @@ export async function runHourly(db: DB, now = new Date()) {
     ["retrievalReminders", () => retrievalReminders(db, now)],
     ["reviewReminders", () => reviewReminders(db, now)],
     ["webhooks", () => retryWebhooks(db, now)],
+    ["purgeIdDocuments", () => purgeIdDocuments(db, now)],
     ["moveFilesToR2", () => moveToR2(db, 40)],
     ["exchangeRate", () => refreshUsdRate(db, now)],
     ["sweep", async () => {

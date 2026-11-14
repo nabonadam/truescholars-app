@@ -45,7 +45,7 @@ export default async function ApplyPage() {
 
       {showForm && (
         <div className="card p-6 sm:p-8">
-          <ApplicationForm qualifications={QUALIFICATIONS} fields={EXPERT_FIELDS} />
+          <ApplicationForm qualifications={QUALIFICATIONS} fields={EXPERT_FIELDS} keep={app?.status === "REJECTED" && !!app.idFileId} />
         </div>
       )}
     </section>

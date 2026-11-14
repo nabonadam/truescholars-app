@@ -193,6 +193,10 @@ export const expertApplications = pgTable("expert_applications", {
   cvUrl: text("cv_url"),
   sampleUrl: text("sample_url"),
   idDocumentUrl: text("id_document_url"),
+  // private uploads (files table, owned by the applicant): only the applicant and admins can download them
+  cvFileId: text("cv_file_id"),
+  sampleFileId: text("sample_file_id"),
+  idFileId: text("id_file_id"), // deleted automatically some time after the decision
   litRetriever: boolean("lit_retriever").notNull().default(false), // wants private literature retrieval assignments
   status: applicationStatusEnum("status").notNull().default("SUBMITTED"),
   reviewerNote: text("reviewer_note"),

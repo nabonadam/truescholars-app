@@ -37,10 +37,13 @@ export async function submitApplicationAction(_prev: FormState, form: FormData):
     litRetriever: form.get("litRetriever") === "1",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form" };
-  if (!parsed.data.cvUrl) return { error: "Please add a link to your CV." };
+  const file = (k: string) => {
+    const f = form.get(k);
+    return f instanceof File && f.size > 0 ? f : null;
+  };
 
   try {
-    await submitApplication(getDb(), user.id, parsed.data);
+    await submitApplication(getDb(), user.id, { ...parsed.data, cvFile: file("cvFile"), sampleFile: file("sampleFile"), idFile: file("idFile") });
   } catch (err) {
     if (err instanceof VettingError) return { error: err.message };
     throw err;
