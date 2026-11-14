@@ -96,7 +96,7 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
 
       <section className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 sm:py-6">
         {/* subjects as a scrolling chip row */}
-        <nav aria-label="Subjects" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+        <nav aria-label="Subjects" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
           <Link href={href({ category: "" })} aria-current={!category ? "true" : undefined} className={chip(!category)}>All subjects</Link>
           {cats.map((c) => (
             <Link key={c.id} href={href({ category: category === c.slug ? "" : c.slug })} aria-current={category === c.slug ? "true" : undefined} className={chip(category === c.slug)}>
@@ -105,7 +105,7 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
           ))}
         </nav>
         {!q && !category && (
-          <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 text-sm sm:mx-0 sm:flex-wrap sm:px-0">
+          <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 text-sm sm:mx-0 sm:flex-wrap sm:px-0">
             <span className="flex-none text-ink-muted">Popular:</span>
             {POPULAR_SEARCHES.map((p) => (
               <Link key={p} href={href({ q: p })} className="flex-none rounded-full bg-white px-3 py-1 text-ink no-underline ring-1 ring-line hover:ring-green">{p}</Link>
@@ -121,7 +121,7 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
               {(filtering || q || category) && <> · <Link href={href({ q: "", category: "", budget: "", delivery: "", level: "" })} className="font-bold text-green">Clear all</Link></>}
             </p>
           </div>
-          <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 text-sm sm:mx-0 sm:rounded-full sm:border sm:border-line sm:bg-white sm:p-1 sm:px-1" aria-label="Sort">
+          <nav className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm sm:mx-0 sm:rounded-full sm:border sm:border-line sm:bg-white sm:p-1 sm:px-1" aria-label="Sort">
             {SORTS.map((s) => (
               <Link key={s.v} href={href({ sort: s.v })} aria-current={sort === s.v ? "true" : undefined} className={`flex-none rounded-full px-3 py-1.5 font-bold no-underline ${sort === s.v ? "bg-green text-white" : "text-ink"}`}>{s.label}</Link>
             ))}

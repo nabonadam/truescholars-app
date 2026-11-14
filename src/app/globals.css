@@ -154,3 +154,11 @@ body:has(.chat-shell) > .site-footer {
 .grid > * {
   min-width: 0;
 }
+
+/* horizontally scrolling chip rows: swipe on phones, no grey bar under them */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
