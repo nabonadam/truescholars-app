@@ -253,13 +253,13 @@ function ServiceCard({ s }: { s: BrowseService }) {
 
 function PostJobBanner() {
   return (
-    <div className="flex flex-wrap items-center gap-5 rounded-lg bg-amber-tint p-6 sm:p-8">
-      <span className="grid size-14 flex-none place-items-center rounded-full bg-amber text-ink"><Icon name="briefcase" size={26} /></span>
-      <div className="min-w-0 flex-1">
-        <h3 className="text-xl font-bold">Not sure which package fits?</h3>
-        <p className="text-ink-muted">Post a job for free. Matching experts are alerted straight away and send you proposals with a price and a plan.</p>
+    <div className="flex flex-col gap-4 rounded-lg bg-amber-tint p-5 sm:flex-row sm:items-center sm:gap-5 sm:p-8">
+      <span className="hidden size-14 flex-none place-items-center rounded-full bg-amber text-ink sm:grid"><Icon name="briefcase" size={26} /></span>
+      <div className="min-w-0 sm:flex-1">
+        <h3 className="text-lg font-bold sm:text-xl">Not sure which package fits?</h3>
+        <p className="text-sm text-ink-muted sm:text-base">Post a job for free. Matching experts are alerted straight away and send you proposals with a price and a plan.</p>
       </div>
-      <Link href="/jobs/new" className="btn-primary">Post a job</Link>
+      <Link href="/jobs/new" className="btn-primary sm:flex-none">Post a job</Link>
     </div>
   );
 }
