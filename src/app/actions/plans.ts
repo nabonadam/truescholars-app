@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { paymentEvents } from "@/db/schema";
-import { initializeTransaction, newReference, paystackConfigured } from "@/lib/paystack";
+import { PAYMENTS_PAUSED, initializeTransaction, newReference, paymentsOpen } from "@/lib/paystack";
 import { PLANS, chargeGhsMinor, isCurrency, isMonths, isPlan, planPrice } from "@/lib/plans";
 import { usdToGhs } from "@/server/fx";
 import { requireUser } from "@/server/guards";
@@ -13,7 +13,7 @@ export async function buyPlanAction(plan: string, months: number, currency: stri
   const user = await requireUser();
   if (!isPlan(plan) || !isMonths(months) || !isCurrency(currency)) return { error: "Choose a plan." };
   if (!user.email) return { error: "Your account needs an email address to pay." };
-  if (!paystackConfigured()) return { error: "Online payment isn't switched on yet. Use “Ask us instead” below." };
+  if (!paymentsOpen()) return { error: PAYMENTS_PAUSED };
   const db = getDb();
   const price = planPrice(plan, months, currency);
   const amountMinor = chargeGhsMinor(price, currency, (await usdToGhs(db)).rate);

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { paymentEvents } from "@/db/schema";
-import { initializeTransaction, isTestMode, newReference } from "@/lib/paystack";
+import { initializeTransaction, isTestMode, newReference, paymentsOpen } from "@/lib/paystack";
 
 /** Starts a GH₵1 Paystack TEST payment so the whole loop can be checked before real orders exist. */
 export async function startTestPayment() {
@@ -12,6 +12,7 @@ export async function startTestPayment() {
   if (!session?.user?.email) redirect("/sign-in");
   if (!session.user.roles.includes("ADMIN")) throw new Error("Only admins can run payment checks.");
   if (!isTestMode()) throw new Error("Test payments are only available with Paystack test keys.");
+  if (!paymentsOpen()) throw new Error("Payments are paused. Set PAYMENTS_ENABLED=1 to run a test payment.");
 
   const reference = newReference("test");
   const amountMinor = 100; // GH₵1.00

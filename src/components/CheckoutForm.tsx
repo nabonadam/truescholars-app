@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { checkoutAction, type FormState } from "@/app/actions/orders";
 
-export function CheckoutForm({ serviceId, tier, questions, priceLabel }: { serviceId: string; tier: string; questions: string[]; priceLabel: string }) {
+export function CheckoutForm({ serviceId, tier, questions, priceLabel, paused }: { serviceId: string; tier: string; questions: string[]; priceLabel: string; paused?: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(checkoutAction, undefined);
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -20,9 +20,10 @@ export function CheckoutForm({ serviceId, tier, questions, priceLabel }: { servi
           ))}
         </div>
       )}
+      {paused && <p className="rounded-sm bg-green-tint px-4 py-3 text-sm text-green"><b>Payments open soon.</b> You can browse experts and packages now; ordering opens as soon as payments are switched on, so nobody can be charged yet.</p>}
       {state?.error && <p role="alert" className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">{state.error}</p>}
-      <button className="btn-primary w-full sm:w-auto sm:self-start" disabled={pending}>
-        {pending ? "Opening secure payment…" : `Pay ${priceLabel} into escrow`}
+      <button className="btn-primary w-full sm:w-auto sm:self-start" disabled={pending || paused}>
+        {paused ? "Ordering opens soon" : pending ? "Opening secure payment…" : `Pay ${priceLabel} into escrow`}
       </button>
       <p className="text-xs text-ink-muted">You&apos;ll pay on Paystack&apos;s secure page by Mobile Money or card. The expert is only paid when you approve the delivery.</p>
     </form>

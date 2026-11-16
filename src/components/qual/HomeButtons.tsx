@@ -39,7 +39,7 @@ export function QualUpgradeButton({ requested }: { requested: boolean }) {
     return (
       <div className="flex items-start gap-3 rounded-sm bg-green-tint p-4 text-green">
         <Icon name="check" size={20} className="mt-0.5 flex-none" />
-        <p className="text-[15px]"><b>Request sent.</b> We&apos;ll switch your access on and send payment details to your email, usually within a day.</p>
+        <p className="text-[15px]"><b>Request sent.</b> We&apos;ll get back to you by email, usually within a day.</p>
       </div>
     );
   }

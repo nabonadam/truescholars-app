@@ -14,6 +14,17 @@ export function paystackConfigured(): boolean {
   return Boolean(process.env.PAYSTACK_SECRET_KEY);
 }
 
+/**
+ * Payments are paused until PAYMENTS_ENABLED=1 is set on the server, even if a Paystack key is present.
+ * While paused nobody can be charged: plans, checkouts, hiring and escrow funding are all switched off,
+ * and free trials keep running.
+ */
+export function paymentsOpen(): boolean {
+  return paystackConfigured() && process.env.PAYMENTS_ENABLED === "1";
+}
+
+export const PAYMENTS_PAUSED = "Payments open soon. For now, everything runs on the free trial, so you won't be charged.";
+
 export function isTestMode(): boolean {
   return (process.env.PAYSTACK_SECRET_KEY ?? "").startsWith("sk_test_");
 }
@@ -54,6 +65,7 @@ export function initializeTransaction(p: {
   callbackUrl: string;
   metadata: PaymentMetadata;
 }) {
+  if (!paymentsOpen()) throw new Error("Payments are paused (PAYMENTS_ENABLED is not 1)");
   return call<{ authorization_url: string; access_code: string; reference: string }>("/transaction/initialize", {
     method: "POST",
     body: JSON.stringify({

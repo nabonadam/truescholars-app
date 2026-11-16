@@ -9,7 +9,7 @@ import { Avatar } from "@/components/UserAvatar";
 import { getDb } from "@/db";
 import { litReviews, milestones, qualStudies, statSessions } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
-import { isTestMode, paystackConfigured } from "@/lib/paystack";
+import { isTestMode, paymentsOpen } from "@/lib/paystack";
 import { ORDER_STATUS } from "@/lib/status";
 import { attentionItems, progressStep } from "@/server/dashboard";
 import { expertAvailable } from "@/server/escrow";
@@ -358,7 +358,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 <Link href="/admin/messages" className="flex items-center justify-between font-bold text-green no-underline">
                   Flagged messages <span className="rounded-full bg-amber-tint px-3 py-1 text-xs text-amber-deep">{flagged}</span>
                 </Link>
-                {paystackConfigured() && isTestMode() && (
+                {paymentsOpen() && isTestMode() && (
                   <form action={startTestPayment} className="border-t border-line pt-3">
                     <button className="text-sm font-bold text-ink-muted underline">Run a GH₵1 Paystack test payment</button>
                   </form>

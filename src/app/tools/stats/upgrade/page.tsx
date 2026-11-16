@@ -3,7 +3,7 @@ import { Icon } from "@/components/Icons";
 import { UpgradeButton } from "@/components/stats/UpgradeButton";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getDb } from "@/db";
-import { isTestMode, paystackConfigured } from "@/lib/paystack";
+import { isTestMode, paymentsOpen } from "@/lib/paystack";
 import { currencyForCountry } from "@/lib/plans";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -51,10 +51,10 @@ export default async function Upgrade() {
           <p className="text-lg font-bold">{status}</p>
           {(access.kind === "trial" || access.kind === "granted") && <UsageMeter tool="stats" />}
           {access.kind === "admin" && <p className="rounded-sm bg-parchment p-2.5 text-[13px] text-ink-muted">Preview: this is what clients see. You don&apos;t need to pay.</p>}
-          {(paystackConfigured() ? <PlanPicker tool="stats" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-ink-muted">Online payment is being switched on. For now, ask us and we&apos;ll switch your access on and send payment details (Mobile Money or card) to <b>{user.email}</b>.</p>)}
+          {(paymentsOpen() ? <PlanPicker tool="stats" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="rounded-sm bg-green-tint p-3 text-[14px] text-green"><b>Free trial period.</b> Paid plans open soon, so nobody can be charged yet. Need more time after your trial? Ask us below and we&apos;ll extend it.</p>)}
           {access.kind !== "admin" && (
-            <details className="text-sm" open={!paystackConfigured()}>
-              <summary className="cursor-pointer font-bold text-ink-muted">Ask us instead (pay by bank or invoice)</summary>
+            <details className="text-sm" open={!paymentsOpen()}>
+              <summary className="cursor-pointer font-bold text-ink-muted">{paymentsOpen() ? "Ask us instead (pay by bank or invoice)" : "Ask us for more time"}</summary>
               <div className="mt-2"><UpgradeButton requested={!!upgradeRequestedAt} /></div>
             </details>
           )}

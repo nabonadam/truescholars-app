@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icons";
 import { reviewForOrder } from "@/server/litRetrieval";
 import { payOrderAction } from "@/app/actions/orders";
+import { paymentsOpen } from "@/lib/paystack";
 import { OrderProgress } from "@/components/OrderProgress";
 import { progressStep } from "@/server/dashboard";
 import { ClientDecision, LivePulse, DeliveryForm, MessageComposer } from "@/components/OrderRoomForms";
@@ -135,10 +136,14 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
               {formatMoney(next.amountMinor, order.currency)} is held safely in escrow and released to {expertFirst} only when you approve the work.
             </p>
           </div>
-          <form action={payOrderAction}>
-            <input type="hidden" name="orderId" value={order.id} />
-            <button className="btn-primary">{multi ? `Fund ${formatMoney(next.amountMinor, order.currency).replace(/\.00$/, "")}` : "Pay now"}</button>
-          </form>
+          {paymentsOpen() ? (
+            <form action={payOrderAction}>
+              <input type="hidden" name="orderId" value={order.id} />
+              <button className="btn-primary">{multi ? `Fund ${formatMoney(next.amountMinor, order.currency).replace(/\.00$/, "")}` : "Pay now"}</button>
+            </form>
+          ) : (
+            <p className="max-w-xs text-sm font-bold text-green">Payments open soon. Nothing can be charged yet; we&apos;ll let you know when you can fund this.</p>
+          )}
         </div>
       )}
       {role === "expert" && next && order.status === "ACTIVE" && (

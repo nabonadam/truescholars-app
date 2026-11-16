@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { isTestMode, paystackConfigured } from "@/lib/paystack";
+import { isTestMode, paymentsOpen } from "@/lib/paystack";
 import { PLANS, currencyForCountry, money } from "@/lib/plans";
 import { apiAccessFor, RATE } from "@/server/apiAccess";
 import { usdToGhs } from "@/server/fx";
@@ -84,10 +84,10 @@ export default async function Developers() {
                 <div className="flex flex-col gap-3">
                   <p className="rounded-sm bg-green-tint p-3 text-sm text-green">{access.admin ? "Admins always have API access." : `Your API plan is active until ${access.until!.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}.`}</p>
                   <Link href="/settings/api" className="btn-primary">Manage keys and webhooks</Link>
-                  {!access.admin && paystackConfigured() && <details><summary className="cursor-pointer text-sm font-bold text-green">Extend your plan</summary><div className="mt-3"><PlanPicker tool="api" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /></div></details>}
+                  {!access.admin && paymentsOpen() && <details><summary className="cursor-pointer text-sm font-bold text-green">Extend your plan</summary><div className="mt-3"><PlanPicker tool="api" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /></div></details>}
                 </div>
               ) : user ? (
-                paystackConfigured() ? <PlanPicker tool="api" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-sm text-ink-muted">Online payment is being switched on. Message us and we&apos;ll set up your API plan.</p>
+                paymentsOpen() ? <PlanPicker tool="api" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-sm text-ink-muted">API plans open soon, together with payments. Message us if you&apos;d like early access.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   <Link href="/sign-up?next=/developers" className="btn-amber">Create an account</Link>

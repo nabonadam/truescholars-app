@@ -65,7 +65,7 @@ function StatsCard({ access, upgradeRequestedAt, sessions }: StatsState) {
           )}
           {access.kind === "ended" && (
             <p className="max-w-md text-[15px] text-white">
-              {upgradeRequestedAt ? "Upgrade requested. We'll switch you on and email payment details soon." : "Your free trial has ended. Your sessions and downloads are safe. Upgrade to keep analysing."}
+              {upgradeRequestedAt ? "Request sent. We'll get back to you by email soon." : "Your free trial has ended. Your sessions and downloads are safe. Upgrade to keep analysing."}
             </p>
           )}
 
