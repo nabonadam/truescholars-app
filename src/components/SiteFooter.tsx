@@ -11,6 +11,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; external?:
       { label: "AI tools", href: site("/#tools"), external: true },
       { label: "Pricing", href: site("/pricing/"), external: true },
       { label: "How it works", href: site("/how-it-works/"), external: true },
+      { label: "How-to videos", href: "/help" },
     ],
   },
   {

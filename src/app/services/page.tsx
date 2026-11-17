@@ -77,6 +77,7 @@ export default async function FindExperts({ searchParams }: { searchParams: Prom
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
             <h1 className="text-2xl font-extrabold text-white sm:text-4xl">Find an expert</h1>
             <p className="hidden text-sm text-on-green-muted sm:block">Vetted statisticians, editors and methodologists · payment held in escrow until you&apos;re happy</p>
+            <a href="/help#experts" className="text-sm font-bold text-amber no-underline hover:underline">▶ How hiring works (1 min)</a>
           </div>
           <form action="/services" className="flex gap-2 rounded-[14px] bg-white p-1.5 shadow-lg" role="search">
             {category && <input type="hidden" name="category" value={category} />}

@@ -1,3 +1,4 @@
+import { HowToVideo } from "@/components/HowToVideo";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { Icon } from "@/components/Icons";
@@ -99,7 +100,15 @@ export default async function QualHome() {
           </div>
         )}
 
-        <h2 className={`${user ? "mt-14" : ""} text-2xl font-extrabold`}>How it works</h2>
+        <section className={`${user ? "mt-14" : ""} grid items-center gap-6 lg:grid-cols-[1fr_1.4fr]`}>
+          <div>
+            <h2 className="text-2xl font-extrabold">See it in one minute</h2>
+            <p className="mt-2 text-ink-muted">A short walkthrough of every step, from start to download.</p>
+            <a href="/help" className="mt-3 inline-block text-sm font-bold text-green">All how-to videos →</a>
+          </div>
+          <HowToVideo id="qual" />
+        </section>
+        <h2 className={`mt-14 text-2xl font-extrabold`}>How it works</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s, i) => (
             <div key={s.title} className="card p-5">

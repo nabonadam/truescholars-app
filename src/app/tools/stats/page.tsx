@@ -1,3 +1,4 @@
+import { HowToVideo } from "@/components/HowToVideo";
 import Link from "next/link";
 import { getDb } from "@/db";
 import { auth } from "@/auth";
@@ -112,6 +113,14 @@ export default async function StatsHome() {
         )}
         {!user && <TrialSteps />}
 
+        <section className={`mt-14 grid items-center gap-6 lg:grid-cols-[1fr_1.4fr]`}>
+          <div>
+            <h2 className="text-2xl font-extrabold">See it in one minute</h2>
+            <p className="mt-2 text-ink-muted">A short walkthrough of every step, from start to download.</p>
+            <a href="/help" className="mt-3 inline-block text-sm font-bold text-green">All how-to videos →</a>
+          </div>
+          <HowToVideo id="stats" />
+        </section>
         <h2 className="mt-14 text-2xl font-extrabold">What it runs</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CAN_DO.map((c) => (

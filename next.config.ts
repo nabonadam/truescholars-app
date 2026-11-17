@@ -24,7 +24,10 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "52mb" },
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      { source: "/videos/:file*", headers: [{ key: "Cache-Control", value: "public, max-age=604800" }] },
+    ];
   },
 };
 
