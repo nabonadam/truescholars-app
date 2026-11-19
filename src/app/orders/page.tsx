@@ -53,13 +53,13 @@ export default async function Orders({ searchParams }: { searchParams: Promise<{
       ? [
           { label: "In progress", value: String(counts.active), icon: "clock" as const },
           { label: "Need you", value: String(counts.you), icon: "spark" as const, hot: counts.you > 0 },
-          { label: "Held in escrow", value: cedi(escrow), icon: "lock" as const },
+          { label: "Paid, in progress", value: cedi(escrow), icon: "lock" as const },
           { label: "Spent so far", value: cedi(spent), icon: "receipt" as const },
         ]
       : [
           { label: "Active sales", value: String(counts.active), icon: "clock" as const },
           { label: "Need you", value: String(counts.you), icon: "spark" as const, hot: counts.you > 0 },
-          { label: "In escrow for you", value: cedi(earnings?.inEscrow ?? 0), icon: "lock" as const },
+          { label: "Paid, in progress", value: cedi(earnings?.inEscrow ?? 0), icon: "lock" as const },
           { label: "Earned so far", value: cedi(earnings?.earned ?? 0), icon: "wallet" as const },
         ];
 

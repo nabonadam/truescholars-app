@@ -25,3 +25,15 @@ describe("payments pause switch", () => {
     expect(() => initializeTransaction({ email: "a@b.c", amountMinor: 100, currency: "GHS", reference: "r", callbackUrl: "https://x", metadata: { purpose: "test", userId: "u" } })).toThrow(/paused/);
   });
 });
+
+describe("marketplace payments", () => {
+  it("stay closed even when tool payments are open", async () => {
+    const { marketplacePaymentsOpen } = await import("@/lib/paystack");
+    process.env.PAYSTACK_SECRET_KEY = "sk_live_x";
+    process.env.PAYMENTS_ENABLED = "1";
+    delete process.env.MARKETPLACE_PAYMENTS_ENABLED;
+    expect(paymentsOpen()).toBe(true);
+    expect(marketplacePaymentsOpen()).toBe(false);
+    expect(() => initializeTransaction({ email: "a@b.c", amountMinor: 100, currency: "GHS", reference: "r", callbackUrl: "https://x", metadata: { purpose: "milestone", milestoneId: "m", userId: "u" } })).toThrow(/Marketplace/);
+  });
+});

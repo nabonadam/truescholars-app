@@ -73,13 +73,13 @@ export async function attentionItems(db: DB, userId: string, now = new Date()): 
         items.push({
           key: `work-${m.id}`, icon: revision ? "refresh" : "clock", tone: revision ? "amber" : "green", urgent: revision || (days !== null && days <= 1), href, cta: "Deliver",
           title: revision ? `${other} asked for a revision on “${title}”` : `Deliver “${title}” for ${other}`,
-          detail: days === null ? "Paid into escrow." : days < 0 ? `Overdue by ${-days} day${days === -1 ? "" : "s"}.` : days === 0 ? "Due today." : `Due in ${days} day${days === 1 ? "" : "s"}.`,
+          detail: days === null ? "Paid." : days < 0 ? `Overdue by ${-days} day${days === -1 ? "" : "s"}.` : days === 0 ? "Due today." : `Due in ${days} day${days === 1 ? "" : "s"}.`,
         });
       }
     }
 
     if (isClient && o.status === "AWAITING_PAYMENT") {
-      items.push({ key: `pay-${o.id}`, icon: "card", tone: "amber", href, cta: "Pay", title: `Finish paying for “${title}”`, detail: `${other} starts once your payment is in escrow.` });
+      items.push({ key: `pay-${o.id}`, icon: "card", tone: "amber", href, cta: "Pay", title: `Finish paying for “${title}”`, detail: `${other} starts once you've paid.` });
     }
     const mine = ms.filter((x) => x.orderId === o.id);
     const next = o.status === "ACTIVE" && nextFundable(mine);

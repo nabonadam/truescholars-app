@@ -66,7 +66,7 @@ export default async function Earnings() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Tile icon="lock" label="In escrow" value={money(s.inEscrow)} note="Paid by clients, released when they approve" />
+          <Tile icon="lock" label="In progress" value={money(s.inEscrow)} note="Paid by clients for work still in progress" />
           <Tile icon="clock" label="Being paid out" value={money(s.pendingPayout)} note="Withdrawals in progress" />
           <Tile icon="wallet" label="Earned in total" value={money(s.earned)} note="After the platform fee" />
           <Tile icon="check" label="Withdrawn" value={money(s.withdrawn)} note="Sent to your account" />

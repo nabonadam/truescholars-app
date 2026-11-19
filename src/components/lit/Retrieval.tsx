@@ -65,9 +65,9 @@ export function RetrievalCard({ review, assignment: a }: { review: ReviewInfo; a
         <Tracker at={a?.paid || (!a && r.expertUserId) ? 2 : 1} />
         {a && !a.paid ? (
           <>
-            <p className="text-[15px]"><b>{a.expert} has been assigned to find your literature.</b> The price is <b>{formatMoney(a.total)}</b>. Pay it into escrow to start: the expert is paid only after you accept the papers.</p>
+            <p className="text-[15px]"><b>{a.expert} has been assigned to find your literature.</b> The price is <b>{formatMoney(a.total)}</b>. Pay to start, then review and accept each paper the expert delivers.</p>
             <div className="flex flex-wrap items-center gap-4">
-              <Link href={`/orders/${a.orderId}`} className="btn-amber min-h-10 px-4 text-sm">Pay into escrow</Link>
+              <Link href={`/orders/${a.orderId}`} className="btn-amber min-h-10 px-4 text-sm">Pay to start</Link>
               <Withdraw id={r.id} label="Withdraw instead" />
             </div>
           </>
@@ -107,7 +107,7 @@ function ReviewDelivery({ review: r, log }: { review: ReviewInfo; log: SearchLog
       <div className="rounded-md border-2 border-amber bg-white p-5">
         <Tracker at={3} />
         <h2 className="mt-3 text-xl font-extrabold">Your expert has submitted the literature</h2>
-        <p className="mt-1 text-[15px] text-ink-muted">Review each paper below: open the DOI, read the expert&apos;s note, then accept or reject it. When you&apos;re happy, submit for detailed analysis and synthesis. That approves the delivery and releases the expert&apos;s payment from escrow.</p>
+        <p className="mt-1 text-[15px] text-ink-muted">Review each paper below: open the DOI, read the expert&apos;s note, then accept or reject it. When you&apos;re happy, submit for detailed analysis and synthesis. That approves the delivery.</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" disabled={busy} onClick={() => start(async () => { const x = await acceptLiteratureAction(r.id); if (x?.error) setMsg(x.error); })} className="btn-amber min-h-11 px-5">
             {busy ? "Submitting…" : "Submit for detailed analysis and synthesis →"}
@@ -152,7 +152,7 @@ function AskExpert({ review: r }: { review: ReviewInfo }) {
     <div className="card flex flex-col gap-4 p-6">
       <div>
         <h2 className="text-xl font-extrabold">Brief for literature retrieval</h2>
-        <p className="text-sm text-ink-muted">Sent privately to The True Scholars, not posted on the marketplace. We assign one dedicated expert and tell you the price ($4.50 or GH₵30 a paper). You pay into escrow only once you&apos;ve seen it, and the expert is paid only after you accept the papers.</p>
+        <p className="text-sm text-ink-muted">Sent privately to The True Scholars, not posted on the marketplace. We assign one dedicated expert and tell you the price ($4.50 or GH₵30 a paper). You only pay once you&apos;ve seen the price and agreed to it.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm font-bold">Papers wanted<input className="field mt-1" type="number" min={5} max={200} value={f.papersWanted} onChange={set("papersWanted")} /></label>
@@ -267,7 +267,7 @@ export function ExpertPanel({ review: r, papers, assignment: a }: { review: Revi
           <b>Copyright:</b> upload PDFs only for open-access papers. For paywalled papers add the DOI only; the client attaches their own copy through their library.
         </div>
         {a && <p className="mt-3 text-[13.5px]"><b>Your fee:</b> {formatMoney(a.total)}{a.dueAt && a.paid ? ` · due ${due(a.dueAt)}` : ""} · <Link href={`/orders/${a.orderId}`} className="font-bold text-green">Order and messages ↗</Link></p>}
-        {waiting && <p className="mt-4 rounded-sm bg-amber-tint p-3 text-sm text-amber-deep"><b>Waiting for the client&apos;s payment.</b> You&apos;ll be notified when it&apos;s in escrow; then you can add papers and the search log here.</p>}
+        {waiting && <p className="mt-4 rounded-sm bg-amber-tint p-3 text-sm text-amber-deep"><b>Waiting for the client&apos;s payment.</b> You&apos;ll be notified when it&apos;s paid; then you can add papers and the search log here.</p>}
         {!open && !waiting && <p className="mt-4 rounded-sm bg-green-tint p-3 text-sm text-green"><b>Delivered.</b> The client is reviewing your papers. You&apos;ll be notified if they ask for replacements.</p>}
       </div>
       <div className="card flex flex-col gap-3 p-5">

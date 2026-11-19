@@ -23,6 +23,17 @@ export function paymentsOpen(): boolean {
   return paystackConfigured() && process.env.PAYMENTS_ENABLED === "1";
 }
 
+/**
+ * Marketplace payments (orders, milestones, hiring) stay off even when payments are open: the old flow held
+ * client money until approval, which Paystack treats as regulated escrow. Turn on only after the marketplace
+ * has been moved to direct split payments and MARKETPLACE_PAYMENTS_ENABLED=1 is set.
+ */
+export function marketplacePaymentsOpen(): boolean {
+  return paymentsOpen() && process.env.MARKETPLACE_PAYMENTS_ENABLED === "1";
+}
+
+export const MARKETPLACE_PAUSED = "Paying experts through The True Scholars opens soon. You can browse, post jobs and talk to experts in the meantime, and nobody can be charged yet.";
+
 export const PAYMENTS_PAUSED = "Payments open soon. For now, everything runs on the free trial, so you won't be charged.";
 
 export function isTestMode(): boolean {
@@ -66,6 +77,7 @@ export function initializeTransaction(p: {
   metadata: PaymentMetadata;
 }) {
   if (!paymentsOpen()) throw new Error("Payments are paused (PAYMENTS_ENABLED is not 1)");
+  if (p.metadata.purpose === "milestone" && !marketplacePaymentsOpen()) throw new Error("Marketplace payments are paused (MARKETPLACE_PAYMENTS_ENABLED is not 1)");
   return call<{ authorization_url: string; access_code: string; reference: string }>("/transaction/initialize", {
     method: "POST",
     body: JSON.stringify({

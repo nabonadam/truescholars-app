@@ -261,7 +261,7 @@ export async function assignRetriever(db: DB, reviewId: string, input: { expertU
     userId: ex.userId,
     kind: "LIT_REVIEW",
     title: `New literature retrieval assignment: “${r.title}”`,
-    body: `${brief.papersWanted ?? 20} papers within ${days} days, for ${cedis(price)}. Start once the client has paid into escrow; you'll be notified.`,
+    body: `${brief.papersWanted ?? 20} papers within ${days} days, for ${cedis(price)}. Start once the client has paid; you'll be notified.`,
     link: `/tools/lit/${r.id}`,
     orderId: order.id,
   });
@@ -269,7 +269,7 @@ export async function assignRetriever(db: DB, reviewId: string, input: { expertU
     userId: r.ownerId,
     kind: "LIT_REVIEW",
     title: `A literature expert has been assigned to “${r.title}”`,
-    body: `The price is ${cedis(price)} for ${brief.papersWanted ?? 20} papers within ${days} days. Pay into escrow to start; the expert is paid only when you accept the literature.`,
+    body: `The price is ${cedis(price)} for ${brief.papersWanted ?? 20} papers within ${days} days. Pay to start; you review and accept each paper before the work is complete.`,
     link: `/orders/${order.id}`,
     orderId: order.id,
   });
@@ -336,7 +336,7 @@ export async function submitRetrieval(db: DB, expertUserId: string, reviewId: st
   if (open.length) throw new LitError(`Fill in the record for ${open.map((p) => `P${String(p.n).padStart(2, "0")}`).join(", ")}: details, summary, relevance and your confirmation that you read it.`);
   if (!r.searchLog || !(r.searchLog as SearchLog).databases?.length) throw new LitError("Fill in the search log (at least the databases you searched) before submitting.");
   const m = await currentMilestone(db, r.orderId, ["FUNDED", "REVISION_REQUESTED"]);
-  if (!m) throw new LitError("The client hasn't paid this job into escrow yet. Wait for the payment before delivering.");
+  if (!m) throw new LitError("The client hasn't paid for this job yet. Wait for the payment before delivering.");
   const sheet = await litExport(db, r, "spreadsheet");
   const fileIds = await saveUploads(db, { orderId: r.orderId, ownerId: expertUserId, uploads: [new File([sheet!.body as string], "literature-retrieval.csv", { type: "text/csv" })] });
   await submitDelivery(db, { milestoneId: m.id, expertId: expertUserId, note: note.trim() || `${pending.length} papers delivered in the literature workspace.`, fileIds });

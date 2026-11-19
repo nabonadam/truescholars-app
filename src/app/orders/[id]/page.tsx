@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icons";
 import { reviewForOrder } from "@/server/litRetrieval";
 import { payOrderAction } from "@/app/actions/orders";
-import { paymentsOpen } from "@/lib/paystack";
+import { marketplacePaymentsOpen } from "@/lib/paystack";
 import { OrderProgress } from "@/components/OrderProgress";
 import { progressStep } from "@/server/dashboard";
 import { ClientDecision, LivePulse, DeliveryForm, MessageComposer } from "@/components/OrderRoomForms";
@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 const MILESTONE: Record<string, string> = {
   PENDING_FUNDING: "Not funded yet",
-  FUNDED: "Paid into escrow · in progress",
+  FUNDED: "Paid · in progress",
   DELIVERED: "Delivered · awaiting the client's approval",
   REVISION_REQUESTED: "Revision requested",
   APPROVED: "Approved · paid to the expert",
@@ -87,7 +87,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           <span className="grid size-10 flex-none place-items-center rounded-full bg-amber font-bold text-ink" aria-hidden="true">⚖</span>
           <span className="flex-1">
             <b>A dispute is open on this order.</b>{" "}
-            <span className="text-on-green-muted">The payment is frozen in escrow until it&apos;s settled.</span>
+            <span className="text-on-green-muted">Payments on this order are paused until it&apos;s settled.</span>
           </span>
           <span className="font-bold text-amber">Open the resolution centre →</span>
         </Link>
@@ -130,13 +130,13 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
         <div className="card flex flex-wrap items-center gap-4 border-amber bg-amber-tint">
           <div className="flex-1">
             <p className="font-bold text-ink">
-              {multi ? `${order.status === "AWAITING_PAYMENT" ? "Start with" : "Ready for"} milestone ${next.position} of ${milestones.length}: ${next.title}` : "Your order starts once payment is in escrow."}
+              {multi ? `${order.status === "AWAITING_PAYMENT" ? "Start with" : "Ready for"} milestone ${next.position} of ${milestones.length}: ${next.title}` : "Your order starts once you've paid."}
             </p>
             <p className="text-sm text-amber-deep">
-              {formatMoney(next.amountMinor, order.currency)} is held safely in escrow and released to {expertFirst} only when you approve the work.
+              {formatMoney(next.amountMinor, order.currency)} for this stage. You fund the next stage only when you&apos;re happy with this one.
             </p>
           </div>
-          {paymentsOpen() ? (
+          {marketplacePaymentsOpen() ? (
             <form action={payOrderAction}>
               <input type="hidden" name="orderId" value={order.id} />
               <button className="btn-primary">{multi ? `Fund ${formatMoney(next.amountMinor, order.currency).replace(/\.00$/, "")}` : "Pay now"}</button>
@@ -200,7 +200,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
                     {role === "client" ? (
                       <>
                         <p className="text-sm text-ink-muted">
-                          Check the delivery. Approving releases {formatMoney(m.amountMinor, order.currency)} from escrow to {expertFirst}.
+                          Check the delivery, then approve it or ask for a revision.
                           {m.autoApproveAt ? ` If you don't respond, it's approved automatically on ${fmtDate(m.autoApproveAt)}.` : ""}
                         </p>
                         <ClientDecision orderId={order.id} milestoneId={m.id} revisionsLeft={revisionsLeft} expertFirstName={expertFirst} />

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { toMinor } from "@/lib/money";
 import { FileError } from "@/server/files";
-import { PAYMENTS_PAUSED, paymentsOpen } from "@/lib/paystack";
+import { MARKETPLACE_PAUSED, marketplacePaymentsOpen } from "@/lib/paystack";
 import { requireUser } from "@/server/guards";
 import { closeJob, declineProposal, hireProposal, JobError, postJob, setShortlisted, submitProposal, withdrawProposal } from "@/server/jobs";
 
@@ -88,7 +88,7 @@ export async function declineAction(form: FormData) {
 
 export async function hireAction(_prev: JobFormState, form: FormData): Promise<JobFormState> {
   const user = await requireUser();
-  if (!paymentsOpen()) return { error: `${PAYMENTS_PAUSED} Hiring opens at the same time; keep comparing proposals and message experts until then.` };
+  if (!marketplacePaymentsOpen()) return { error: `${MARKETPLACE_PAUSED} Hiring opens at the same time.` };
   let orderId: string;
   try {
     orderId = (await hireProposal(getDb(), { proposalId: String(form.get("proposalId")), clientId: user.id })).id;

@@ -283,7 +283,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
               </div>
             </dl>
             <p className="flex gap-2 rounded-sm bg-green-tint p-3 text-xs text-green">
-              <Icon name="lock" size={16} className="flex-none" /> Payment for each milestone is held in escrow before you start work.
+              <Icon name="lock" size={16} className="flex-none" /> Each milestone is paid before you start work on it.
             </p>
           </div>
         </aside>

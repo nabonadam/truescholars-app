@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CheckoutForm } from "@/components/CheckoutForm";
-import { paymentsOpen } from "@/lib/paystack";
+import { marketplacePaymentsOpen } from "@/lib/paystack";
 import { getDb } from "@/db";
 import { formatMoney } from "@/lib/money";
 import { requireUser } from "@/server/guards";
@@ -30,7 +30,7 @@ export default async function Checkout({ params, searchParams }: { params: Promi
           <span className="eyebrow">Checkout</span>
           <h1 className="text-2xl font-bold sm:text-3xl">Almost there</h1>
         </div>
-        <CheckoutForm serviceId={id} tier={t.name} questions={svc.service.requirements} priceLabel={formatMoney(t.priceMinor)} paused={!paymentsOpen()} />
+        <CheckoutForm serviceId={id} tier={t.name} questions={svc.service.requirements} priceLabel={formatMoney(t.priceMinor)} paused={!marketplacePaymentsOpen()} />
       </div>
 
       <aside className="card flex h-fit flex-col gap-4">

@@ -46,7 +46,7 @@ export async function assignRetrieverAction(_p: AdminState, form: FormData): Pro
   const reviewId = String(form.get("reviewId") ?? "");
   return run(
     () => assignRetriever(getDb(), reviewId, { expertUserId: String(form.get("expert") ?? ""), priceMinor: Math.round(Number(form.get("price")) * 100), days: Number(form.get("days")), note: String(form.get("note") ?? "") }),
-    "Assigned. The expert and the client have been notified; the client pays into escrow next.",
+    "Assigned. The expert and the client have been notified; the client pays next.",
   );
 }
 

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { milestones, orders, paymentEvents } from "@/db/schema";
-import { PAYMENTS_PAUSED, initializeTransaction, newReference, paymentsOpen } from "@/lib/paystack";
+import { MARKETPLACE_PAUSED, initializeTransaction, marketplacePaymentsOpen, newReference } from "@/lib/paystack";
 import { requireUser } from "@/server/guards";
 import { nextFundable } from "@/server/jobs";
 import { createOrderFromService, OrderError } from "@/server/orders";
@@ -39,7 +39,7 @@ async function payMilestone(p: { milestoneId: string; amountMinor: number; email
 export async function checkoutAction(_prev: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
   if (!user.email) return { error: "Your account needs an email address to pay." };
-  if (!paymentsOpen()) return { error: PAYMENTS_PAUSED };
+  if (!marketplacePaymentsOpen()) return { error: MARKETPLACE_PAUSED };
 
   const serviceId = String(form.get("serviceId"));
   const tier = String(form.get("tier")) as TierName;
@@ -73,7 +73,7 @@ export async function payOrderAction(form: FormData) {
   const db = getDb();
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order || order.clientId !== user.id || !user.email) redirect("/orders");
-  if (!paymentsOpen()) redirect(`/orders/${orderId}`);
+  if (!marketplacePaymentsOpen()) redirect(`/orders/${orderId}`);
   const next = nextFundable(await db.select().from(milestones).where(eq(milestones.orderId, orderId)));
   if (!next) redirect(`/orders/${orderId}`);
   await payMilestone({ milestoneId: next.id, amountMinor: next.amountMinor, email: user.email, userId: user.id, orderId });

@@ -95,7 +95,7 @@ export default async function ExpertProfile({ params }: { params: Promise<{ id: 
         <div className="flex flex-col gap-4 rounded-lg bg-amber-tint p-5 sm:flex-row sm:items-center">
           <div className="min-w-0 sm:flex-1">
             <h2 className="text-lg font-bold">Need something different?</h2>
-            <p className="text-sm text-ink-muted">Post a job with your brief and budget. {first} and other matching experts can send you a proposal. Payment is held in escrow until you approve the work.</p>
+            <p className="text-sm text-ink-muted">Post a job with your brief and budget. {first} and other matching experts can send you a proposal. You pay one milestone at a time.</p>
           </div>
           <Link href="/jobs/new" className="btn-primary sm:flex-none">Post a job</Link>
         </div>

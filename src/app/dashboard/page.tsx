@@ -181,7 +181,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <h2 className="text-2xl font-bold">Get research help in three steps</h2>
             <ol className="grid gap-4 md:grid-cols-3">
               <Step n={1} icon="search" title="Find an expert or post a job" body="Pick a ready-made package, or describe your project and let vetted experts send you proposals." />
-              <Step n={2} icon="lock" title="Pay into escrow" body="Mobile Money or card. The expert isn't paid until you approve the work." />
+              <Step n={2} icon="lock" title="Pay one stage at a time" body="Mobile Money or card. Big jobs are split into milestones, so you never pay for everything up front." />
               <Step n={3} icon="star" title="Approve and review" body="Get your delivery, ask for revisions if needed, then approve and rate." />
             </ol>
           </div>
@@ -192,7 +192,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <ol className="grid gap-4 md:grid-cols-3">
               <Step n={1} icon="shield" title="Get vetted" body="Your credentials have been approved." done />
               <Step n={2} icon="package" title="Publish a service" body="Clear packages with prices and delivery times." done={liveServices > 0} />
-              <Step n={3} icon="wallet" title="Deliver your first order" body="Clients pay into escrow; you're paid when they approve." />
+              <Step n={3} icon="wallet" title="Deliver your first order" body="Clients pay for each milestone before you start it." />
             </ol>
             {liveServices === 0 && <Link href="/expert/services/new" className="btn-primary self-start">Create your first service</Link>}
           </div>
@@ -209,7 +209,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
               <Stat icon="package" tone="amber" label="Live services" value={String(liveServices)} note={`${services.length} created`} />
             </>
           )}
-          <Stat icon="lock" tone={isExpert ? "green" : "solid"} label="In escrow" value={formatMoney(inEscrow)} note="Held safely until you approve" />
+          <Stat icon="lock" tone={isExpert ? "green" : "solid"} label="Paid, in progress" value={formatMoney(inEscrow)} note="Paid milestones not yet completed" />
           {!isExpert && (
             <>
               <Stat icon="clock" tone="green" label="Active orders" value={String(buying.filter((o) => OPEN.includes(o.status)).length)} note={`${buying.length} in total`} />
@@ -286,7 +286,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <div className="flex flex-col gap-3 rounded-lg bg-ink p-6 text-white">
               <IconTile name="shield" tone="solid" size={44} />
               <h2 className="text-lg font-bold text-white">How you&apos;re protected</h2>
-              <p className="text-sm text-on-green-muted">Your payment sits in escrow until you approve the delivery. Revisions are included, and our team steps in if you can&apos;t agree.</p>
+              <p className="text-sm text-on-green-muted">Pay one milestone at a time. Revisions are included, and our team steps in if you can&apos;t agree.</p>
             </div>
 
             {isExpert && (

@@ -100,7 +100,7 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
         </table>
 
         <footer className="flex flex-col gap-1 border-t border-line pt-6 text-xs text-ink-muted">
-          <p>Paid via Paystack (Mobile Money or card). Funds are held in escrow and released to the expert when the client approves the work.</p>
+          <p>Paid via Paystack (Mobile Money or card).</p>
           <p>Order reference: {order.id} · Issued {fmt(new Date())}</p>
         </footer>
       </article>

@@ -97,7 +97,7 @@ export default async function ServicePage({ params, searchParams }: { params: Pr
         <div className="card flex flex-col gap-3">
           <h2 className="text-xl font-bold">How payment works</h2>
           <p className="text-sm text-ink-muted">
-            You pay by Mobile Money or card. The money is held in escrow and only released to {expert.name?.split(" ")[0] ?? "the expert"} when you approve the delivery. Not right? Ask for a revision, and our team steps in if you can&apos;t agree.
+            You pay by Mobile Money or card. Bigger projects are split into milestones, so you pay one stage at a time. Not right? Ask for a revision, and our team steps in if you can&apos;t agree.
           </p>
           {expert.skills.length > 0 && (
             <div className="flex flex-wrap gap-2 pt-2">

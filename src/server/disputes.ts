@@ -81,7 +81,7 @@ export async function openDispute(db: DB, p: { milestoneId: string; userId: stri
     userId: otherId,
     kind: "DISPUTE",
     title: `${firstName(opener?.name)} opened a dispute on “${order.title}”`,
-    body: `${REASONS[p.reason as ReasonCode]}. The payment stays safely in escrow while you sort it out. Please respond within ${RESPONSE_DAYS} days.`,
+    body: `${REASONS[p.reason as ReasonCode]}. Please respond within ${RESPONSE_DAYS} days.`,
     link,
     orderId: order.id,
   });

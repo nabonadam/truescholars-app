@@ -53,7 +53,7 @@ export default async function DisputePage({ params }: { params: Promise<{ id: st
             <span className="text-xs font-bold tracking-wider text-amber uppercase">Resolution centre</span>
             <h1 className="text-2xl font-bold text-white">{order.title}</h1>
             <p className="text-on-green-muted">
-              {m.title} · {formatMoney(amount, order.currency)} {open ? "frozen in escrow" : ""} · {v.clientName} (client) and {v.expertName} (expert)
+              {m.title} · {formatMoney(amount, order.currency)} {open ? "paused" : ""} · {v.clientName} (client) and {v.expertName} (expert)
             </p>
           </div>
         </div>

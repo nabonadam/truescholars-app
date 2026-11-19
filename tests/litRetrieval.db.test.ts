@@ -103,7 +103,7 @@ describe("literature retrieval by an expert", () => {
     expect(p2.summary).toBe(summary);
     await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/search log/);
     await saveSearchLog(db, expert, id, { databases: ["Scopus", "AJOL"], searchStrings: "rainfall AND adaptation", identified: 120, duplicates: 20, screened: 100, excludedScreening: 80, fullText: 20, excludedFullText: 18, included: 2 });
-    await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/escrow/);
+    await expect(submitRetrieval(db, expert, id, "")).rejects.toThrow(/hasn.t paid/);
     const [m] = await db.select().from(schema.milestones).where(eq(schema.milestones.orderId, order2.id));
     await fundMilestone(db, { milestoneId: m.id, amountMinor: 25_000, currency: "GHS", reference: "ps_1" });
     await submitRetrieval(db, expert, id, "Two strong papers.");

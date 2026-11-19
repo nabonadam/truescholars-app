@@ -92,7 +92,7 @@ async function retrievalReminders(db: DB, now: Date) {
     if (!m) continue;
     const since = r.assignedAt ? now.getTime() - r.assignedAt.getTime() : 0;
     if (m.status === "PENDING_FUNDING") {
-      if (since >= 2 * DAY && (await once(db, `unpaid:${r.orderId}`, () => notify(db, { userId: r.ownerId, kind: "LIT_REVIEW", title: `Your literature expert is waiting to start “${r.title}”`, body: `Pay ${formatMoney(m.amount)} into escrow so they can begin. The expert is paid only after you accept the papers.`, link: `/orders/${r.orderId}`, orderId: r.orderId! })))) sent++;
+      if (since >= 2 * DAY && (await once(db, `unpaid:${r.orderId}`, () => notify(db, { userId: r.ownerId, kind: "LIT_REVIEW", title: `Your literature expert is waiting to start “${r.title}”`, body: `Pay ${formatMoney(m.amount)} so they can begin.`, link: `/orders/${r.orderId}`, orderId: r.orderId! })))) sent++;
       if (since >= 5 * DAY) {
         for (const a of admins) if (await once(db, `unpaid-admin:${r.orderId}:${a}`, () => notify(db, { userId: a, kind: "LIT_REQUEST", title: `Unpaid for 5 days: “${r.title}”`, body: "The client hasn't paid. Consider following up, or taking it back from the expert.", link: "/admin/retrieval" }))) sent++;
       }

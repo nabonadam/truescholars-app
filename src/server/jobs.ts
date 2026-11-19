@@ -522,7 +522,7 @@ export async function hireProposal(db: DB, p: { proposalId: string; clientId: st
     userId: result.expertUserId,
     kind: "HIRED",
     title: `You're hired! “${result.job.title}”`,
-    body: `${client?.name?.split(" ")[0] ?? "The client"} accepted your proposal. Work starts as soon as the first milestone is paid into escrow.`,
+    body: `${client?.name?.split(" ")[0] ?? "The client"} accepted your proposal. Work starts as soon as the first milestone is paid.`,
     link: `/orders/${result.order.id}`,
     orderId: result.order.id,
   });

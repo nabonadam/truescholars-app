@@ -211,7 +211,7 @@ export function PostJobForm({ categories, guides }: { categories: Cat[]; guides:
           )}
         </Step>
 
-        <Step n={4} title="Budget and timeline" hint="Fixed price, paid into escrow. You release money only when you approve the work.">
+        <Step n={4} title="Budget and timeline" hint="Fixed price. Bigger work can be split into milestones, so the client pays one stage at a time.">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="budgetMin" className="label">From (GH₵)</label>
@@ -294,7 +294,7 @@ export function PostJobForm({ categories, guides }: { categories: Cat[]; guides:
             <li>Matching experts get an alert straight away.</li>
             <li>Proposals arrive with a price and a milestone plan.</li>
             <li>Shortlist, compare side by side, then hire.</li>
-            <li>Pay each milestone into escrow; release it when you approve.</li>
+            <li>Pay one milestone at a time; fund the next only when you&apos;re happy.</li>
           </ol>
         </div>
       </aside>
@@ -486,7 +486,7 @@ export function HireButton({
           </ol>
           <div className="flex justify-between text-base"><span>Total</span><b className="font-display">{totalLabel}</b></div>
           <p className="rounded-sm bg-green-tint px-4 py-3 text-sm text-green">
-            Next, you&apos;ll pay milestone 1 ({milestones[0]?.amountLabel}) into escrow. {first} is paid only when you approve each delivery. Other applicants will be told you&apos;ve hired.
+            Next, you&apos;ll pay milestone 1 ({milestones[0]?.amountLabel}) . You fund each later milestone only when you&apos;re happy with the one before. Other applicants will be told you&apos;ve hired.
           </p>
           <ErrorNote state={state} />
           <div className="flex flex-wrap justify-end gap-2">

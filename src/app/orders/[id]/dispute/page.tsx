@@ -29,13 +29,13 @@ export default async function NewDispute({ params, searchParams }: { params: Pro
       <div>
         <span className="eyebrow">Resolution centre</span>
         <h1 className="text-3xl font-bold">Open a dispute</h1>
-        <p className="text-ink-muted">{data.order.title}{milestone ? ` · ${milestone.title} · ${formatMoney(milestone.amountMinor, data.order.currency)} in escrow` : ""}</p>
+        <p className="text-ink-muted">{data.order.title}{milestone ? ` · ${milestone.title} · ${formatMoney(milestone.amountMinor, data.order.currency)}` : ""}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           { icon: "message" as const, title: "Talk first", body: `Most problems are fixed with a clear message to ${other.name?.split(" ")[0] ?? "the other side"}.` },
-          { icon: "lock" as const, title: "Money stays safe", body: "A dispute freezes the payment in escrow. Nobody can move it." },
+          { icon: "lock" as const, title: "Payment paused", body: "While a dispute is open, nothing on this milestone moves." },
           { icon: "scale" as const, title: "Fair outcome", body: "Agree a split together, or our team decides after reviewing everything." },
         ].map((s) => (
           <div key={s.title} className="flex flex-col gap-2 rounded-md border border-line bg-white p-4">
@@ -53,7 +53,7 @@ export default async function NewDispute({ params, searchParams }: { params: Pro
       ) : (
         <div className="card flex flex-col gap-3">
           <h2 className="text-xl font-bold">There&apos;s nothing to dispute right now</h2>
-          <p className="text-ink-muted">You can open a dispute while a milestone&apos;s payment is held in escrow and no other dispute is open on it.</p>
+          <p className="text-ink-muted">You can open a dispute on a paid milestone that isn&apos;t complete, if no other dispute is open on it.</p>
           <Link href={`/messages?c=${id}`} className="btn-primary self-start">Message {other.name?.split(" ")[0]}</Link>
         </div>
       )}

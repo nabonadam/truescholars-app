@@ -20,12 +20,12 @@ export function CheckoutForm({ serviceId, tier, questions, priceLabel, paused }:
           ))}
         </div>
       )}
-      {paused && <p className="rounded-sm bg-green-tint px-4 py-3 text-sm text-green"><b>Payments open soon.</b> You can browse experts and packages now; ordering opens as soon as payments are switched on, so nobody can be charged yet.</p>}
+      {paused && <p className="rounded-sm bg-green-tint px-4 py-3 text-sm text-green"><b>Ordering opens soon.</b> Paying experts through The True Scholars isn&apos;t switched on yet, so nobody can be charged. You can browse experts and packages, post a job and message experts in the meantime.</p>}
       {state?.error && <p role="alert" className="rounded-sm bg-amber-tint px-4 py-3 text-sm text-amber-deep">{state.error}</p>}
       <button className="btn-primary w-full sm:w-auto sm:self-start" disabled={pending || paused}>
-        {paused ? "Ordering opens soon" : pending ? "Opening secure payment…" : `Pay ${priceLabel} into escrow`}
+        {paused ? "Ordering opens soon" : pending ? "Opening secure payment…" : `Pay ${priceLabel}`}
       </button>
-      <p className="text-xs text-ink-muted">You&apos;ll pay on Paystack&apos;s secure page by Mobile Money or card. The expert is only paid when you approve the delivery.</p>
+      <p className="text-xs text-ink-muted">You&apos;ll pay on Paystack&apos;s secure page by Mobile Money or card. Bigger projects are split into milestones, so you pay one stage at a time.</p>
     </form>
   );
 }
