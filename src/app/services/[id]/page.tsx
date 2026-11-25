@@ -97,7 +97,7 @@ export default async function ServicePage({ params, searchParams }: { params: Pr
         <div className="card flex flex-col gap-3">
           <h2 className="text-xl font-bold">How payment works</h2>
           <p className="text-sm text-ink-muted">
-            You pay by Mobile Money or card through Paystack, one agreed milestone at a time. Paystack splits each payment automatically: 85% goes to the expert and a 15% platform fee goes to DreamsHive Technologies (The True Scholars).
+            You pay by Mobile Money or card through Paystack, one agreed milestone at a time. Paystack splits each payment automatically: 85% goes to the expert and a 15% platform fee goes to The True Scholars.
           </p>
           <p className="text-sm text-ink-muted">
             Each share is settled directly to the expert and to us on Paystack&apos;s normal schedule. We don&apos;t hold any funds or wait for your approval before the expert is paid. Not right? Ask for a revision, and our team steps in if you can&apos;t agree.
