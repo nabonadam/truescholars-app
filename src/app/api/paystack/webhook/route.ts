@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { isValidSignature, verifyTransaction } from "@/lib/paystack";
+import { isAuthenticWebhook, verifyTransaction } from "@/lib/paystack";
 import { applyVerifiedTransaction } from "@/server/payments";
 import { readBody } from "@/server/rateLimit";
 
 export const runtime = "nodejs";
 
 /**
- * Paystack webhook (set the URL in Paystack → Settings → API Keys & Webhooks):
+ * Paystack webhook (set the URL in Paystack → Developers → API configuration → Live webhook URL):
  *   https://app.thetruescholars.com/api/paystack/webhook
  * The signature proves the call came from Paystack; we still re-verify the transaction before booking it.
  */
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const bytes = await readBody(req, 512 * 1024);
   if (!bytes) return NextResponse.json({ error: "too large" }, { status: 413 });
   const raw = new TextDecoder().decode(bytes);
-  if (!isValidSignature(raw, req.headers.get("x-paystack-signature"))) {
+  if (!isAuthenticWebhook(raw, req.headers)) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 

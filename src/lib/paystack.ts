@@ -115,6 +115,35 @@ export function isValidSignature(rawBody: string, signature: string | null, key:
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * Newer Paystack-Signature header: "t=<unix>,v1=<key id>:<hex>" (one or two v1 values during rotation),
+ * HMAC-SHA512 over "<t>.<raw body>" keyed with the whole whsec_ signing secret. Rejects stale timestamps (>300s).
+ */
+export function isValidSignedHeader(
+  rawBody: string,
+  header: string | null,
+  secret: string | undefined = process.env.PAYSTACK_WEBHOOK_SECRET,
+  now: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!header || !secret) return false;
+  const parts = header.split(",").map((p) => {
+    const i = p.indexOf("=");
+    return i < 0 ? [p.trim(), ""] : [p.slice(0, i).trim(), p.slice(i + 1).trim()];
+  });
+  const t = parts.find(([k]) => k === "t")?.[1];
+  const sigs = parts.filter(([k]) => k === "v1").map(([, v]) => v.slice(v.indexOf(":") + 1));
+  if (!t || !/^\d+$/.test(t) || sigs.length === 0 || Math.abs(now - Number(t)) > 300) return false;
+  const expected = createHmac("sha512", secret).update(`${t}.`).update(rawBody).digest();
+  return sigs.some((hex) => /^[0-9a-f]{128}$/.test(hex) && timingSafeEqual(expected, Buffer.from(hex, "hex")));
+}
+
+/** Accepts the new Paystack-Signature header when a signing secret is set, else the legacy x-paystack-signature. */
+export function isAuthenticWebhook(rawBody: string, headers: Headers): boolean {
+  const signed = headers.get("paystack-signature");
+  if (signed && process.env.PAYSTACK_WEBHOOK_SECRET) return isValidSignedHeader(rawBody, signed);
+  return isValidSignature(rawBody, headers.get("x-paystack-signature"));
+}
+
 export function newReference(prefix: string): string {
   return `${prefix}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 }
