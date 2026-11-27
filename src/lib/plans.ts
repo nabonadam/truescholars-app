@@ -1,7 +1,7 @@
 /**
- * Paid plans for the AI tools, in two price lists: GH₵ for Ghana and the rest of Africa, US$ for
- * everyone else. Change prices here and nowhere else. Paystack (a Ghana business) charges in cedis
- * only, so a US$ price is charged as its cedi equivalent at the day's rate.
+ * Paid plans for the AI tools. Everyone pays the US$ price; Paystack (a Ghana business) charges in
+ * cedis only, so it is charged as its cedi equivalent at the day's rate. Change prices here and nowhere
+ * else. The GHS column is no longer offered: it is only a floor when checking a payment with no checkout record.
  */
 
 export type PlanId = "stats" | "qual" | "lit" | "all" | "api";

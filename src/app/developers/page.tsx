@@ -6,7 +6,7 @@ import { PlanPicker } from "@/components/PlanPicker";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { isTestMode, paymentsOpen } from "@/lib/paystack";
-import { PLANS, currencyForCountry, money } from "@/lib/plans";
+import { PLANS, chargeGhsMinor, money } from "@/lib/plans";
 import { apiAccessFor, RATE } from "@/server/apiAccess";
 import { usdToGhs } from "@/server/fx";
 import { API_PLAN_LIMIT } from "@/server/usage";
@@ -77,17 +77,17 @@ export default async function Developers() {
           <div className="card text-ink">
             <div className="flex items-baseline justify-between">
               <h2 className="text-lg font-bold">{p.name}</h2>
-              <span className="text-right"><b className="text-2xl">{money(p.USD, "USD")}</b><span className="text-sm text-ink-muted">/month</span><span className="block text-[12.5px] text-ink-muted">or {money(p.GHS, "GHS")} in Africa</span></span>
+              <span className="text-right"><b className="text-2xl">{money(p.USD, "USD")}</b><span className="text-sm text-ink-muted">/month</span><span className="block text-[12.5px] text-ink-muted">≈ {money(chargeGhsMinor(p.USD, "USD", fx.rate) / 100, "GHS")} at today&apos;s rate</span></span>
             </div>
             <div className="mt-4">
               {access?.active ? (
                 <div className="flex flex-col gap-3">
                   <p className="rounded-sm bg-green-tint p-3 text-sm text-green">{access.admin ? "Admins always have API access." : `Your API plan is active until ${access.until!.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}.`}</p>
                   <Link href="/settings/api" className="btn-primary">Manage keys and webhooks</Link>
-                  {!access.admin && paymentsOpen() && <details><summary className="cursor-pointer text-sm font-bold text-green">Extend your plan</summary><div className="mt-3"><PlanPicker tool="api" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /></div></details>}
+                  {!access.admin && paymentsOpen() && <details><summary className="cursor-pointer text-sm font-bold text-green">Extend your plan</summary><div className="mt-3"><PlanPicker tool="api" testMode={isTestMode()} usdToGhs={fx.rate} /></div></details>}
                 </div>
               ) : user ? (
-                paymentsOpen() ? <PlanPicker tool="api" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="text-sm text-ink-muted">API plans open soon, together with payments. Message us if you&apos;d like early access.</p>
+                paymentsOpen() ? <PlanPicker tool="api" testMode={isTestMode()} usdToGhs={fx.rate} /> : <p className="text-sm text-ink-muted">API plans open soon, together with payments. Message us if you&apos;d like early access.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   <Link href="/sign-up?next=/developers" className="btn-amber">Create an account</Link>

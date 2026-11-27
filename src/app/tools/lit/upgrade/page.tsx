@@ -4,7 +4,6 @@ import { LitUpgradeButton } from "@/components/lit/NewReview";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getDb } from "@/db";
 import { isTestMode, paymentsOpen } from "@/lib/paystack";
-import { currencyForCountry } from "@/lib/plans";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { usdToGhs } from "@/server/fx";
@@ -51,7 +50,7 @@ export default async function Upgrade() {
           <p className="text-lg font-bold">{status}</p>
           {(access.kind === "trial" || access.kind === "granted") && <UsageMeter tool="lit" />}
           {access.kind === "admin" && <p className="rounded-sm bg-parchment p-2.5 text-[13px] text-ink-muted">Preview: this is what clients see. You don&apos;t need to pay.</p>}
-          {(paymentsOpen() ? <PlanPicker tool="lit" testMode={isTestMode()} initialCurrency={currencyForCountry(me?.country)} usdToGhs={fx.rate} /> : <p className="rounded-sm bg-green-tint p-3 text-[14px] text-green"><b>Free trial period.</b> Paid plans open soon, so nobody can be charged yet. Need more time after your trial? Ask us below and we&apos;ll extend it.</p>)}
+          {(paymentsOpen() ? <PlanPicker tool="lit" testMode={isTestMode()} usdToGhs={fx.rate} /> : <p className="rounded-sm bg-green-tint p-3 text-[14px] text-green"><b>Free trial period.</b> Paid plans open soon, so nobody can be charged yet. Need more time after your trial? Ask us below and we&apos;ll extend it.</p>)}
           {access.kind !== "admin" && (
             <details className="text-sm" open={!paymentsOpen()}>
               <summary className="cursor-pointer font-bold text-ink-muted">{paymentsOpen() ? "Ask us instead (pay by bank or invoice)" : "Ask us for more time"}</summary>
